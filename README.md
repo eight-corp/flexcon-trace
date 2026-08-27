@@ -4,7 +4,7 @@
 
 ## 主な機能
 
-- Supabaseメール認証
+- 管理者が事前登録したユーザーだけのSupabaseメール認証
 - 納品先の登録・使用停止
 - 背面カメラによるQR連続読取
 - 目標12本のカウンターと重複防止
@@ -31,7 +31,7 @@ Supabase DashboardのSQL Editorで、次のファイルを開いて全内容を�
 supabase/migrations/202608270001_initial_schema.sql
 ```
 
-その後、AuthenticationのEmail providerが有効であることを確認します。確認メールを省略する試験運用では、Authentication設定のConfirm emailを無効にできます。
+その後、Supabase DashboardのAuthentication設定で `Allow new users to sign up` を無効にします。利用者は `Authentication` > `Users` > `Add user` から管理者が作成し、メール確認済みの状態と初期パスワードを設定します。アプリには一般向けのアカウント作成機能を置きません。
 
 ## ビルド
 
