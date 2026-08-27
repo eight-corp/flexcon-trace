@@ -39,16 +39,19 @@ supabase/migrations/202608270001_initial_schema.sql
 npm run build
 ```
 
-生成された `dist` をCloudflare Pagesへ公開します。Git連携時の設定は次のとおりです。
+## GitHub Pagesへの公開
 
-```text
-Build command: npm run build
-Build output directory: dist
-```
-
-Cloudflare Pagesの環境変数にも次を登録します。
+GitHubリポジトリの `Settings` > `Secrets and variables` > `Actions` > `Variables` に、次の2項目を登録します。
 
 ```text
 VITE_SUPABASE_URL
 VITE_SUPABASE_PUBLISHABLE_KEY
 ```
+
+次に `Settings` > `Pages` の `Source` で `GitHub Actions` を選択します。`main` ブランチへpushすると、ワークフローがビルドして次のURLへ公開します。
+
+```text
+https://eight-corp.github.io/flexcon-trace/
+```
+
+カメラ利用にはHTTPSが必要ですが、GitHub Pagesの公開URLはHTTPSに対応しています。
