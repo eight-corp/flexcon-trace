@@ -7,10 +7,10 @@ const QrScanner = lazy(() => import('./QrScanner').then((module) => ({ default: 
 
 const STORAGE_KEY_PREFIX = 'flexcon-pending-shipment'
 
-type Props = { userId: string; onRegistered: () => void }
+type Props = { workerId: string; onRegistered: () => void }
 
-export function ShipmentScanner({ userId, onRegistered }: Props) {
-  const storageKey = `${STORAGE_KEY_PREFIX}-${userId}`
+export function ShipmentScanner({ workerId, onRegistered }: Props) {
+  const storageKey = `${STORAGE_KEY_PREFIX}-${workerId}`
   const [destinations, setDestinations] = useState<Destination[]>([])
   const [destinationId, setDestinationId] = useState('')
   const [vehicleNo, setVehicleNo] = useState('')
@@ -26,11 +26,11 @@ export function ShipmentScanner({ userId, onRegistered }: Props) {
   const lastRead = useRef({ value: '', time: 0 })
 
   useEffect(() => {
-    void supabase.from('destinations').select('*').eq('active', true).order('name').then(({ data, error }) => {
+    void supabase.from('flexcon_destinations').select('*').eq('active', true).order('name').then(({ data, error }) => {
       if (error) setNotice({ type: 'error', text: '納品先を取得できません。SupabaseのSQL設定を確認してください。' })
       else setDestinations((data ?? []) as Destination[])
     })
-  }, [userId])
+  }, [workerId])
 
   useEffect(() => { localStorage.setItem(storageKey, JSON.stringify(lots)) }, [lots, storageKey])
 
@@ -74,7 +74,8 @@ export function ShipmentScanner({ userId, onRegistered }: Props) {
     setScannerActive(false)
     setNotice(null)
     const registeredCount = lots.length
-    const { error } = await supabase.rpc('register_shipment', {
+    const { error } = await supabase.rpc('flexcon_register_shipment', {
+      p_worker_id: workerId,
       p_destination_id: destinationId,
       p_lot_numbers: lots,
       p_vehicle_no: vehicleNo.trim() || null,

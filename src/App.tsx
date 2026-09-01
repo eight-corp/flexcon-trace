@@ -1,33 +1,25 @@
 import { useEffect, useState } from 'react'
-import type { Session } from '@supabase/supabase-js'
 import { History, LogOut, MapPinned, ScanLine, Wheat } from 'lucide-react'
 import { AuthScreen } from './components/AuthScreen'
 import { DestinationManager } from './components/DestinationManager'
 import { ShipmentHistory } from './components/ShipmentHistory'
 import { ShipmentScanner } from './components/ShipmentScanner'
-import { supabase } from './lib/supabase'
+import { clearWorkerSession, restoreWorkerSession } from './lib/workerAuth'
+import type { Worker } from './types'
 import './App.css'
 
 type Tab = 'scan' | 'history' | 'destinations'
 
 function App() {
-  const [session, setSession] = useState<Session | null>(null)
+  const [worker, setWorker] = useState<Worker | null>(null)
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<Tab>('scan')
   const [historyVersion, setHistoryVersion] = useState(0)
 
   useEffect(() => {
-    void supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session)
-      setLoading(false)
-    })
-
-    const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      setSession(nextSession)
-      setLoading(false)
-    })
-
-    return () => data.subscription.unsubscribe()
+    void restoreWorkerSession()
+      .then(setWorker)
+      .finally(() => setLoading(false))
   }, [])
 
   if (loading) {
@@ -39,7 +31,12 @@ function App() {
     )
   }
 
-  if (!session) return <AuthScreen />
+  if (!worker) return <AuthScreen onLogin={setWorker} />
+
+  const logout = () => {
+    clearWorkerSession()
+    setWorker(null)
+  }
 
   return (
     <div className="app-shell">
@@ -48,7 +45,7 @@ function App() {
           <span className="brand-mark"><Wheat size={21} aria-hidden="true" /></span>
           <div>
             <strong>フレコントレース</strong>
-            <small>玄米出荷管理</small>
+            <small>玄米出荷管理 / {worker.worker_name}</small>
           </div>
         </div>
         <button
@@ -56,7 +53,7 @@ function App() {
           type="button"
           title="ログアウト"
           aria-label="ログアウト"
-          onClick={() => void supabase.auth.signOut()}
+          onClick={logout}
         >
           <LogOut size={20} />
         </button>
@@ -65,12 +62,12 @@ function App() {
       <main className="app-main">
         {tab === 'scan' && (
           <ShipmentScanner
-            userId={session.user.id}
+            workerId={worker.worker_id}
             onRegistered={() => setHistoryVersion((value) => value + 1)}
           />
         )}
         {tab === 'history' && <ShipmentHistory refreshKey={historyVersion} />}
-        {tab === 'destinations' && <DestinationManager userId={session.user.id} />}
+        {tab === 'destinations' && <DestinationManager workerId={worker.worker_id} />}
       </main>
 
       <nav className="bottom-nav" aria-label="メインメニュー">

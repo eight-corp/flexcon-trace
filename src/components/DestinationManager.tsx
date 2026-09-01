@@ -3,7 +3,7 @@ import { MapPin, Plus, Power } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import type { Destination } from '../types'
 
-export function DestinationManager({ userId }: { userId: string }) {
+export function DestinationManager({ workerId }: { workerId: string }) {
   const [items, setItems] = useState<Destination[]>([])
   const [name, setName] = useState('')
   const [address, setAddress] = useState('')
@@ -11,23 +11,28 @@ export function DestinationManager({ userId }: { userId: string }) {
   const [message, setMessage] = useState('')
 
   const load = async () => {
-    const { data, error } = await supabase.from('destinations').select('*').order('active', { ascending: false }).order('name')
+    const { data, error } = await supabase.from('flexcon_destinations').select('*').order('active', { ascending: false }).order('name')
     if (error) setMessage(error.message)
     else setItems((data ?? []) as Destination[])
   }
 
   useEffect(() => {
-    void supabase.from('destinations').select('*').order('active', { ascending: false }).order('name')
+    void supabase.from('flexcon_destinations').select('*').order('active', { ascending: false }).order('name')
       .then(({ data, error }) => {
         if (error) setMessage(error.message)
         else setItems((data ?? []) as Destination[])
       })
-  }, [userId])
+  }, [workerId])
 
   const add = async (event: React.FormEvent) => {
     event.preventDefault()
     setMessage('')
-    const { error } = await supabase.from('destinations').insert({ name: name.trim(), address: address.trim() || null, contact_name: contactName.trim() || null, created_by: userId })
+    const { error } = await supabase.rpc('flexcon_add_destination', {
+      p_worker_id: workerId,
+      p_name: name.trim(),
+      p_address: address.trim() || null,
+      p_contact_name: contactName.trim() || null,
+    })
     if (error) return setMessage(error.message)
     setName('')
     setAddress('')
@@ -37,7 +42,11 @@ export function DestinationManager({ userId }: { userId: string }) {
   }
 
   const toggle = async (item: Destination) => {
-    const { error } = await supabase.from('destinations').update({ active: !item.active }).eq('id', item.id)
+    const { error } = await supabase.rpc('flexcon_set_destination_active', {
+      p_worker_id: workerId,
+      p_destination_id: item.id,
+      p_active: !item.active,
+    })
     if (error) setMessage(error.message)
     else await load()
   }

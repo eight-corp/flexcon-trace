@@ -4,7 +4,7 @@
 
 ## 主な機能
 
-- 管理者が事前登録したユーザーだけのSupabaseメール認証
+- にんにく冷蔵庫管理と共通の作業者・PINログイン
 - 納品先の登録・使用停止
 - 背面カメラによるQR連続読取
 - 目標12本のカウンターと重複防止
@@ -21,17 +21,21 @@ copy .env.example .env.local
 npm run dev
 ```
 
-`.env.local` にSupabaseのProject URLとPublishable keyを設定します。Secret keyやService role keyはフロントエンドに置かないでください。
+`.env.local` に、にんにく冷蔵庫管理で使用しているSupabaseのProject URLとPublishable keyを設定します。Secret keyやService role keyはフロントエンドに置かないでください。
 
 ## Supabase設定
 
-Supabase DashboardのSQL Editorで、次のファイルを開いて全内容を実行します。
+にんにく冷蔵庫管理のSupabase Dashboardを開き、SQL Editorで次のファイルの全内容を実行します。
 
 ```text
-supabase/migrations/202608270001_initial_schema.sql
+supabase/migrations/202609010001_shared_garlic_supabase.sql
 ```
 
-その後、Supabase DashboardのAuthentication設定で `Allow new users to sign up` を無効にします。利用者は `Authentication` > `Users` > `Add user` から管理者が作成し、メール確認済みの状態と初期パスワードを設定します。アプリには一般向けのアカウント作成機能を置きません。
+利用者は、にんにく冷蔵庫管理の作業者マスタで管理します。使用する作業者を有効にし、備考欄へ `PIN:1234` の形式でPINを設定してください。フレコントレース側で利用者を重複登録する必要はありません。
+
+作業者名、権限、有効・無効、PINは両アプリで共通です。ログイン状態はブラウザとアプリごとに保存されるため、初回はフレコントレース側でも同じ作業者とPINでログインします。
+
+フレコン用のテーブルとRPCにはすべて `flexcon_` を付けています。にんにく冷蔵庫管理の既存テーブルは変更しません。旧フレコン専用Supabaseのデータも、このSQLでは削除されません。
 
 ## ビルド
 
@@ -41,7 +45,7 @@ npm run build
 
 ## GitHub Pagesへの公開
 
-GitHubリポジトリの `Settings` > `Secrets and variables` > `Actions` > `Variables` に、次の2項目を登録します。
+GitHubリポジトリの `Settings` > `Secrets and variables` > `Actions` > `Variables` に、にんにく冷蔵庫管理のSupabase情報として次の2項目を登録します。
 
 ```text
 VITE_SUPABASE_URL
