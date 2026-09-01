@@ -2,6 +2,16 @@ import { useEffect, useRef, useState } from 'react'
 import { BrowserQRCodeReader } from '@zxing/browser'
 import { Camera, CameraOff } from 'lucide-react'
 
+const SCAN_DELAY_MS = 80
+const CAMERA_CONSTRAINTS: MediaStreamConstraints = {
+  video: {
+    facingMode: { ideal: 'environment' },
+    width: { ideal: 1280, max: 1280 },
+    height: { ideal: 720, max: 720 },
+    frameRate: { ideal: 30, max: 30 },
+  },
+}
+
 type Props = {
   active: boolean
   onRead: (value: string) => void
@@ -20,11 +30,13 @@ export function QrScanner({ active, onRead, onStart, onStop }: Props) {
     if (!active || !videoRef.current) return
     let disposed = false
     let stop: (() => void) | undefined
-    const reader = new BrowserQRCodeReader()
+    const reader = new BrowserQRCodeReader(undefined, {
+      delayBetweenScanAttempts: SCAN_DELAY_MS,
+    })
     setError('')
 
     void reader.decodeFromConstraints(
-      { video: { facingMode: { ideal: 'environment' } } },
+      CAMERA_CONSTRAINTS,
       videoRef.current,
       (result) => { if (result && !disposed) onReadRef.current(result.getText()) },
     ).then((controls) => {
