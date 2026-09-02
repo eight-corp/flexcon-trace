@@ -123,7 +123,8 @@
 .authorization-table-wrap { max-width: 100%; overflow: auto; border: 1px solid var(--line); border-radius: 7px; background: #fff; }
 .authorization-table { width: 100%; min-width: 1740px; border-collapse: separate; border-spacing: 0; font-size: 13px; }
 .authorization-table th, .authorization-table td { padding: 10px 11px; border-bottom: 1px solid var(--line); border-right: 1px solid #e5e8e5; text-align: left; vertical-align: middle; white-space: nowrap; }
-.authorization-table th { position: sticky; top: 0; z-index: 2; background: #eef2ee; color: #3d4840; font-weight: 700; }
+.authorization-table thead { position: sticky; top: 0; z-index: 5; }
+.authorization-table th { position: relative; z-index: 1; background: #eef2ee; box-shadow: 0 2px 0 #c8cec9; color: #3d4840; font-weight: 700; }
 .authorization-table tbody tr { cursor: pointer; }
 .authorization-table tbody tr:hover, .authorization-table tbody tr:focus { background: var(--green-soft); outline: none; }
 .authorization-table tbody tr:last-child td { border-bottom: 0; }
@@ -132,6 +133,7 @@
 .authorization-table .flag-cell { width: 96px; text-align: center; color: var(--green); }
 .authorization-table th:nth-child(5), .authorization-table td:nth-child(5), .authorization-table th:nth-child(11), .authorization-table td:nth-child(11) { white-space: normal; min-width: 220px; }
 .authorization-table th:last-child, .authorization-table td:last-child { position: sticky; right: 0; z-index: 3; width: 54px; min-width: 54px; border-right: 0; background: #fff; }
+.authorization-table th:last-child { z-index: 2; }
 .authorization-table th:last-child { background: #eef2ee; }
 .authorization-table tbody tr:hover td:last-child, .authorization-table tbody tr:focus td:last-child { background: var(--green-soft); }
 .authorization-delete-cell { padding: 5px !important; }
