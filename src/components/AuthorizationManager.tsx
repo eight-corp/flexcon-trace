@@ -63,6 +63,16 @@ const AUTHORIZATION_NO_COLLATOR = new Intl.Collator('ja', {
   sensitivity: 'base',
 })
 
+const PREFECTURES = [
+  '北海道', '青森県', '岩手県', '宮城県', '秋田県', '山形県', '福島県',
+  '茨城県', '栃木県', '群馬県', '埼玉県', '千葉県', '東京都', '神奈川県',
+  '新潟県', '富山県', '石川県', '福井県', '山梨県', '長野県', '岐阜県',
+  '静岡県', '愛知県', '三重県', '滋賀県', '京都府', '大阪府', '兵庫県',
+  '奈良県', '和歌山県', '鳥取県', '島根県', '岡山県', '広島県', '山口県',
+  '徳島県', '香川県', '愛媛県', '高知県', '福岡県', '佐賀県', '長崎県',
+  '熊本県', '大分県', '宮崎県', '鹿児島県', '沖縄県',
+] as const
+
 const REQUIRED_IMPORT_HEADERS = [
   [0, '№'],
   [1, '氏名'],
@@ -96,6 +106,36 @@ function optionalFlag(value: CellValue | null | undefined): boolean | null {
   const normalized = cellText(value).toLowerCase()
   if (['0', 'false', 'なし', '無', '×', '未'].includes(normalized)) return false
   return true
+}
+
+function normalizeName(value: string): string {
+  return value.trim().replace(/[\s　]+/g, '').toLocaleLowerCase('ja')
+}
+
+function extractAddressParts(address: string): { prefecture: string | null; municipality: string | null } {
+  const normalized = address.trim().replace(/^[\s　]+/, '')
+  const prefectureWithSuffix = PREFECTURES.find((value) => normalized.startsWith(value)) ?? null
+  const prefecture = prefectureWithSuffix === '北海道'
+    ? prefectureWithSuffix
+    : prefectureWithSuffix?.replace(/[都道府県]$/, '') ?? null
+  const localityText = (prefectureWithSuffix ? normalized.slice(prefectureWithSuffix.length) : normalized)
+    .replace(/^[\s　]+/, '')
+
+  const countyMunicipality = localityText.match(/^[^0-9０-９\s　]+?郡([^0-9０-９\s　]+?(?:町|村))/)?.[1]
+  if (countyMunicipality) return { prefecture, municipality: countyMunicipality }
+
+  const municipality = localityText.match(/^([^0-9０-９\s　]+?(?:市|区|町|村))/)?.[1] ?? null
+  return { prefecture, municipality }
+}
+
+function nextAuthorizationNo(items: AuthorizationRecord[]): string {
+  const numericNos = items
+    .map((item) => item.authorization_no.trim())
+    .filter((value) => /^\d+$/.test(value))
+    .map(Number)
+    .filter(Number.isSafeInteger)
+
+  return String((numericNos.length > 0 ? Math.max(...numericNos) : 0) + 1)
 }
 
 export function AuthorizationManager({ workerId }: Props) {
@@ -146,9 +186,18 @@ export function AuthorizationManager({ workerId }: Props) {
   }
 
   const beginAdd = () => {
-    setForm(EMPTY_FORM)
+    setForm({ ...EMPTY_FORM, authorization_no: nextAuthorizationNo(items) })
     setNotice(null)
     setModalOpen(true)
+  }
+
+  const applyAddressPartsToForm = () => {
+    const parts = extractAddressParts(form.address)
+    setForm((current) => ({
+      ...current,
+      prefecture: parts.prefecture ?? current.prefecture,
+      municipality: parts.municipality ?? current.municipality,
+    }))
   }
 
   const authorizationArgs = (record: AuthorizationRecord) => ({
@@ -191,6 +240,22 @@ export function AuthorizationManager({ workerId }: Props) {
       [editingCell.field]: value || null,
     }
 
+    if (editingCell.field === 'full_name') {
+      const duplicate = items.some((item) => (
+        item.id !== record.id && normalizeName(item.full_name) === normalizeName(value)
+      ))
+      if (duplicate) {
+        setNotice({ type: 'error', text: `氏名「${value}」はすでに登録されています。` })
+        return
+      }
+    }
+
+    if (editingCell.field === 'address') {
+      const parts = extractAddressParts(value)
+      updatedRecord.prefecture = parts.prefecture ?? record.prefecture
+      updatedRecord.municipality = parts.municipality ?? record.municipality
+    }
+
     setBusy(true)
     setNotice(null)
     const { error } = await supabase.rpc('flexcon_update_authorization', {
@@ -229,17 +294,24 @@ export function AuthorizationManager({ workerId }: Props) {
 
   const save = async (event: React.FormEvent) => {
     event.preventDefault()
+    const fullName = form.full_name.trim()
+    if (items.some((item) => normalizeName(item.full_name) === normalizeName(fullName))) {
+      setNotice({ type: 'error', text: `氏名「${fullName}」はすでに登録されています。` })
+      return
+    }
+
+    const addressParts = extractAddressParts(form.address)
     setBusy(true)
     setNotice(null)
     const args = {
       p_worker_id: workerId,
       p_authorization_no: form.authorization_no.trim(),
-      p_full_name: form.full_name.trim(),
+      p_full_name: fullName,
       p_seed_purchase_slip: form.seed_purchase_slip,
       p_farming_plan: form.farming_plan,
       p_address: form.address.trim() || null,
-      p_prefecture: form.prefecture.trim() || null,
-      p_municipality: form.municipality.trim() || null,
+      p_prefecture: addressParts.prefecture ?? (form.prefecture.trim() || null),
+      p_municipality: addressParts.municipality ?? (form.municipality.trim() || null),
       p_phone: form.phone.trim() || null,
       p_crop_type: form.crop_type.trim() || null,
       p_feed_rice_variety: form.feed_rice_variety.trim() || null,
@@ -280,14 +352,16 @@ export function AuthorizationManager({ workerId }: Props) {
         const authorizationNo = cellText(row[0])
         const fullName = cellText(row[1])
         if (!authorizationNo || !fullName) return []
+        const address = cellText(row[5])
+        const addressParts = extractAddressParts(address)
         return [{
           authorization_no: authorizationNo,
           full_name: fullName,
           seed_purchase_slip: optionalFlag(row[2]),
           farming_plan: optionalFlag(row[3]),
-          address: nullableText(row[5]),
-          prefecture: nullableText(row[6]),
-          municipality: nullableText(row[7]),
+          address: address || null,
+          prefecture: addressParts.prefecture ?? nullableText(row[6]),
+          municipality: addressParts.municipality ?? nullableText(row[7]),
           phone: nullableText(row[8]),
           crop_type: nullableText(row[9]),
           feed_rice_variety: nullableText(row[11]),
@@ -300,6 +374,22 @@ export function AuthorizationManager({ workerId }: Props) {
         .filter((value, index, all) => all.indexOf(value) !== index)
       if (duplicateNos.length > 0) {
         throw new Error(`同じナンバーが複数あります: ${[...new Set(duplicateNos)].slice(0, 10).join(', ')}`)
+      }
+
+      const duplicateNames = parsed
+        .map((record) => normalizeName(record.full_name))
+        .filter((value, index, all) => all.indexOf(value) !== index)
+      if (duplicateNames.length > 0) {
+        const duplicateName = parsed.find((record) => normalizeName(record.full_name) === duplicateNames[0])?.full_name
+        throw new Error(`氏名「${duplicateName}」がExcel内に複数あります。`)
+      }
+
+      const existingNameConflict = parsed.find((record) => items.some((item) => (
+        item.authorization_no !== record.authorization_no
+        && normalizeName(item.full_name) === normalizeName(record.full_name)
+      )))
+      if (existingNameConflict) {
+        throw new Error(`氏名「${existingNameConflict.full_name}」は別のナンバーで登録済みです。`)
       }
       if (parsed.length === 0) throw new Error('取込可能な委任状情報がありません。')
 
@@ -477,7 +567,7 @@ export function AuthorizationManager({ workerId }: Props) {
                 <div className="switch-field"><span>営農計画書フラグ</span><ToggleSwitch checked={form.farming_plan} label="営農計画書フラグ" onChange={() => setForm((current) => ({ ...current, farming_plan: !current.farming_plan }))} /></div>
               </div>
 
-              <label>住所<input value={form.address} onChange={(event) => setText('address', event.target.value)} /></label>
+              <label>住所<input value={form.address} onChange={(event) => setText('address', event.target.value)} onBlur={applyAddressPartsToForm} /></label>
               <div className="form-grid two">
                 <label>県名<input value={form.prefecture} onChange={(event) => setText('prefecture', event.target.value)} /></label>
                 <label>市町村<input value={form.municipality} onChange={(event) => setText('municipality', event.target.value)} /></label>
