@@ -64,6 +64,7 @@ function App() {
         {tab === 'scan' && (
           <ShipmentScanner
             workerId={worker.worker_id}
+            workerName={worker.worker_name}
             onRegistered={() => setHistoryVersion((value) => value + 1)}
           />
         )}

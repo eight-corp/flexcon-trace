@@ -9,7 +9,7 @@ export function ShipmentHistory({ refreshKey }: { refreshKey: number }) {
   const [error, setError] = useState('')
 
   useEffect(() => {
-    void supabase.from('flexcon_shipments').select('id, shipped_at, contact_name, carrier_name, driver_name, vehicle_no, note, flexcon_destinations(name), flexcon_shipment_items(lot_number), workers(worker_name)').order('shipped_at', { ascending: false }).limit(200)
+    void supabase.from('flexcon_shipments').select('id, shipped_at, carrier_name, driver_name, vehicle_no, note, flexcon_destinations(name), flexcon_shipment_items(lot_number), workers(worker_name)').order('shipped_at', { ascending: false }).limit(200)
       .then(({ data, error: queryError }) => {
         if (queryError) setError(queryError.message)
         else setShipments((data ?? []) as unknown as Shipment[])
@@ -21,7 +21,6 @@ export function ShipmentHistory({ refreshKey }: { refreshKey: number }) {
     if (!term) return shipments
     return shipments.filter((item) =>
       item.flexcon_destinations?.name.toLowerCase().includes(term)
-      || item.contact_name?.toLowerCase().includes(term)
       || item.carrier_name?.toLowerCase().includes(term)
       || item.driver_name?.toLowerCase().includes(term)
       || item.vehicle_no?.toLowerCase().includes(term)
@@ -30,15 +29,14 @@ export function ShipmentHistory({ refreshKey }: { refreshKey: number }) {
   }, [search, shipments])
 
   const exportCsv = () => {
-    const rows = [['出荷日時', '納品先', '担当者', '運送会社名', 'ドライバー名', '車両番号', '登録作業者', 'QRコード', 'フレコン本数', '備考']]
+    const rows = [['出荷日時', '納品先', '担当者', '運送会社名', 'ドライバー名', '車両番号', 'QRコード', 'フレコン本数', '備考']]
     filtered.forEach((shipment) => shipment.flexcon_shipment_items.forEach((item) => rows.push([
       new Date(shipment.shipped_at).toLocaleString('ja-JP'),
       shipment.flexcon_destinations?.name ?? '',
-      shipment.contact_name ?? '',
+      shipment.workers?.worker_name ?? '',
       shipment.carrier_name ?? '',
       shipment.driver_name ?? '',
       shipment.vehicle_no ?? '',
-      shipment.workers?.worker_name ?? '',
       item.lot_number,
       String(shipment.flexcon_shipment_items.length),
       shipment.note ?? '',
@@ -67,8 +65,8 @@ export function ShipmentHistory({ refreshKey }: { refreshKey: number }) {
             <div className="shipment-head">
               <div>
                 <strong>{shipment.flexcon_destinations?.name ?? '納品先不明'}</strong>
-                <small>{new Date(shipment.shipped_at).toLocaleString('ja-JP')} / 登録：{shipment.workers?.worker_name ?? '不明'}</small>
-                {shipment.contact_name && <small><UserRound size={13} className="inline-icon" />担当：{shipment.contact_name}</small>}
+                <small>{new Date(shipment.shipped_at).toLocaleString('ja-JP')}</small>
+                <small><UserRound size={13} className="inline-icon" />担当：{shipment.workers?.worker_name ?? '不明'}</small>
                 {shipment.carrier_name && <small><Building2 size={13} className="inline-icon" />{shipment.carrier_name} / {shipment.driver_name ?? 'ドライバー不明'}</small>}
                 {shipment.vehicle_no && <small><Truck size={13} className="inline-icon" />{shipment.vehicle_no}</small>}
               </div>

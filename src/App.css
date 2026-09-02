@@ -69,13 +69,25 @@
 .editing-item { display: block; }
 .editing-item form { width: 100%; }
 .inactive-item { opacity: .58; }
+.master-form { scroll-margin-top: 80px; }
+.master-form-active { border-color: #8cb79a; box-shadow: 0 0 0 3px rgba(35, 102, 64, .1); }
 .toggle-switch { width: 48px; height: 26px; flex: 0 0 auto; border: 0; border-radius: 13px; padding: 3px; background: #aeb6b0; }
 .toggle-switch span { display: block; width: 20px; height: 20px; border-radius: 50%; background: #fff; transition: transform .15s ease; }
 .toggle-switch[aria-checked="true"] { background: var(--green); }
 .toggle-switch[aria-checked="true"] span { transform: translateX(22px); }
 .inline-icon { vertical-align: -2px; margin-right: 4px; }
-.transport-summary { display: flex; align-items: center; gap: 8px; margin-top: 14px; padding: 10px 12px; background: var(--surface-soft); border-radius: 6px; color: #4d5950; font-size: 13px; }
-.transport-summary span { min-width: 0; overflow-wrap: anywhere; }
+.scanner-top { margin-top: 0; }
+.scan-actions { margin-top: 14px; justify-content: flex-end; }
+.modal-backdrop { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 18px; background: rgba(17, 24, 19, .62); }
+.registration-modal { width: min(100%, 640px); max-height: calc(100vh - 36px); overflow-y: auto; background: #fff; border-radius: 8px; padding: 20px; box-shadow: 0 18px 50px rgba(0, 0, 0, .28); }
+.modal-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+.modal-header h2 { margin: 0 0 3px; }
+.modal-header p { margin: 0; color: var(--muted); font-size: 13px; }
+.worker-summary { display: grid; grid-template-columns: auto auto 1fr; align-items: center; gap: 8px; padding: 10px 12px; background: var(--green-soft); color: var(--green-dark); border-radius: 6px; }
+.worker-summary strong { justify-self: end; }
+.driver-vehicle-fields { margin: 0; padding: 13px; border: 1px solid var(--line); border-radius: 6px; }
+.driver-vehicle-fields legend { padding: 0 5px; color: #3f4a42; font-size: 13px; font-weight: 700; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
 .shipment-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; }
 .shipment-head strong { display: block; }
 .shipment-head small { display: block; color: var(--muted); }
@@ -105,4 +117,7 @@
   .form-grid.two { grid-template-columns: 1fr; }
   .auth-panel { padding: 22px 18px; }
   .shipment-head { align-items: center; }
+  .scan-actions > *, .modal-actions > * { flex: 1; }
+  .modal-backdrop { align-items: end; padding: 0; }
+  .registration-modal { width: 100%; max-height: 94vh; border-radius: 8px 8px 0 0; padding: 18px 16px calc(18px + env(safe-area-inset-bottom)); }
 }

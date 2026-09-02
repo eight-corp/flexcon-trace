@@ -19,8 +19,8 @@ export type Worker = {
 export type TransportProfile = {
   id: string
   company_name: string
-  driver_name: string
-  vehicle_no: string
+  driver_name: string | null
+  vehicle_no: string | null
   active: boolean
   created_at: string
   updated_at: string
@@ -29,7 +29,6 @@ export type TransportProfile = {
 export type Shipment = {
   id: string
   shipped_at: string
-  contact_name: string | null
   carrier_name: string | null
   driver_name: string | null
   vehicle_no: string | null
