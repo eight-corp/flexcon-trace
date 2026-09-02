@@ -51,7 +51,9 @@
 .target-control { width: 106px; }
 .scan-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 7px; max-height: 290px; overflow: auto; }
 .scan-list li { min-height: 44px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-soft); display: flex; align-items: center; gap: 10px; padding: 7px 8px 7px 11px; }
-.scan-list .lot-number { flex: 1; font-family: Consolas, monospace; font-size: 17px; font-weight: 700; }
+.scan-list .lot-producer-name { flex: 1; min-width: 0; overflow: hidden; color: #28342c; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.scan-list .lot-producer-name.unknown { color: var(--red); font-size: 12px; }
+.scan-list .lot-number { flex: 0 0 auto; font-family: Consolas, monospace; font-size: 17px; font-weight: 700; }
 .scan-list .sequence { color: var(--muted); font-size: 12px; width: 24px; }
 .manual-entry { display: flex; gap: 8px; margin-top: 12px; }
 .manual-entry input { flex: 1; font-family: Consolas, monospace; }

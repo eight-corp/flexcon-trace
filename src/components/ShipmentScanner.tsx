@@ -18,10 +18,16 @@ function currentLocalDateTime() {
   return date.toISOString().slice(0, 16)
 }
 
+function normalizeAuthorizationNo(value: string) {
+  const trimmed = value.trim()
+  return /^\d+$/.test(trimmed) ? String(Number(trimmed)) : trimmed
+}
+
 export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
   const storageKey = `${STORAGE_KEY_PREFIX}-${workerId}`
   const [destinations, setDestinations] = useState<Destination[]>([])
   const [transportProfiles, setTransportProfiles] = useState<TransportProfile[]>([])
+  const [authorizationNames, setAuthorizationNames] = useState<Record<string, string>>({})
   const [shippedAt, setShippedAt] = useState(currentLocalDateTime)
   const [destinationId, setDestinationId] = useState('')
   const [transportProfileId, setTransportProfileId] = useState('')
@@ -43,11 +49,21 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
     void Promise.all([
       supabase.from('flexcon_destinations').select('*').eq('active', true).order('name'),
       supabase.from('flexcon_transport_profiles').select('*').eq('active', true).order('company_name'),
-    ]).then(([destinationResult, transportResult]) => {
+      supabase.from('flexcon_authorizations').select('authorization_no, full_name'),
+    ]).then(([destinationResult, transportResult, authorizationResult]) => {
       if (destinationResult.error) setNotice({ type: 'error', text: '納品先を取得できません。SupabaseのSQL設定を確認してください。' })
       else setDestinations((destinationResult.data ?? []) as Destination[])
       if (transportResult.error) setNotice({ type: 'error', text: '運送会社を取得できません。追加SQLを実行してください。' })
       else setTransportProfiles((transportResult.data ?? []) as TransportProfile[])
+      if (authorizationResult.error) {
+        setNotice({ type: 'error', text: '委任状一覧を取得できません。SupabaseのSQL設定を確認してください。' })
+      } else {
+        const names = Object.fromEntries((authorizationResult.data ?? []).map((record) => [
+          normalizeAuthorizationNo(String(record.authorization_no)),
+          String(record.full_name),
+        ]))
+        setAuthorizationNames(names)
+      }
     })
   }, [workerId])
 
@@ -171,6 +187,9 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
             {lots.map((lot, index) => (
               <li key={lot}>
                 <span className="sequence">{index + 1}</span><CheckCircle2 size={18} color="#236640" />
+                <span className={`lot-producer-name ${authorizationNames[normalizeAuthorizationNo(lot.slice(0, 3))] ? '' : 'unknown'}`}>
+                  {authorizationNames[normalizeAuthorizationNo(lot.slice(0, 3))] ?? '委任状未登録'}
+                </span>
                 <span className="lot-number">{lot}</span>
                 <button className="icon-button" type="button" title="削除" aria-label={`${lot}を削除`} onClick={() => setLots((current) => current.filter((item) => item !== lot))}><X size={18} /></button>
               </li>
