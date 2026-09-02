@@ -122,7 +122,7 @@
 .authorization-heading-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-shrink: 0; }
 .visually-hidden { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; margin: -1px !important; overflow: hidden !important; clip: rect(0, 0, 0, 0) !important; white-space: nowrap !important; border: 0 !important; }
 .authorization-table-wrap { max-width: 100%; overflow: auto; border: 1px solid var(--line); border-radius: 7px; background: #fff; }
-.authorization-table { width: 100%; min-width: 1680px; border-collapse: separate; border-spacing: 0; font-size: 13px; }
+.authorization-table { width: 100%; min-width: 1740px; border-collapse: separate; border-spacing: 0; font-size: 13px; }
 .authorization-table th, .authorization-table td { padding: 10px 11px; border-bottom: 1px solid var(--line); border-right: 1px solid #e5e8e5; text-align: left; vertical-align: middle; white-space: nowrap; }
 .authorization-table thead { position: sticky; top: 0; z-index: 5; }
 .authorization-table th { position: relative; z-index: 1; background: #eef2ee; box-shadow: 0 2px 0 #c8cec9; color: #3d4840; font-weight: 700; }
@@ -134,6 +134,14 @@
 .authorization-table .authorization-name { font-weight: 700; }
 .authorization-table .flag-cell { width: 96px; text-align: center; color: var(--green); }
 .authorization-table .flag-cell .toggle-switch { margin: 0 auto; }
+.authorization-table .authorization-register-header, .authorization-table .authorization-register-cell { width: 58px; min-width: 58px; text-align: center; }
+.authorization-new-row { background: #f6fbf7; }
+.authorization-new-row:hover { background: #f6fbf7 !important; }
+.authorization-new-row td { padding: 4px 5px; }
+.authorization-new-row-input { width: 100%; min-width: 100px; height: 34px; margin: 0; padding: 5px 7px; border: 1px solid #b9c5bc; border-radius: 3px; background: #fff; font: inherit; }
+.authorization-new-row-input:focus { border-color: var(--green); outline: 2px solid rgb(38 111 64 / 18%); }
+.authorization-new-row-input[readonly] { background: #edf1ee; color: #334039; font-family: Consolas, monospace; font-weight: 700; }
+.authorization-row-save { margin: 0 auto; color: var(--green); }
 .authorization-editable-cell { cursor: cell; }
 .authorization-editable-cell:focus { position: relative; z-index: 1; outline: 2px solid #4f8260; outline-offset: -2px; background: #f6fbf7; }
 .authorization-cell-editing { padding: 4px !important; background: #f6fbf7; }

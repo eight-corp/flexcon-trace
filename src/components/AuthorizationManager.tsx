@@ -146,6 +146,7 @@ export function AuthorizationManager({ workerId }: Props) {
   const [modalOpen, setModalOpen] = useState(false)
   const [editingCell, setEditingCell] = useState<EditingCell | null>(null)
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
+  const [rowForm, setRowForm] = useState<FormState>(EMPTY_FORM)
   const [busy, setBusy] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
   const [importFileName, setImportFileName] = useState('')
@@ -157,11 +158,13 @@ export function AuthorizationManager({ workerId }: Props) {
     void supabase.from('flexcon_authorizations').select('*').order('authorization_no')
       .then(({ data, error }) => {
         if (error) setNotice({ type: 'error', text: error.message })
-        else setItems(
-          ((data ?? []) as AuthorizationRecord[]).sort((left, right) => (
+        else {
+          const loadedItems = ((data ?? []) as AuthorizationRecord[]).sort((left, right) => (
             AUTHORIZATION_NO_COLLATOR.compare(left.authorization_no, right.authorization_no)
-          )),
-        )
+          ))
+          setItems(loadedItems)
+          setRowForm({ ...EMPTY_FORM, authorization_no: nextAuthorizationNo(loadedItems) })
+        }
       })
   }, [version])
 
@@ -194,6 +197,15 @@ export function AuthorizationManager({ workerId }: Props) {
   const applyAddressPartsToForm = () => {
     const parts = extractAddressParts(form.address)
     setForm((current) => ({
+      ...current,
+      prefecture: parts.prefecture ?? current.prefecture,
+      municipality: parts.municipality ?? current.municipality,
+    }))
+  }
+
+  const applyAddressPartsToRowForm = () => {
+    const parts = extractAddressParts(rowForm.address)
+    setRowForm((current) => ({
       ...current,
       prefecture: parts.prefecture ?? current.prefecture,
       municipality: parts.municipality ?? current.municipality,
@@ -328,6 +340,59 @@ export function AuthorizationManager({ workerId }: Props) {
     }
     setBusy(false)
   }
+
+  const saveRow = async (event: React.SyntheticEvent) => {
+    event.preventDefault()
+    if (busy) return
+
+    const fullName = rowForm.full_name.trim()
+    if (!fullName) {
+      setNotice({ type: 'error', text: '氏名を入力してください。' })
+      return
+    }
+    if (items.some((item) => normalizeName(item.full_name) === normalizeName(fullName))) {
+      setNotice({ type: 'error', text: `氏名「${fullName}」はすでに登録されています。` })
+      return
+    }
+
+    const addressParts = extractAddressParts(rowForm.address)
+    setBusy(true)
+    setNotice(null)
+    const { error } = await supabase.rpc('flexcon_add_authorization', {
+      p_worker_id: workerId,
+      p_authorization_no: rowForm.authorization_no.trim(),
+      p_full_name: fullName,
+      p_seed_purchase_slip: rowForm.seed_purchase_slip,
+      p_farming_plan: rowForm.farming_plan,
+      p_address: rowForm.address.trim() || null,
+      p_prefecture: addressParts.prefecture ?? (rowForm.prefecture.trim() || null),
+      p_municipality: addressParts.municipality ?? (rowForm.municipality.trim() || null),
+      p_phone: rowForm.phone.trim() || null,
+      p_crop_type: rowForm.crop_type.trim() || null,
+      p_feed_rice_variety: rowForm.feed_rice_variety.trim() || null,
+      p_notes: rowForm.notes.trim() || null,
+    })
+
+    if (error) {
+      setNotice({ type: 'error', text: error.message })
+    } else {
+      setNotice({ type: 'success', text: '委任状情報を追加しました。' })
+      setVersion((value) => value + 1)
+    }
+    setBusy(false)
+  }
+
+  const rowInput = (field: EditableTextField, type: 'text' | 'tel' = 'text') => (
+    <input
+      className="authorization-new-row-input"
+      type={type}
+      value={rowForm[field]}
+      readOnly={field === 'authorization_no'}
+      aria-label={`新規委任状 ${field}`}
+      onChange={(event) => setRowForm((current) => ({ ...current, [field]: event.target.value }))}
+      onBlur={field === 'address' ? applyAddressPartsToRowForm : undefined}
+    />
+  )
 
   const chooseImportFile = () => {
     setNotice(null)
@@ -513,6 +578,7 @@ export function AuthorizationManager({ workerId }: Props) {
               <th>農作物の種類</th>
               <th>飼料用米の品種</th>
               <th>備考</th>
+              <th className="authorization-register-header">登録</th>
             </tr>
           </thead>
           <tbody>
@@ -541,8 +607,46 @@ export function AuthorizationManager({ workerId }: Props) {
                 {editableCell(record, 'crop_type')}
                 {editableCell(record, 'feed_rice_variety')}
                 {editableCell(record, 'notes')}
+                <td className="authorization-register-cell" />
               </tr>
             ))}
+            <tr className="authorization-new-row">
+              <td className="authorization-no">{rowInput('authorization_no')}</td>
+              <td className="authorization-name">{rowInput('full_name')}</td>
+              <td className="flag-cell">
+                <ToggleSwitch
+                  checked={rowForm.seed_purchase_slip}
+                  label="新規委任状 種子購入伝票フラグ"
+                  onChange={() => setRowForm((current) => ({ ...current, seed_purchase_slip: !current.seed_purchase_slip }))}
+                />
+              </td>
+              <td className="flag-cell">
+                <ToggleSwitch
+                  checked={rowForm.farming_plan}
+                  label="新規委任状 営農計画書フラグ"
+                  onChange={() => setRowForm((current) => ({ ...current, farming_plan: !current.farming_plan }))}
+                />
+              </td>
+              <td>{rowInput('address')}</td>
+              <td>{rowInput('prefecture')}</td>
+              <td>{rowInput('municipality')}</td>
+              <td>{rowInput('phone', 'tel')}</td>
+              <td>{rowInput('crop_type')}</td>
+              <td>{rowInput('feed_rice_variety')}</td>
+              <td>{rowInput('notes')}</td>
+              <td className="authorization-register-cell">
+                <button
+                  className="icon-button authorization-row-save"
+                  type="button"
+                  title="この行を登録"
+                  aria-label="この行を登録"
+                  disabled={busy}
+                  onClick={(event) => void saveRow(event)}
+                >
+                  <Save size={18} />
+                </button>
+              </td>
+            </tr>
           </tbody>
         </table>
         {filtered.length === 0 && <div className="empty-state">委任状情報がありません</div>}
