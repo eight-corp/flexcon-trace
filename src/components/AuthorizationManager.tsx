@@ -50,6 +50,11 @@ const EMPTY_FORM: FormState = {
   notes: '',
 }
 
+const AUTHORIZATION_NO_COLLATOR = new Intl.Collator('ja', {
+  numeric: true,
+  sensitivity: 'base',
+})
+
 const REQUIRED_IMPORT_HEADERS = [
   [0, '№'],
   [1, '氏名'],
@@ -120,7 +125,11 @@ export function AuthorizationManager({ workerId }: Props) {
     void supabase.from('flexcon_authorizations').select('*').order('authorization_no')
       .then(({ data, error }) => {
         if (error) setNotice({ type: 'error', text: error.message })
-        else setItems((data ?? []) as AuthorizationRecord[])
+        else setItems(
+          ((data ?? []) as AuthorizationRecord[]).sort((left, right) => (
+            AUTHORIZATION_NO_COLLATOR.compare(left.authorization_no, right.authorization_no)
+          )),
+        )
       })
   }, [version])
 
