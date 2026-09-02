@@ -1,14 +1,15 @@
 import { useEffect, useState } from 'react'
-import { History, LogOut, MapPinned, ScanLine, Wheat } from 'lucide-react'
+import { History, LogOut, MapPinned, ScanLine, Truck, Wheat } from 'lucide-react'
 import { AuthScreen } from './components/AuthScreen'
 import { DestinationManager } from './components/DestinationManager'
 import { ShipmentHistory } from './components/ShipmentHistory'
 import { ShipmentScanner } from './components/ShipmentScanner'
+import { TransportManager } from './components/TransportManager'
 import { clearWorkerSession, restoreWorkerSession } from './lib/workerAuth'
 import type { Worker } from './types'
 import './App.css'
 
-type Tab = 'scan' | 'history' | 'destinations'
+type Tab = 'scan' | 'history' | 'destinations' | 'transport'
 
 function App() {
   const [worker, setWorker] = useState<Worker | null>(null)
@@ -68,6 +69,7 @@ function App() {
         )}
         {tab === 'history' && <ShipmentHistory refreshKey={historyVersion} />}
         {tab === 'destinations' && <DestinationManager workerId={worker.worker_id} />}
+        {tab === 'transport' && <TransportManager workerId={worker.worker_id} />}
       </main>
 
       <nav className="bottom-nav" aria-label="メインメニュー">
@@ -79,6 +81,9 @@ function App() {
         </button>
         <button className={tab === 'destinations' ? 'active' : ''} onClick={() => setTab('destinations')}>
           <MapPinned size={22} /><span>納品先</span>
+        </button>
+        <button className={tab === 'transport' ? 'active' : ''} onClick={() => setTab('transport')}>
+          <Truck size={22} /><span>運送会社</span>
         </button>
       </nav>
     </div>

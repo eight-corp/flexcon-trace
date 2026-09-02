@@ -1,19 +1,27 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
-import { CheckCircle2, Plus, Send, Trash2, X } from 'lucide-react'
+import { CheckCircle2, Plus, Send, Trash2, Truck, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import type { Destination } from '../types'
+import type { Destination, TransportProfile } from '../types'
 
 const QrScanner = lazy(() => import('./QrScanner').then((module) => ({ default: module.QrScanner })))
-
 const STORAGE_KEY_PREFIX = 'flexcon-pending-shipment'
 
 type Props = { workerId: string; onRegistered: () => void }
 
+function currentLocalDateTime() {
+  const date = new Date()
+  date.setMinutes(date.getMinutes() - date.getTimezoneOffset())
+  return date.toISOString().slice(0, 16)
+}
+
 export function ShipmentScanner({ workerId, onRegistered }: Props) {
   const storageKey = `${STORAGE_KEY_PREFIX}-${workerId}`
   const [destinations, setDestinations] = useState<Destination[]>([])
+  const [transportProfiles, setTransportProfiles] = useState<TransportProfile[]>([])
+  const [shippedAt, setShippedAt] = useState(currentLocalDateTime)
   const [destinationId, setDestinationId] = useState('')
-  const [vehicleNo, setVehicleNo] = useState('')
+  const [contactName, setContactName] = useState('')
+  const [transportProfileId, setTransportProfileId] = useState('')
   const [note, setNote] = useState('')
   const [targetCount, setTargetCount] = useState(12)
   const [lots, setLots] = useState<string[]>(() => {
@@ -26,16 +34,28 @@ export function ShipmentScanner({ workerId, onRegistered }: Props) {
   const lastRead = useRef({ value: '', time: 0 })
 
   useEffect(() => {
-    void supabase.from('flexcon_destinations').select('*').eq('active', true).order('name').then(({ data, error }) => {
-      if (error) setNotice({ type: 'error', text: '納品先を取得できません。SupabaseのSQL設定を確認してください。' })
-      else setDestinations((data ?? []) as Destination[])
+    void Promise.all([
+      supabase.from('flexcon_destinations').select('*').eq('active', true).order('name'),
+      supabase.from('flexcon_transport_profiles').select('*').eq('active', true).order('company_name').order('driver_name'),
+    ]).then(([destinationResult, transportResult]) => {
+      if (destinationResult.error) setNotice({ type: 'error', text: '納品先を取得できません。SupabaseのSQL設定を確認してください。' })
+      else setDestinations((destinationResult.data ?? []) as Destination[])
+      if (transportResult.error) setNotice({ type: 'error', text: '運送会社情報を取得できません。追加SQLを実行してください。' })
+      else setTransportProfiles((transportResult.data ?? []) as TransportProfile[])
     })
   }, [workerId])
 
   useEffect(() => { localStorage.setItem(storageKey, JSON.stringify(lots)) }, [lots, storageKey])
 
+  const selectedDestination = destinations.find((item) => item.id === destinationId)
+  const selectedTransport = transportProfiles.find((item) => item.id === transportProfileId)
   const startScanner = useCallback(() => setScannerActive(true), [])
   const stopScanner = useCallback(() => setScannerActive(false), [])
+
+  const changeDestination = (id: string) => {
+    setDestinationId(id)
+    setContactName(destinations.find((item) => item.id === id)?.contact_name ?? '')
+  }
 
   const addLot = useCallback((rawValue: string) => {
     const value = rawValue.trim()
@@ -66,9 +86,13 @@ export function ShipmentScanner({ workerId, onRegistered }: Props) {
   }
 
   const registerShipment = async () => {
+    if (!shippedAt) return setNotice({ type: 'error', text: '出荷日時を入力してください。' })
     if (!destinationId) return setNotice({ type: 'error', text: '納品先を選択してください。' })
+    if (!contactName.trim()) return setNotice({ type: 'error', text: '担当者を入力してください。' })
+    if (!transportProfileId) return setNotice({ type: 'error', text: '運送会社情報を選択してください。' })
     if (lots.length === 0) return setNotice({ type: 'error', text: 'ロット番号を1本以上読み取ってください。' })
-    if (!window.confirm(`${lots.length}本をまとめて出荷登録しますか？`)) return
+    const message = `${selectedDestination?.name ?? ''}へ${lots.length}本を、${selectedTransport?.company_name ?? ''}で出荷登録しますか？`
+    if (!window.confirm(message)) return
 
     setBusy(true)
     setScannerActive(false)
@@ -77,8 +101,10 @@ export function ShipmentScanner({ workerId, onRegistered }: Props) {
     const { error } = await supabase.rpc('flexcon_register_shipment', {
       p_worker_id: workerId,
       p_destination_id: destinationId,
+      p_transport_profile_id: transportProfileId,
+      p_shipped_at: new Date(shippedAt).toISOString(),
+      p_contact_name: contactName.trim(),
       p_lot_numbers: lots,
-      p_vehicle_no: vehicleNo.trim() || null,
       p_note: note.trim() || null,
     })
 
@@ -86,8 +112,8 @@ export function ShipmentScanner({ workerId, onRegistered }: Props) {
       setNotice({ type: 'error', text: error.message })
     } else {
       setLots([])
-      setVehicleNo('')
       setNote('')
+      setShippedAt(currentLocalDateTime())
       localStorage.removeItem(storageKey)
       setNotice({ type: 'success', text: `${registeredCount}本の出荷を登録しました。` })
       onRegistered()
@@ -97,20 +123,26 @@ export function ShipmentScanner({ workerId, onRegistered }: Props) {
 
   return (
     <div>
-      <div className="page-heading"><h1>出荷QR連続読取</h1><p>納品先を選択してから、フレコンのQRを順番に読み取ります。</p></div>
+      <div className="page-heading"><h1>出荷QR連続読取</h1><p>出荷情報を選択してから、フレコンのQRを順番に読み取ります。</p></div>
 
       <section className="section-band">
         <div className="form-grid two">
+          <label>出荷日時<input type="datetime-local" value={shippedAt} onChange={(e) => setShippedAt(e.target.value)} required /></label>
           <label>納品先
-            <select value={destinationId} onChange={(e) => setDestinationId(e.target.value)}>
+            <select value={destinationId} onChange={(e) => changeDestination(e.target.value)} required>
               <option value="">選択してください</option>
               {destinations.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
             </select>
           </label>
-          <label>車両番号・便名（任意）
-            <input value={vehicleNo} onChange={(e) => setVehicleNo(e.target.value)} placeholder="例：青森 100 あ 12-34" />
+          <label>担当者<input value={contactName} onChange={(e) => setContactName(e.target.value)} required placeholder="納品先の担当者" /></label>
+          <label>運送会社・ドライバー・車両
+            <select value={transportProfileId} onChange={(e) => setTransportProfileId(e.target.value)} required>
+              <option value="">選択してください</option>
+              {transportProfiles.map((item) => <option key={item.id} value={item.id}>{item.company_name} / {item.driver_name} / {item.vehicle_no}</option>)}
+            </select>
           </label>
         </div>
+        {selectedTransport && <div className="transport-summary"><Truck size={18} /><span><strong>{selectedTransport.company_name}</strong>　{selectedTransport.driver_name}　{selectedTransport.vehicle_no}</span></div>}
       </section>
 
       {notice && <div className={`notice ${notice.type}`}>{notice.text}</div>}
@@ -150,10 +182,10 @@ export function ShipmentScanner({ workerId, onRegistered }: Props) {
       </div>
 
       <section className="section-band">
-        <label>備考（任意）<textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="運送会社、担当者への申し送りなど" /></label>
+        <label>備考（任意）<textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="申し送りなど" /></label>
         <div className="button-row" style={{ marginTop: 14 }}>
           <button className="secondary-button" type="button" disabled={lots.length === 0} onClick={() => { if (window.confirm('読み取り済みの一覧を消去しますか？')) setLots([]) }}><Trash2 size={18} />一覧を消去</button>
-          <button className="primary-button" type="button" disabled={busy || lots.length === 0 || !destinationId} onClick={() => void registerShipment()}><Send size={18} />{busy ? '登録中...' : `${lots.length}本を一括登録`}</button>
+          <button className="primary-button" type="button" disabled={busy || lots.length === 0 || !shippedAt || !destinationId || !contactName.trim() || !transportProfileId} onClick={() => void registerShipment()}><Send size={18} />{busy ? '登録中...' : `${lots.length}本を一括登録`}</button>
         </div>
       </section>
     </div>
