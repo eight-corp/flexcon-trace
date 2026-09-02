@@ -26,9 +26,9 @@ begin
 
   if exists (
     select 1
-    from public.flexcon_authorizations as authorization
-    where authorization.id <> new.id
-      and public.flexcon_normalize_authorization_name(authorization.full_name)
+    from public.flexcon_authorizations as auth_record
+    where auth_record.id <> new.id
+      and public.flexcon_normalize_authorization_name(auth_record.full_name)
           = public.flexcon_normalize_authorization_name(new.full_name)
   ) then
     raise exception '氏名「%」はすでに登録されています。', btrim(new.full_name);
