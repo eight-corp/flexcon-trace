@@ -53,21 +53,15 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
 
   useEffect(() => { localStorage.setItem(storageKey, JSON.stringify(lots)) }, [lots, storageKey])
 
-  const startScanner = useCallback(() => {
-    if (lots.length > 0 && lots.length >= plannedCount) {
-      setRegistrationOpen(true)
-      return
-    }
-    setScannerActive(true)
-  }, [lots.length, plannedCount])
+  const startScanner = useCallback(() => setScannerActive(true), [])
   const stopScanner = useCallback(() => setScannerActive(false), [])
 
   const changePlannedCount = (value: number) => {
-    const nextCount = Math.min(24, Math.max(1, value || 1))
+    const minimumCount = Math.max(1, lots.length)
+    const nextCount = Math.min(24, Math.max(minimumCount, value || minimumCount))
     setPlannedCount(nextCount)
     if (lots.length > 0 && lots.length >= nextCount) {
       setScannerActive(false)
-      setRegistrationOpen(true)
     }
   }
 
@@ -88,13 +82,15 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
         return current
       }
       const next = [...current, value]
-      setNotice({ type: 'success', text: `${value} を追加しました。` })
+      setNotice({
+        type: 'success',
+        text: next.length >= plannedCount
+          ? `予定本数${plannedCount}本の読み取りが完了しました。「出荷情報を入力」をタップしてください。`
+          : `${value} を追加しました。`,
+      })
       navigator.vibrate?.(80)
       if (next.length >= plannedCount) {
-        window.setTimeout(() => {
-          setScannerActive(false)
-          setRegistrationOpen(true)
-        }, 0)
+        window.setTimeout(() => setScannerActive(false), 0)
       }
       return next
     })
@@ -152,7 +148,7 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
 
   return (
     <div>
-      <div className="page-heading"><h1>出荷QR連続読取</h1><p>予定本数を読み取ると、出荷情報の入力画面が開きます。</p></div>
+      <div className="page-heading"><h1>出荷QR連続読取</h1><p>予定本数を読み取ったら「出荷情報を入力」をタップします。</p></div>
 
       {notice && <div className={`notice ${notice.type}`}>{notice.text}</div>}
 
@@ -166,7 +162,7 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
         <div className="count-panel">
           <div className="count-display"><strong>{lots.length}</strong><span>/ {plannedCount}本</span></div>
           <label className="target-control">予定本数
-            <input type="number" min={1} max={24} value={plannedCount} onChange={(e) => changePlannedCount(Number(e.target.value))} />
+            <input type="number" min={Math.max(1, lots.length)} max={24} value={plannedCount} onChange={(e) => changePlannedCount(Number(e.target.value))} />
           </label>
         </div>
 
@@ -189,7 +185,7 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
 
         <div className="button-row scan-actions">
           <button className="secondary-button" type="button" disabled={lots.length === 0} onClick={clearLots}><Trash2 size={18} />一覧を消去</button>
-          <button className="primary-button" type="button" disabled={lots.length === 0} onClick={() => { setScannerActive(false); setRegistrationOpen(true) }}><Send size={18} />出荷情報を入力</button>
+          <button className="primary-button" type="button" disabled={lots.length !== plannedCount} onClick={() => { setScannerActive(false); setRegistrationOpen(true) }}><Send size={18} />出荷情報を入力</button>
         </div>
       </section>
 
