@@ -15,6 +15,7 @@
 - 出荷済みロットの再登録防止
 - 出荷日時、ログイン担当者、運送情報を含む出荷履歴の検索とCSV出力
 - 管理者による出荷履歴の編集・削除
+- 委任状情報の一覧・検索・追加・編集・削除
 
 ## ローカル起動
 
@@ -35,9 +36,10 @@ supabase/migrations/202609010001_shared_garlic_supabase.sql
 supabase/migrations/202609020001_shipping_details.sql
 supabase/migrations/202609020002_transport_company_only.sql
 supabase/migrations/202609020003_admin_shipment_history.sql
+supabase/migrations/202609020004_authorizations.sql
 ```
 
-上記4ファイルを上から順に実行します。すでに上3つのSQLを実行済みの場合は、`202609020003_admin_shipment_history.sql` の全内容だけを追加実行してください。
+上記5ファイルを上から順に実行します。すでに上4つのSQLを実行済みの場合は、`202609020004_authorizations.sql` の全内容だけを追加実行してください。
 
 利用者は、にんにく冷蔵庫管理の作業者マスタで管理します。使用する作業者を有効にし、備考欄へ `PIN:1234` の形式でPINを設定してください。フレコントレース側で利用者を重複登録する必要はありません。
 

@@ -39,3 +39,20 @@ export type Shipment = {
   flexcon_shipment_items: { lot_number: string }[]
   workers: { worker_name: string } | null
 }
+
+export type AuthorizationRecord = {
+  id: string
+  authorization_no: string
+  full_name: string
+  seed_purchase_slip: boolean
+  farming_plan: boolean
+  address: string | null
+  prefecture: string | null
+  municipality: string | null
+  phone: string | null
+  crop_type: string | null
+  feed_rice_variety: string | null
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
