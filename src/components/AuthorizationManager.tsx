@@ -1,11 +1,26 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Check, Plus, Save, Search, Trash2, X } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Check, FileUp, Plus, Save, Search, Trash2, X } from 'lucide-react'
+import type { CellValue } from 'read-excel-file/browser'
 import { supabase } from '../lib/supabase'
 import type { AuthorizationRecord } from '../types'
 import { ToggleSwitch } from './ToggleSwitch'
 
 type Props = { workerId: string }
 type Notice = { type: 'success' | 'error'; text: string } | null
+
+type ImportRecord = {
+  authorization_no: string
+  full_name: string
+  seed_purchase_slip: boolean | null
+  farming_plan: boolean | null
+  address: string | null
+  prefecture: string | null
+  municipality: string | null
+  phone: string | null
+  crop_type: string | null
+  feed_rice_variety: string | null
+  notes: string | null
+}
 
 type FormState = {
   authorization_no: string
@@ -35,6 +50,41 @@ const EMPTY_FORM: FormState = {
   notes: '',
 }
 
+const REQUIRED_IMPORT_HEADERS = [
+  [0, '№'],
+  [1, '氏名'],
+  [2, '種子購入伝票'],
+  [3, '営農計画書'],
+  [5, '住所'],
+  [6, '県名'],
+  [7, '市町村'],
+  [8, '電話番号'],
+  [9, '農作物の種類'],
+  [11, '飼料用米の銘柄'],
+  [36, '備考'],
+] as const
+
+function cellText(value: CellValue | null | undefined): string {
+  if (value === null || value === undefined) return ''
+  return String(value).trim()
+}
+
+function nullableText(value: CellValue | null | undefined): string | null {
+  return cellText(value) || null
+}
+
+function normalizedHeader(value: CellValue | null | undefined): string {
+  return cellText(value).replace(/[\s　]/g, '')
+}
+
+function optionalFlag(value: CellValue | null | undefined): boolean | null {
+  if (value === null || value === undefined || cellText(value) === '') return null
+  if (typeof value === 'boolean') return value
+  const normalized = cellText(value).toLowerCase()
+  if (['0', 'false', 'なし', '無', '×', '未'].includes(normalized)) return false
+  return true
+}
+
 function recordToForm(record: AuthorizationRecord): FormState {
   return {
     authorization_no: record.authorization_no,
@@ -60,6 +110,11 @@ export function AuthorizationManager({ workerId }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [busy, setBusy] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
+  const [importFileName, setImportFileName] = useState('')
+  const [importRecords, setImportRecords] = useState<ImportRecord[]>([])
+  const [importError, setImportError] = useState('')
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     void supabase.from('flexcon_authorizations').select('*').order('authorization_no')
@@ -151,11 +206,103 @@ export function AuthorizationManager({ workerId }: Props) {
     setBusy(false)
   }
 
+  const chooseImportFile = () => {
+    setNotice(null)
+    fileInputRef.current?.click()
+  }
+
+  const prepareImport = async (file: File) => {
+    setBusy(true)
+    setImportError('')
+    try {
+      const { readSheet } = await import('read-excel-file/browser')
+      const rows = await readSheet(file, '委任状一覧')
+      const headers = rows[0] ?? []
+      const missingHeader = REQUIRED_IMPORT_HEADERS.find(([index, expected]) => (
+        !normalizedHeader(headers[index]).includes(normalizedHeader(expected))
+      ))
+      if (missingHeader) {
+        throw new Error(`「委任状一覧」シートの${missingHeader[1]}列を確認できません。指定の検査記録ファイルを選択してください。`)
+      }
+
+      const parsed = rows.slice(1).flatMap((row) => {
+        const authorizationNo = cellText(row[0])
+        const fullName = cellText(row[1])
+        if (!authorizationNo || !fullName) return []
+        return [{
+          authorization_no: authorizationNo,
+          full_name: fullName,
+          seed_purchase_slip: optionalFlag(row[2]),
+          farming_plan: optionalFlag(row[3]),
+          address: nullableText(row[5]),
+          prefecture: nullableText(row[6]),
+          municipality: nullableText(row[7]),
+          phone: nullableText(row[8]),
+          crop_type: nullableText(row[9]),
+          feed_rice_variety: nullableText(row[11]),
+          notes: nullableText(row[36]),
+        } satisfies ImportRecord]
+      })
+
+      const duplicateNos = parsed
+        .map((record) => record.authorization_no)
+        .filter((value, index, all) => all.indexOf(value) !== index)
+      if (duplicateNos.length > 0) {
+        throw new Error(`同じナンバーが複数あります: ${[...new Set(duplicateNos)].slice(0, 10).join(', ')}`)
+      }
+      if (parsed.length === 0) throw new Error('取込可能な委任状情報がありません。')
+
+      setImportFileName(file.name)
+      setImportRecords(parsed)
+      setImportOpen(true)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Excelファイルを読み込めませんでした。'
+      setNotice({ type: 'error', text: message })
+    } finally {
+      setBusy(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
+
+  const executeImport = async () => {
+    setBusy(true)
+    setImportError('')
+    const { data, error } = await supabase.rpc('flexcon_import_authorizations', {
+      p_worker_id: workerId,
+      p_records: importRecords,
+    })
+    if (error) {
+      setImportError(error.message)
+    } else {
+      const result = data as { inserted?: number; updated?: number } | null
+      setImportOpen(false)
+      setNotice({
+        type: 'success',
+        text: `Excelから${importRecords.length}件を取り込みました（追加${result?.inserted ?? 0}件・更新${result?.updated ?? 0}件）。`,
+      })
+      setVersion((value) => value + 1)
+    }
+    setBusy(false)
+  }
+
   return (
     <div>
       <div className="page-heading authorization-heading">
         <div><h1>委任状一覧</h1><p>登録済みの委任状情報を確認・更新します。</p></div>
-        <button className="primary-button" type="button" onClick={beginAdd}><Plus size={18} />追加</button>
+        <div className="authorization-heading-actions">
+          <input
+            ref={fileInputRef}
+            className="visually-hidden"
+            type="file"
+            accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel.sheet.macroEnabled.12"
+            onChange={(event) => {
+              const file = event.target.files?.[0]
+              if (file) void prepareImport(file)
+            }}
+          />
+          <button className="secondary-button" type="button" onClick={chooseImportFile} disabled={busy}><FileUp size={18} />Excel取込</button>
+          <button className="primary-button" type="button" onClick={beginAdd} disabled={busy}><Plus size={18} />追加</button>
+        </div>
       </div>
 
       {notice && <div className={`notice ${notice.type}`}>{notice.text}</div>}
@@ -260,6 +407,38 @@ export function AuthorizationManager({ workerId }: Props) {
                 <button className="primary-button" type="submit" disabled={busy}><Save size={18} />{busy ? '保存中...' : '保存'}</button>
               </div>
             </form>
+          </section>
+        </div>
+      )}
+
+      {importOpen && (
+        <div className="modal-backdrop" role="presentation">
+          <section className="registration-modal authorization-import-modal" role="dialog" aria-modal="true" aria-labelledby="authorization-import-title">
+            <div className="modal-header">
+              <div><h2 id="authorization-import-title">Excel取込の確認</h2><p>{importFileName}</p></div>
+              <button className="icon-button" type="button" title="閉じる" aria-label="取込画面を閉じる" onClick={() => setImportOpen(false)} disabled={busy}><X size={21} /></button>
+            </div>
+
+            {importError && <div className="notice error">{importError}</div>}
+            <div className="import-summary"><strong>{importRecords.length}件</strong><span>同じナンバーは更新、新しいナンバーは追加されます。</span></div>
+            <p className="import-note">Excelで空欄のフラグは、登録済みの値を変更しません。</p>
+
+            <div className="import-preview">
+              <table>
+                <thead><tr><th>ナンバー</th><th>氏名</th><th>市町村</th><th>農作物の種類</th></tr></thead>
+                <tbody>
+                  {importRecords.slice(0, 5).map((record) => (
+                    <tr key={record.authorization_no}><td>{record.authorization_no}</td><td>{record.full_name}</td><td>{record.municipality ?? ''}</td><td>{record.crop_type ?? ''}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {importRecords.length > 5 && <p className="import-preview-more">ほか {importRecords.length - 5}件</p>}
+
+            <div className="modal-actions">
+              <button className="secondary-button" type="button" onClick={() => setImportOpen(false)} disabled={busy}>取消</button>
+              <button className="primary-button" type="button" onClick={() => void executeImport()} disabled={busy}><FileUp size={18} />{busy ? '取込中...' : '取込を実行'}</button>
+            </div>
           </section>
         </div>
       )}
