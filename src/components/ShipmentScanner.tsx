@@ -12,10 +12,66 @@ type Props = {
   onRegistered: () => void
 }
 
+type ShipmentDraft = {
+  lots: string[]
+  plannedCount: number
+  shippedAt: string
+  destinationId: string
+  transportProfileId: string
+  driverName: string
+  vehicleNo: string
+  note: string
+}
+
 function currentLocalDateTime() {
   const date = new Date()
   date.setMinutes(date.getMinutes() - date.getTimezoneOffset())
   return date.toISOString().slice(0, 16)
+}
+
+function loadShipmentDraft(storageKey: string): ShipmentDraft {
+  const emptyDraft: ShipmentDraft = {
+    lots: [],
+    plannedCount: 12,
+    shippedAt: currentLocalDateTime(),
+    destinationId: '',
+    transportProfileId: '',
+    driverName: '',
+    vehicleNo: '',
+    note: '',
+  }
+
+  try {
+    const saved = JSON.parse(localStorage.getItem(storageKey) ?? 'null') as unknown
+    if (Array.isArray(saved)) {
+      return {
+        ...emptyDraft,
+        lots: saved.filter((value): value is string => typeof value === 'string'),
+      }
+    }
+    if (!saved || typeof saved !== 'object') return emptyDraft
+
+    const draft = saved as Partial<ShipmentDraft>
+    const lots = Array.isArray(draft.lots)
+      ? draft.lots.filter((value): value is string => typeof value === 'string')
+      : []
+    const plannedCount = typeof draft.plannedCount === 'number'
+      ? Math.min(24, Math.max(1, draft.plannedCount, lots.length))
+      : Math.max(12, lots.length)
+
+    return {
+      lots,
+      plannedCount,
+      shippedAt: typeof draft.shippedAt === 'string' && draft.shippedAt ? draft.shippedAt : emptyDraft.shippedAt,
+      destinationId: typeof draft.destinationId === 'string' ? draft.destinationId : '',
+      transportProfileId: typeof draft.transportProfileId === 'string' ? draft.transportProfileId : '',
+      driverName: typeof draft.driverName === 'string' ? draft.driverName : '',
+      vehicleNo: typeof draft.vehicleNo === 'string' ? draft.vehicleNo : '',
+      note: typeof draft.note === 'string' ? draft.note : '',
+    }
+  } catch {
+    return emptyDraft
+  }
 }
 
 function normalizeAuthorizationNo(value: string) {
@@ -25,19 +81,18 @@ function normalizeAuthorizationNo(value: string) {
 
 export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
   const storageKey = `${STORAGE_KEY_PREFIX}-${workerId}`
+  const [initialDraft] = useState(() => loadShipmentDraft(storageKey))
   const [destinations, setDestinations] = useState<Destination[]>([])
   const [transportProfiles, setTransportProfiles] = useState<TransportProfile[]>([])
   const [authorizationNames, setAuthorizationNames] = useState<Record<string, string>>({})
-  const [shippedAt, setShippedAt] = useState(currentLocalDateTime)
-  const [destinationId, setDestinationId] = useState('')
-  const [transportProfileId, setTransportProfileId] = useState('')
-  const [driverName, setDriverName] = useState('')
-  const [vehicleNo, setVehicleNo] = useState('')
-  const [note, setNote] = useState('')
-  const [plannedCount, setPlannedCount] = useState(12)
-  const [lots, setLots] = useState<string[]>(() => {
-    try { return JSON.parse(localStorage.getItem(storageKey) ?? '[]') as string[] } catch { return [] }
-  })
+  const [shippedAt, setShippedAt] = useState(initialDraft.shippedAt)
+  const [destinationId, setDestinationId] = useState(initialDraft.destinationId)
+  const [transportProfileId, setTransportProfileId] = useState(initialDraft.transportProfileId)
+  const [driverName, setDriverName] = useState(initialDraft.driverName)
+  const [vehicleNo, setVehicleNo] = useState(initialDraft.vehicleNo)
+  const [note, setNote] = useState(initialDraft.note)
+  const [plannedCount, setPlannedCount] = useState(initialDraft.plannedCount)
+  const [lots, setLots] = useState<string[]>(initialDraft.lots)
   const [scannerActive, setScannerActive] = useState(false)
   const [registrationOpen, setRegistrationOpen] = useState(false)
   const [manualLot, setManualLot] = useState('')
@@ -67,7 +122,19 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
     })
   }, [workerId])
 
-  useEffect(() => { localStorage.setItem(storageKey, JSON.stringify(lots)) }, [lots, storageKey])
+  useEffect(() => {
+    const draft: ShipmentDraft = {
+      lots,
+      plannedCount,
+      shippedAt,
+      destinationId,
+      transportProfileId,
+      driverName,
+      vehicleNo,
+      note,
+    }
+    localStorage.setItem(storageKey, JSON.stringify(draft))
+  }, [destinationId, driverName, lots, note, plannedCount, shippedAt, storageKey, transportProfileId, vehicleNo])
 
   const startScanner = useCallback(() => setScannerActive(true), [])
   const stopScanner = useCallback(() => setScannerActive(false), [])
@@ -149,7 +216,6 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
       setNote('')
       setShippedAt(currentLocalDateTime())
       setRegistrationOpen(false)
-      localStorage.removeItem(storageKey)
       setNotice({ type: 'success', text: `${registeredCount}本の出荷を登録しました。` })
       onRegistered()
     }

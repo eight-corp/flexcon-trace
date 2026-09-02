@@ -64,6 +64,7 @@ function App() {
       <main className={`app-main ${tab === 'authorizations' ? 'app-main-wide' : ''}`}>
         {tab === 'scan' && (
           <ShipmentScanner
+            key={worker.worker_id}
             workerId={worker.worker_id}
             workerName={worker.worker_name}
             onRegistered={() => setHistoryVersion((value) => value + 1)}
