@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { FileUp, Plus, Save, Search, Trash2, X } from 'lucide-react'
+import { FileUp, Plus, Save, Search, X } from 'lucide-react'
 import type { CellValue } from 'read-excel-file/browser'
 import { supabase } from '../lib/supabase'
 import type { AuthorizationRecord } from '../types'
@@ -257,22 +257,6 @@ export function AuthorizationManager({ workerId }: Props) {
     setBusy(false)
   }
 
-  const deleteRecord = async (record: AuthorizationRecord) => {
-    if (!window.confirm(`ナンバー「${record.authorization_no}」 ${record.full_name} の委任状情報を削除しますか？`)) return
-    setBusy(true)
-    const { error } = await supabase.rpc('flexcon_delete_authorization', {
-      p_worker_id: workerId,
-      p_authorization_id: record.id,
-    })
-    if (error) {
-      setNotice({ type: 'error', text: error.message })
-    } else {
-      setNotice({ type: 'success', text: '委任状情報を削除しました。' })
-      setVersion((value) => value + 1)
-    }
-    setBusy(false)
-  }
-
   const chooseImportFile = () => {
     setNotice(null)
     fileInputRef.current?.click()
@@ -420,8 +404,6 @@ export function AuthorizationManager({ workerId }: Props) {
         </div>
       </div>
 
-      {notice && <div className={`notice ${notice.type}`}>{notice.text}</div>}
-
       <div className="search-row">
         <div style={{ position: 'relative', flex: 1 }}><Search size={18} style={{ position: 'absolute', left: 12, top: 13, color: '#6b756d' }} /><input style={{ paddingLeft: 38 }} value={search} onChange={(event) => setSearch(event.target.value)} placeholder="ナンバー・氏名・住所などで検索" /></div>
       </div>
@@ -441,7 +423,6 @@ export function AuthorizationManager({ workerId }: Props) {
               <th>農作物の種類</th>
               <th>飼料用米の品種</th>
               <th>備考</th>
-              <th aria-label="削除" />
             </tr>
           </thead>
           <tbody>
@@ -470,21 +451,6 @@ export function AuthorizationManager({ workerId }: Props) {
                 {editableCell(record, 'crop_type')}
                 {editableCell(record, 'feed_rice_variety')}
                 {editableCell(record, 'notes')}
-                <td className="authorization-delete-cell">
-                  <button
-                    className="icon-button delete-icon"
-                    type="button"
-                    title="削除"
-                    aria-label={`${record.authorization_no}を削除`}
-                    disabled={busy}
-                    onClick={(event) => {
-                      event.stopPropagation()
-                      void deleteRecord(record)
-                    }}
-                  >
-                    <Trash2 size={18} />
-                  </button>
-                </td>
               </tr>
             ))}
           </tbody>
@@ -499,8 +465,6 @@ export function AuthorizationManager({ workerId }: Props) {
               <div><h2 id="authorization-modal-title">委任状情報を追加</h2></div>
               <button className="icon-button" type="button" title="閉じる" aria-label="入力画面を閉じる" onClick={() => setModalOpen(false)} disabled={busy}><X size={21} /></button>
             </div>
-
-            {notice?.type === 'error' && <div className="notice error">{notice.text}</div>}
 
             <form className="form-grid" onSubmit={(event) => void save(event)}>
               <div className="form-grid two">
@@ -561,6 +525,12 @@ export function AuthorizationManager({ workerId }: Props) {
               <button className="primary-button" type="button" onClick={() => void executeImport()} disabled={busy}><FileUp size={18} />{busy ? '取込中...' : '取込を実行'}</button>
             </div>
           </section>
+        </div>
+      )}
+
+      {notice && (
+        <div className={`notice operation-log ${notice.type}`} role="status" aria-live="polite">
+          {notice.text}
         </div>
       )}
     </div>
