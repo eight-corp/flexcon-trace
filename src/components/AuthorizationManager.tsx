@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Check, FileUp, Plus, Save, Search, Trash2, X } from 'lucide-react'
+import { FileUp, Plus, Save, Search, Trash2, X } from 'lucide-react'
 import type { CellValue } from 'read-excel-file/browser'
 import { supabase } from '../lib/supabase'
 import type { AuthorizationRecord } from '../types'
@@ -34,6 +34,14 @@ type FormState = {
   crop_type: string
   feed_rice_variety: string
   notes: string
+}
+
+type EditableTextField = Exclude<keyof FormState, 'seed_purchase_slip' | 'farming_plan'>
+type EditableFlagField = 'seed_purchase_slip' | 'farming_plan'
+type EditingCell = {
+  recordId: string
+  field: EditableTextField
+  value: string
 }
 
 const EMPTY_FORM: FormState = {
@@ -90,29 +98,13 @@ function optionalFlag(value: CellValue | null | undefined): boolean | null {
   return true
 }
 
-function recordToForm(record: AuthorizationRecord): FormState {
-  return {
-    authorization_no: record.authorization_no,
-    full_name: record.full_name,
-    seed_purchase_slip: record.seed_purchase_slip,
-    farming_plan: record.farming_plan,
-    address: record.address ?? '',
-    prefecture: record.prefecture ?? '',
-    municipality: record.municipality ?? '',
-    phone: record.phone ?? '',
-    crop_type: record.crop_type ?? '',
-    feed_rice_variety: record.feed_rice_variety ?? '',
-    notes: record.notes ?? '',
-  }
-}
-
 export function AuthorizationManager({ workerId }: Props) {
   const [items, setItems] = useState<AuthorizationRecord[]>([])
   const [search, setSearch] = useState('')
   const [notice, setNotice] = useState<Notice>(null)
   const [version, setVersion] = useState(0)
   const [modalOpen, setModalOpen] = useState(false)
-  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editingCell, setEditingCell] = useState<EditingCell | null>(null)
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [busy, setBusy] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
@@ -154,17 +146,85 @@ export function AuthorizationManager({ workerId }: Props) {
   }
 
   const beginAdd = () => {
-    setEditingId(null)
     setForm(EMPTY_FORM)
     setNotice(null)
     setModalOpen(true)
   }
 
-  const beginEdit = (record: AuthorizationRecord) => {
-    setEditingId(record.id)
-    setForm(recordToForm(record))
+  const authorizationArgs = (record: AuthorizationRecord) => ({
+    p_worker_id: workerId,
+    p_authorization_no: record.authorization_no.trim(),
+    p_full_name: record.full_name.trim(),
+    p_seed_purchase_slip: record.seed_purchase_slip,
+    p_farming_plan: record.farming_plan,
+    p_address: record.address?.trim() || null,
+    p_prefecture: record.prefecture?.trim() || null,
+    p_municipality: record.municipality?.trim() || null,
+    p_phone: record.phone?.trim() || null,
+    p_crop_type: record.crop_type?.trim() || null,
+    p_feed_rice_variety: record.feed_rice_variety?.trim() || null,
+    p_notes: record.notes?.trim() || null,
+  })
+
+  const beginInlineEdit = (record: AuthorizationRecord, field: EditableTextField) => {
+    if (busy) return
     setNotice(null)
-    setModalOpen(true)
+    setEditingCell({ recordId: record.id, field, value: record[field] ?? '' })
+  }
+
+  const saveInlineEdit = async () => {
+    if (!editingCell || busy) return
+    const record = items.find((item) => item.id === editingCell.recordId)
+    if (!record) {
+      setEditingCell(null)
+      return
+    }
+
+    const value = editingCell.value.trim()
+    if ((editingCell.field === 'authorization_no' || editingCell.field === 'full_name') && !value) {
+      setNotice({ type: 'error', text: editingCell.field === 'authorization_no' ? 'ナンバーを入力してください。' : '氏名を入力してください。' })
+      return
+    }
+
+    const updatedRecord = {
+      ...record,
+      [editingCell.field]: value || null,
+    }
+
+    setBusy(true)
+    setNotice(null)
+    const { error } = await supabase.rpc('flexcon_update_authorization', {
+      ...authorizationArgs(updatedRecord),
+      p_authorization_id: record.id,
+    })
+
+    if (error) {
+      setNotice({ type: 'error', text: error.message })
+    } else {
+      setEditingCell(null)
+      setNotice({ type: 'success', text: '委任状情報を更新しました。' })
+      setVersion((value) => value + 1)
+    }
+    setBusy(false)
+  }
+
+  const toggleInlineFlag = async (record: AuthorizationRecord, field: EditableFlagField) => {
+    if (busy) return
+    const updatedRecord = { ...record, [field]: !record[field] }
+    setBusy(true)
+    setNotice(null)
+    const { error } = await supabase.rpc('flexcon_update_authorization', {
+      ...authorizationArgs(updatedRecord),
+      p_authorization_id: record.id,
+    })
+
+    if (error) {
+      setNotice({ type: 'error', text: error.message })
+    } else {
+      setNotice({ type: 'success', text: '委任状情報を更新しました。' })
+      setVersion((value) => value + 1)
+    }
+    setBusy(false)
   }
 
   const save = async (event: React.FormEvent) => {
@@ -185,15 +245,13 @@ export function AuthorizationManager({ workerId }: Props) {
       p_feed_rice_variety: form.feed_rice_variety.trim() || null,
       p_notes: form.notes.trim() || null,
     }
-    const { error } = editingId
-      ? await supabase.rpc('flexcon_update_authorization', { ...args, p_authorization_id: editingId })
-      : await supabase.rpc('flexcon_add_authorization', args)
+    const { error } = await supabase.rpc('flexcon_add_authorization', args)
 
     if (error) {
       setNotice({ type: 'error', text: error.message })
     } else {
       setModalOpen(false)
-      setNotice({ type: 'success', text: editingId ? '委任状情報を更新しました。' : '委任状情報を追加しました。' })
+      setNotice({ type: 'success', text: '委任状情報を追加しました。' })
       setVersion((value) => value + 1)
     }
     setBusy(false)
@@ -294,6 +352,54 @@ export function AuthorizationManager({ workerId }: Props) {
     setBusy(false)
   }
 
+  const editableCell = (
+    record: AuthorizationRecord,
+    field: EditableTextField,
+    className?: string,
+  ) => {
+    const isEditing = editingCell?.recordId === record.id && editingCell.field === field
+    const value = record[field] ?? ''
+
+    return (
+      <td
+        className={`${className ?? ''} ${isEditing ? 'authorization-cell-editing' : 'authorization-editable-cell'}`.trim()}
+        tabIndex={0}
+        title="ダブルクリックして編集"
+        onDoubleClick={() => beginInlineEdit(record, field)}
+        onKeyDown={(event) => {
+          if (!isEditing && event.key === 'Enter') beginInlineEdit(record, field)
+        }}
+      >
+        {isEditing ? (
+          <input
+            className="authorization-cell-editor"
+            type={field === 'phone' ? 'tel' : 'text'}
+            value={editingCell.value}
+            autoFocus
+            onFocus={(event) => event.currentTarget.select()}
+            onChange={(event) => setEditingCell((current) => (
+              current ? { ...current, value: event.target.value } : current
+            ))}
+            onBlur={() => setEditingCell(null)}
+            onClick={(event) => event.stopPropagation()}
+            onDoubleClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => {
+              event.stopPropagation()
+              if (event.key === 'Enter') {
+                event.preventDefault()
+                void saveInlineEdit()
+              }
+              if (event.key === 'Escape') {
+                event.preventDefault()
+                setEditingCell(null)
+              }
+            }}
+          />
+        ) : value}
+      </td>
+    )
+  }
+
   return (
     <div className="authorization-page">
       <div className="page-heading authorization-heading">
@@ -340,24 +446,30 @@ export function AuthorizationManager({ workerId }: Props) {
           </thead>
           <tbody>
             {filtered.map((record) => (
-              <tr
-                key={record.id}
-                tabIndex={0}
-                title="タップして編集"
-                onClick={() => beginEdit(record)}
-                onKeyDown={(event) => { if (event.key === 'Enter') beginEdit(record) }}
-              >
-                <td className="authorization-no">{record.authorization_no}</td>
-                <td className="authorization-name">{record.full_name}</td>
-                <td className="flag-cell">{record.seed_purchase_slip ? <Check size={18} aria-label="あり" /> : <span aria-label="なし">-</span>}</td>
-                <td className="flag-cell">{record.farming_plan ? <Check size={18} aria-label="あり" /> : <span aria-label="なし">-</span>}</td>
-                <td>{record.address ?? ''}</td>
-                <td>{record.prefecture ?? ''}</td>
-                <td>{record.municipality ?? ''}</td>
-                <td>{record.phone ?? ''}</td>
-                <td>{record.crop_type ?? ''}</td>
-                <td>{record.feed_rice_variety ?? ''}</td>
-                <td>{record.notes ?? ''}</td>
+              <tr key={record.id}>
+                {editableCell(record, 'authorization_no', 'authorization-no')}
+                {editableCell(record, 'full_name', 'authorization-name')}
+                <td className="flag-cell">
+                  <ToggleSwitch
+                    checked={record.seed_purchase_slip}
+                    label={`${record.authorization_no} 種子購入伝票フラグ`}
+                    onChange={() => void toggleInlineFlag(record, 'seed_purchase_slip')}
+                  />
+                </td>
+                <td className="flag-cell">
+                  <ToggleSwitch
+                    checked={record.farming_plan}
+                    label={`${record.authorization_no} 営農計画書フラグ`}
+                    onChange={() => void toggleInlineFlag(record, 'farming_plan')}
+                  />
+                </td>
+                {editableCell(record, 'address')}
+                {editableCell(record, 'prefecture')}
+                {editableCell(record, 'municipality')}
+                {editableCell(record, 'phone')}
+                {editableCell(record, 'crop_type')}
+                {editableCell(record, 'feed_rice_variety')}
+                {editableCell(record, 'notes')}
                 <td className="authorization-delete-cell">
                   <button
                     className="icon-button delete-icon"
@@ -384,7 +496,7 @@ export function AuthorizationManager({ workerId }: Props) {
         <div className="modal-backdrop" role="presentation">
           <section className="registration-modal authorization-modal" role="dialog" aria-modal="true" aria-labelledby="authorization-modal-title">
             <div className="modal-header">
-              <div><h2 id="authorization-modal-title">{editingId ? '委任状情報を編集' : '委任状情報を追加'}</h2></div>
+              <div><h2 id="authorization-modal-title">委任状情報を追加</h2></div>
               <button className="icon-button" type="button" title="閉じる" aria-label="入力画面を閉じる" onClick={() => setModalOpen(false)} disabled={busy}><X size={21} /></button>
             </div>
 
