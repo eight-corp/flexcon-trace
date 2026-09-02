@@ -199,31 +199,27 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
 
             {notice?.type === 'error' && <div className="notice error">{notice.text}</div>}
 
-            <form className="form-grid" onSubmit={(event) => void registerShipment(event)}>
-              <div className="worker-summary"><UserRound size={18} /><span>担当者</span><strong>{workerName}</strong></div>
-              <div className="form-grid two">
-                <label>出荷日時<input type="datetime-local" value={shippedAt} onChange={(e) => setShippedAt(e.target.value)} required /></label>
-                <label>納品先
-                  <select value={destinationId} onChange={(e) => setDestinationId(e.target.value)} required>
-                    <option value="">選択してください</option>
-                    {destinations.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-                  </select>
-                </label>
+            <form className="shipment-registration-form" onSubmit={(event) => void registerShipment(event)}>
+              <div className="shipment-form-row worker-summary">
+                <span className="worker-summary-label"><UserRound size={18} />担当者</span>
+                <strong>{workerName}</strong>
               </div>
-              <label>運送会社
+              <label className="shipment-form-row"><span>出荷日時</span><input type="datetime-local" value={shippedAt} onChange={(e) => setShippedAt(e.target.value)} required /></label>
+              <label className="shipment-form-row"><span>納品先</span>
+                <select value={destinationId} onChange={(e) => setDestinationId(e.target.value)} required>
+                  <option value="">選択してください</option>
+                  {destinations.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                </select>
+              </label>
+              <label className="shipment-form-row"><span>運送会社</span>
                 <select value={transportProfileId} onChange={(e) => setTransportProfileId(e.target.value)} required>
                   <option value="">選択してください</option>
                   {transportProfiles.map((item) => <option key={item.id} value={item.id}>{item.company_name}</option>)}
                 </select>
               </label>
-              <fieldset className="driver-vehicle-fields">
-                <legend>ドライバー・車両情報</legend>
-                <div className="form-grid two">
-                  <label>ドライバー名<input value={driverName} onChange={(e) => setDriverName(e.target.value)} required /></label>
-                  <label>車両番号<input value={vehicleNo} onChange={(e) => setVehicleNo(e.target.value)} required placeholder="例：岩手 100 あ 12-34" /></label>
-                </div>
-              </fieldset>
-              <label>備考（任意）<textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="申し送りなど" /></label>
+              <label className="shipment-form-row"><span>ドライバー名</span><input value={driverName} onChange={(e) => setDriverName(e.target.value)} required /></label>
+              <label className="shipment-form-row"><span>車両番号</span><input value={vehicleNo} onChange={(e) => setVehicleNo(e.target.value)} required placeholder="例：岩手 100 あ 12-34" /></label>
+              <label className="shipment-form-row"><span>備考（任意）</span><textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="申し送りなど" /></label>
               <div className="modal-actions">
                 <button className="secondary-button" type="button" onClick={() => setRegistrationOpen(false)} disabled={busy}>戻る</button>
                 <button className="primary-button" type="submit" disabled={busy}><Send size={18} />{busy ? '登録中...' : `${lots.length}本を登録`}</button>
