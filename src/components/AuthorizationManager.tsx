@@ -295,7 +295,7 @@ export function AuthorizationManager({ workerId }: Props) {
   }
 
   return (
-    <div>
+    <div className="authorization-page">
       <div className="page-heading authorization-heading">
         <div><h1>委任状一覧</h1><p>登録済みの委任状情報を確認・更新します。</p></div>
         <div className="authorization-heading-actions">

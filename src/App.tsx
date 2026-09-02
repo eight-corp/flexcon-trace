@@ -61,7 +61,7 @@ function App() {
         </button>
       </header>
 
-      <main className="app-main">
+      <main className={`app-main ${tab === 'authorizations' ? 'app-main-wide' : ''}`}>
         {tab === 'scan' && (
           <ShipmentScanner
             workerId={worker.worker_id}
