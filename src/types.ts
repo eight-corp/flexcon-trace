@@ -28,6 +28,8 @@ export type TransportProfile = {
 
 export type Shipment = {
   id: string
+  destination_id: string
+  transport_profile_id: string | null
   shipped_at: string
   carrier_name: string | null
   driver_name: string | null

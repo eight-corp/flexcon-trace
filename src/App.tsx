@@ -68,7 +68,7 @@ function App() {
             onRegistered={() => setHistoryVersion((value) => value + 1)}
           />
         )}
-        {tab === 'history' && <ShipmentHistory refreshKey={historyVersion} />}
+        {tab === 'history' && <ShipmentHistory refreshKey={historyVersion} workerId={worker.worker_id} isAdmin={worker.role === 'admin'} />}
         {tab === 'destinations' && <DestinationManager workerId={worker.worker_id} />}
         {tab === 'transport' && <TransportManager workerId={worker.worker_id} />}
       </main>

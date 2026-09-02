@@ -91,6 +91,10 @@
 .shipment-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; }
 .shipment-head strong { display: block; }
 .shipment-head small { display: block; color: var(--muted); }
+.shipment-side { display: grid; justify-items: end; gap: 8px; }
+.shipment-admin-actions { display: flex; gap: 2px; }
+.shipment-admin-actions .icon-button { width: 36px; height: 36px; }
+.delete-icon { color: var(--red); }
 .shipment-count { background: var(--blue-soft); color: var(--blue); border-radius: 5px; padding: 4px 8px; font-weight: 700; white-space: nowrap; }
 .lot-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
 .lot-tag { font-family: Consolas, monospace; background: #eef1ee; border: 1px solid #d5dad6; border-radius: 4px; padding: 3px 7px; font-size: 13px; }
