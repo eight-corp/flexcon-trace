@@ -104,6 +104,10 @@ function displayNumber(value: number | null): string {
   return value === null ? '' : String(value)
 }
 
+function displayAverageMoisture(value: number | null): string {
+  return value === null ? '' : Number(value).toFixed(1)
+}
+
 function optionalNumber(value: string): number | null {
   return value.trim() === '' ? null : Number(value)
 }
@@ -127,7 +131,12 @@ function averageMoisture(values: string[]): string {
     .filter(Number.isFinite)
   if (measured.length === 0) return ''
   const average = measured.reduce((total, value) => total + value, 0) / measured.length
-  return String(Math.round(average * 100) / 100)
+  return (Math.round(average * 10) / 10).toFixed(1)
+}
+
+function isHighMoisture(value: string | number | null | undefined): boolean {
+  if (value === null || value === undefined || value === '') return false
+  return Number(value) > 16
 }
 
 export function InspectionRecordManager({ workerId }: Props) {
@@ -390,10 +399,15 @@ export function InspectionRecordManager({ workerId }: Props) {
                 <td>{displayNumber(record.paper_bags)}</td>
                 <td>{displayNumber(record.bulk_quantity)}</td>
                 <td>{record.grade ?? ''}</td>
-                <td>{displayNumber(record.moisture)}</td>
+                <td className={isHighMoisture(record.moisture) ? 'moisture-high' : ''}>{displayAverageMoisture(record.moisture)}</td>
                 <td>{record.reason ?? ''}</td>
                 {Array.from({ length: MOISTURE_COUNT }, (_, index) => (
-                  <td key={`${record.id}-moisture-${index + 1}`}>{displayNumber(record.moisture_values[index] ?? null)}</td>
+                  <td
+                    className={isHighMoisture(record.moisture_values[index]) ? 'moisture-high' : ''}
+                    key={`${record.id}-moisture-${index + 1}`}
+                  >
+                    {displayNumber(record.moisture_values[index] ?? null)}
+                  </td>
                 ))}
               </tr>
             ))}
@@ -483,7 +497,13 @@ export function InspectionRecordManager({ workerId }: Props) {
                   <label>推フレ<input type="number" min="0" step="1" value={form.recommended_flexcon} onChange={(event) => setText('recommended_flexcon', event.target.value)} /></label>
                   <label>紙袋<input type="number" min="0" step="1" value={form.paper_bags} onChange={(event) => setText('paper_bags', event.target.value)} /></label>
                   <label>バラ<input type="number" min="0" step="1" value={form.bulk_quantity} onChange={(event) => setText('bulk_quantity', event.target.value)} /></label>
-                  <label>水分<input className="inspection-average-input" value={averageMoisture(form.moisture_values)} readOnly /></label>
+                  <label>水分
+                    <input
+                      className={`inspection-average-input ${isHighMoisture(averageMoisture(form.moisture_values)) ? 'moisture-high' : ''}`.trim()}
+                      value={averageMoisture(form.moisture_values)}
+                      readOnly
+                    />
+                  </label>
                 </div>
 
                 <div className="inspection-reason-actions">
@@ -512,6 +532,7 @@ export function InspectionRecordManager({ workerId }: Props) {
                   {form.moisture_values.map((value, index) => (
                     <label key={`moisture-input-${index + 1}`}>水分{index + 1}
                       <input
+                        className={isHighMoisture(value) ? 'moisture-high' : ''}
                         type="number"
                         min="0"
                         max="100"

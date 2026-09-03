@@ -48,7 +48,7 @@ language plpgsql
 set search_path = public
 as $$
 begin
-  select round(avg(measured.value), 2)
+  select round(avg(measured.value), 1)
   into new.moisture
   from unnest(new.moisture_values) as measured(value)
   where measured.value is not null;
@@ -68,7 +68,7 @@ execute function public.flexcon_set_inspection_moisture_average();
 
 update public.flexcon_inspection_records as inspection
 set moisture = (
-  select round(avg(measured.value), 2)
+  select round(avg(measured.value), 1)
   from unnest(inspection.moisture_values) as measured(value)
   where measured.value is not null
 );
