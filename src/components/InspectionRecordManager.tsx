@@ -485,6 +485,9 @@ export function InspectionRecordManager({ workerId }: Props) {
     splitDetails.bulk_quantity,
     inspectionWeights,
   ) : null
+  const splitRecordNo = form.record_no.trim() && Number.isInteger(Number(form.record_no)) && Number(form.record_no) > 0
+    ? Number(form.record_no) + 1
+    : ''
 
   return (
     <div className="inspection-page">
@@ -671,7 +674,7 @@ export function InspectionRecordManager({ workerId }: Props) {
                         </div>
                       </fieldset>
                       <fieldset className="inspection-split-record">
-                        <legend>分割後2（新しいナンバー）</legend>
+                        <legend>分割後2（ナンバー {splitRecordNo}）</legend>
                         <div className="inspection-split-fields">
                           <label>推フレ<input type="number" min="0" step="1" value={splitDetails.recommended_flexcon} onChange={(event) => setSplitText('recommended_flexcon', event.target.value)} /></label>
                           <label>紙袋<input type="number" min="0" step="1" value={splitDetails.paper_bags} onChange={(event) => setSplitText('paper_bags', event.target.value)} /></label>

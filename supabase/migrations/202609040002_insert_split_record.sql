@@ -1,5 +1,5 @@
--- 1件の検査記録を、共通情報を引き継いだ2件の記録へ分割します。
--- 202609030001_inspection_records.sql の実行後に適用してください。
+-- 分割後2を分割後1の直後へ挿入し、後続ナンバーを1つずつ繰り下げます。
+-- 202609040001_split_inspection_records.sql の実行後に適用してください。
 
 create or replace function public.flexcon_split_inspection_record(
   p_worker_id text,
