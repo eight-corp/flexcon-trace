@@ -198,9 +198,8 @@
 .inspection-split-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 10px; }
 .inspection-split-record { min-width: 0; margin: 0; padding: 12px; border: 1px solid #b9c8bd; border-radius: 6px; background: #f8faf8; }
 .inspection-split-record legend { padding: 0 6px; color: var(--green-dark); font-size: 13px; font-weight: 700; }
-.inspection-split-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; }
+.inspection-split-fields { display: grid; grid-template-columns: minmax(78px, .7fr) minmax(90px, .8fr) minmax(140px, 1.4fr); gap: 9px; }
 .inspection-split-fields label { min-width: 0; margin: 0; }
-.inspection-split-fields label:last-child { grid-column: span 2; }
 .moisture-input-grid { display: grid; grid-template-columns: repeat(10, minmax(74px, 1fr)); gap: 8px; }
 .moisture-input-grid label { color: #4b574f; font-size: 11px; }
 .moisture-input-grid input { min-width: 0; padding: 7px 6px; }
@@ -259,8 +258,7 @@
   .inspection-heading { align-items: stretch; flex-direction: column; }
   .inspection-heading > button { width: 100%; }
   .inspection-form-row-one, .inspection-form-row-two, .inspection-form-row-three, .inspection-form-row-common { grid-template-columns: 1fr; }
-  .inspection-split-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .inspection-split-fields label:last-child { grid-column: 1 / -1; }
+  .inspection-split-fields { grid-template-columns: minmax(0, .7fr) minmax(0, .8fr) minmax(0, 1.2fr); }
   .moisture-input-grid { grid-template-columns: repeat(4, minmax(62px, 1fr)); }
   .inspection-form-actions { flex-wrap: wrap; }
   .inspection-form-actions .certificate-create-button { flex-basis: 100%; }
