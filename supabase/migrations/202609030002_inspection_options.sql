@@ -3,7 +3,7 @@
 
 create table if not exists public.flexcon_inspection_options (
   id uuid primary key default gen_random_uuid(),
-  option_type text not null check (option_type in ('location', 'brand')),
+  option_type text not null check (option_type in ('location', 'brand_aomori', 'brand_iwate')),
   name text not null check (char_length(btrim(name)) between 1 and 120),
   active boolean not null default true,
   created_by_worker_id text references public.workers(worker_id),
@@ -28,17 +28,19 @@ values
   ('location', '浪岡倉庫'),
   ('location', '六戸倉庫'),
   ('location', '八幡平倉庫'),
-  ('brand', 'まっしぐら'),
-  ('brand', 'あきたこまち'),
-  ('brand', 'はれわたり'),
-  ('brand', 'つがるロマン'),
-  ('brand', '青天の霹靂'),
-  ('brand', '飼料用玄米'),
-  ('brand', 'あかりもち'),
-  ('brand', 'ひとめぼれ'),
-  ('brand', 'いわてっこ'),
-  ('brand', 'つきあかり'),
-  ('brand', '岩手141号')
+  ('brand_aomori', 'まっしぐら'),
+  ('brand_aomori', 'はれわたり'),
+  ('brand_aomori', 'つがるロマン'),
+  ('brand_aomori', '青天の霹靂'),
+  ('brand_aomori', '飼料用玄米'),
+  ('brand_aomori', 'あかりもち'),
+  ('brand_aomori', 'つきあかり'),
+  ('brand_iwate', 'あきたこまち'),
+  ('brand_iwate', '飼料用玄米'),
+  ('brand_iwate', 'ひとめぼれ'),
+  ('brand_iwate', 'いわてっこ'),
+  ('brand_iwate', 'つきあかり'),
+  ('brand_iwate', '岩手141号')
 on conflict (option_type, name) do nothing;
 
 create or replace function public.flexcon_save_inspection_option(
@@ -60,7 +62,7 @@ begin
   v_worker := public.flexcon_require_active_worker(p_worker_id);
   v_name := btrim(coalesce(p_name, ''));
 
-  if p_option_type not in ('location', 'brand') then
+  if p_option_type not in ('location', 'brand_aomori', 'brand_iwate') then
     raise exception '検査項目の種類が正しくありません。';
   end if;
   if char_length(v_name) not between 1 and 120 then

@@ -143,7 +143,7 @@ export function InspectionOptionManager({ workerId }: Props) {
 
   return (
     <div>
-      <div className="page-heading"><h1>検査項目管理</h1><p>検査記録で選択する検査場所と銘柄を管理します。</p></div>
+      <div className="page-heading"><h1>検査項目管理</h1><p>検査場所と県別の銘柄を管理します。</p></div>
       <div className="inspection-master-grid">
         <OptionSection
           workerId={workerId}
@@ -155,9 +155,17 @@ export function InspectionOptionManager({ workerId }: Props) {
         />
         <OptionSection
           workerId={workerId}
-          optionType="brand"
-          title="銘柄"
-          items={items.filter((item) => item.option_type === 'brand')}
+          optionType="brand_aomori"
+          title="青森県の銘柄"
+          items={items.filter((item) => item.option_type === 'brand_aomori' || item.option_type === 'brand')}
+          onChanged={changed}
+          onError={failed}
+        />
+        <OptionSection
+          workerId={workerId}
+          optionType="brand_iwate"
+          title="岩手県の銘柄"
+          items={items.filter((item) => item.option_type === 'brand_iwate')}
           onChanged={changed}
           onError={failed}
         />

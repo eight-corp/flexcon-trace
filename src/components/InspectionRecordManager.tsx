@@ -139,6 +139,13 @@ function isHighMoisture(value: string | number | null | undefined): boolean {
   return Number(value) > 16
 }
 
+function brandTypeForPrefecture(prefecture: string): 'brand_aomori' | 'brand_iwate' | null {
+  const normalized = prefecture.trim().replace(/県$/, '')
+  if (normalized === '青森') return 'brand_aomori'
+  if (normalized === '岩手') return 'brand_iwate'
+  return null
+}
+
 export function InspectionRecordManager({ workerId }: Props) {
   const [items, setItems] = useState<InspectionRecord[]>([])
   const [authorizations, setAuthorizations] = useState<AuthorizationRecord[]>([])
@@ -242,14 +249,40 @@ export function InspectionRecordManager({ workerId }: Props) {
     setForm((current) => ({ ...current, [field]: value }))
   }
 
+  const setPrefecture = (value: string) => {
+    const brandType = brandTypeForPrefecture(value)
+    setForm((current) => {
+      const brandIsAvailable = inspectionOptions.some((item) => (
+        item.active
+        && item.name === current.brand
+        && (item.option_type === brandType || item.option_type === 'brand')
+      ))
+      return {
+        ...current,
+        prefecture: value,
+        brand: current.brand && !brandIsAvailable ? '' : current.brand,
+      }
+    })
+  }
+
   const applyAuthorizationRecord = (authorization: AuthorizationRecord) => {
-    setForm((current) => ({
-      ...current,
-      authorization_no: authorization.authorization_no,
-      full_name: authorization.full_name,
-      prefecture: authorization.prefecture ?? '',
-      municipality: authorization.municipality ?? '',
-    }))
+    const prefecture = authorization.prefecture ?? ''
+    const brandType = brandTypeForPrefecture(prefecture)
+    setForm((current) => {
+      const brandIsAvailable = inspectionOptions.some((item) => (
+        item.active
+        && item.name === current.brand
+        && (item.option_type === brandType || item.option_type === 'brand')
+      ))
+      return {
+        ...current,
+        authorization_no: authorization.authorization_no,
+        full_name: authorization.full_name,
+        prefecture,
+        municipality: authorization.municipality ?? '',
+        brand: current.brand && !brandIsAvailable ? '' : current.brand,
+      }
+    })
   }
 
   const applyAuthorizationNo = (authorizationNo: string) => {
@@ -356,7 +389,10 @@ export function InspectionRecordManager({ workerId }: Props) {
 
   const moistureHeaders = Array.from({ length: MOISTURE_COUNT }, (_, index) => `水分${index + 1}`)
   const locationOptions = inspectionOptions.filter((item) => item.option_type === 'location')
-  const brandOptions = inspectionOptions.filter((item) => item.option_type === 'brand')
+  const selectedBrandType = brandTypeForPrefecture(form.prefecture)
+  const brandOptions = inspectionOptions.filter((item) => (
+    item.option_type === selectedBrandType || item.option_type === 'brand'
+  ))
 
   return (
     <div className="inspection-page">
@@ -476,7 +512,7 @@ export function InspectionRecordManager({ workerId }: Props) {
                       required
                     />
                   </label>
-                  <label>県名<input value={form.prefecture} onChange={(event) => setText('prefecture', event.target.value)} /></label>
+                  <label>県名<input value={form.prefecture} onChange={(event) => setPrefecture(event.target.value)} /></label>
                   <label>市町村名<input value={form.municipality} onChange={(event) => setText('municipality', event.target.value)} /></label>
                   <label>検査場所
                     <select value={form.inspection_location} onChange={(event) => setText('inspection_location', event.target.value)}>
@@ -498,8 +534,8 @@ export function InspectionRecordManager({ workerId }: Props) {
 
                 <div className="inspection-form-grid inspection-form-row-three">
                   <label>銘柄
-                    <select value={form.brand} onChange={(event) => setText('brand', event.target.value)}>
-                      <option value="">選択してください</option>
+                    <select value={form.brand} onChange={(event) => setText('brand', event.target.value)} disabled={selectedBrandType === null}>
+                      <option value="">{selectedBrandType === null ? '県名を入力してください' : '選択してください'}</option>
                       {form.brand && !brandOptions.some((item) => item.name === form.brand) && (
                         <option value={form.brand}>{form.brand}</option>
                       )}
