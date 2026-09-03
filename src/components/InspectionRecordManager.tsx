@@ -152,24 +152,38 @@ export function InspectionRecordManager({ workerId }: Props) {
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
-    void Promise.all([
-      supabase
+    const load = async () => {
+      const inspectionRequest = supabase
         .from('flexcon_inspection_records')
         .select('*')
         .order('fiscal_year', { ascending: false })
         .order('record_no', { ascending: false })
-        .limit(1000),
-      supabase
+        .limit(1000)
+      const authorizationRequest = supabase
         .from('flexcon_authorizations')
         .select('*')
-        .order('authorization_no'),
-      supabase
+        .order('authorization_no')
+
+      let optionResult = await supabase
         .from('flexcon_inspection_options')
         .select('*')
         .eq('active', true)
         .order('sort_order')
-        .order('name'),
-    ]).then(([inspectionResult, authorizationResult, optionResult]) => {
+        .order('name')
+
+      if (optionResult.error?.code === '42703' && optionResult.error.message.includes('sort_order')) {
+        optionResult = await supabase
+          .from('flexcon_inspection_options')
+          .select('*')
+          .eq('active', true)
+          .order('name')
+      }
+
+      const [inspectionResult, authorizationResult] = await Promise.all([
+        inspectionRequest,
+        authorizationRequest,
+      ])
+
       if (inspectionResult.error) {
         setNotice({ type: 'error', text: '検査記録を取得できません。追加SQLを実行してください。' })
       } else {
@@ -183,11 +197,13 @@ export function InspectionRecordManager({ workerId }: Props) {
       }
 
       if (optionResult.error) {
-        setNotice({ type: 'error', text: '検査場所と銘柄を取得できません。検査項目用SQLを実行してください。' })
+        setNotice({ type: 'error', text: `検査場所と銘柄を取得できません。${optionResult.error.message}` })
       } else {
         setInspectionOptions((optionResult.data ?? []) as InspectionOption[])
       }
-    })
+    }
+
+    void load()
   }, [version])
 
   const filtered = useMemo(() => {
