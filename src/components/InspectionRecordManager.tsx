@@ -21,7 +21,6 @@ type InspectionForm = {
   paper_bags: string
   bulk_quantity: string
   grade: string
-  moisture: string
   reason: string
   moisture_values: string[]
 }
@@ -54,7 +53,6 @@ function emptyForm(recordNo = 1): InspectionForm {
     paper_bags: '',
     bulk_quantity: '',
     grade: '',
-    moisture: '',
     reason: '',
     moisture_values: emptyMoistureValues(),
   }
@@ -93,7 +91,6 @@ function formFromRecord(record: InspectionRecord): InspectionForm {
     paper_bags: record.paper_bags === null ? '' : String(record.paper_bags),
     bulk_quantity: record.bulk_quantity === null ? '' : String(record.bulk_quantity),
     grade: record.grade ?? '',
-    moisture: record.moisture === null ? '' : String(record.moisture),
     reason: record.reason ?? '',
     moisture_values: moistureValues,
   }
@@ -109,6 +106,20 @@ function displayNumber(value: number | null): string {
 
 function optionalNumber(value: string): number | null {
   return value.trim() === '' ? null : Number(value)
+}
+
+function normalizeName(value: string): string {
+  return value.trim().replace(/[\s　]+/g, '').toLocaleLowerCase('ja')
+}
+
+function averageMoisture(values: string[]): string {
+  const measured = values
+    .filter((value) => value.trim() !== '')
+    .map(Number)
+    .filter(Number.isFinite)
+  if (measured.length === 0) return ''
+  const average = measured.reduce((total, value) => total + value, 0) / measured.length
+  return String(Math.round(average * 100) / 100)
 }
 
 export function InspectionRecordManager({ workerId }: Props) {
@@ -185,13 +196,7 @@ export function InspectionRecordManager({ workerId }: Props) {
     setForm((current) => ({ ...current, [field]: value }))
   }
 
-  const applyAuthorization = (authorizationNo: string) => {
-    const normalized = normalizeAuthorizationNo(authorizationNo)
-    const authorization = authorizations.find((item) => (
-      normalizeAuthorizationNo(item.authorization_no) === normalized
-    ))
-    if (!authorization) return
-
+  const applyAuthorizationRecord = (authorization: AuthorizationRecord) => {
     setForm((current) => ({
       ...current,
       authorization_no: authorization.authorization_no,
@@ -199,6 +204,20 @@ export function InspectionRecordManager({ workerId }: Props) {
       prefecture: authorization.prefecture ?? '',
       municipality: authorization.municipality ?? '',
     }))
+  }
+
+  const applyAuthorizationNo = (authorizationNo: string) => {
+    const normalized = normalizeAuthorizationNo(authorizationNo)
+    const authorization = authorizations.find((item) => (
+      normalizeAuthorizationNo(item.authorization_no) === normalized
+    ))
+    if (authorization) applyAuthorizationRecord(authorization)
+  }
+
+  const applyAuthorizationName = (fullName: string) => {
+    const normalized = normalizeName(fullName)
+    const authorization = authorizations.find((item) => normalizeName(item.full_name) === normalized)
+    if (authorization) applyAuthorizationRecord(authorization)
   }
 
   const setMoistureValue = (index: number, value: string) => {
@@ -246,7 +265,6 @@ export function InspectionRecordManager({ workerId }: Props) {
         paper_bags: optionalNumber(form.paper_bags),
         bulk_quantity: optionalNumber(form.bulk_quantity),
         grade: form.grade.trim() || null,
-        moisture: optionalNumber(form.moisture),
         reason: form.reason.trim() || null,
         moisture_values: form.moisture_values.map(optionalNumber),
       },
@@ -360,17 +378,31 @@ export function InspectionRecordManager({ workerId }: Props) {
                       value={form.authorization_no}
                       onChange={(event) => {
                         setText('authorization_no', event.target.value)
-                        applyAuthorization(event.target.value)
+                        applyAuthorizationNo(event.target.value)
                       }}
-                      onBlur={(event) => applyAuthorization(event.target.value)}
+                      onBlur={(event) => applyAuthorizationNo(event.target.value)}
                     />
                   </label>
-                  <label>氏名<input value={form.full_name} onChange={(event) => setText('full_name', event.target.value)} required /></label>
+                  <label>氏名
+                    <input
+                      list="inspection-name-options"
+                      value={form.full_name}
+                      onChange={(event) => {
+                        setText('full_name', event.target.value)
+                        applyAuthorizationName(event.target.value)
+                      }}
+                      onBlur={(event) => applyAuthorizationName(event.target.value)}
+                      required
+                    />
+                  </label>
                   <label>検査場所<input value={form.inspection_location} onChange={(event) => setText('inspection_location', event.target.value)} /></label>
                 </div>
 
                 <datalist id="inspection-authorization-options">
                   {authorizations.map((item) => <option key={item.id} value={item.authorization_no}>{item.full_name}</option>)}
+                </datalist>
+                <datalist id="inspection-name-options">
+                  {authorizations.map((item) => <option key={item.id} value={item.full_name}>{item.authorization_no}</option>)}
                 </datalist>
 
                 <div className="inspection-form-grid four">
@@ -384,7 +416,7 @@ export function InspectionRecordManager({ workerId }: Props) {
                   <label>推フレ<input type="number" min="0" step="1" value={form.recommended_flexcon} onChange={(event) => setText('recommended_flexcon', event.target.value)} /></label>
                   <label>紙袋<input type="number" min="0" step="1" value={form.paper_bags} onChange={(event) => setText('paper_bags', event.target.value)} /></label>
                   <label>バラ<input type="number" min="0" step="1" value={form.bulk_quantity} onChange={(event) => setText('bulk_quantity', event.target.value)} /></label>
-                  <label>水分<input type="number" min="0" max="100" step="0.01" value={form.moisture} onChange={(event) => setText('moisture', event.target.value)} /></label>
+                  <label>水分<input className="inspection-average-input" value={averageMoisture(form.moisture_values)} readOnly /></label>
                 </div>
 
                 <label>理由<input value={form.reason} onChange={(event) => setText('reason', event.target.value)} /></label>

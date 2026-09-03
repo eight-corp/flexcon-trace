@@ -196,6 +196,7 @@
 .moisture-input-grid { display: grid; grid-template-columns: repeat(10, minmax(74px, 1fr)); gap: 8px; }
 .moisture-input-grid label { color: #4b574f; font-size: 11px; }
 .moisture-input-grid input { min-width: 0; padding: 7px 6px; }
+.inspection-average-input { background: #edf1ee; color: #334039; font-weight: 700; }
 .inspection-modal-actions { position: sticky; bottom: -20px; margin: 0 -20px -20px; padding: 12px 20px 20px; border-top: 1px solid var(--line); background: #fff; }
 
 @media (min-width: 760px) {

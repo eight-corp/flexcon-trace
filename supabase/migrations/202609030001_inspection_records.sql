@@ -42,6 +42,37 @@ drop policy if exists flexcon_read_inspection_records
 create policy flexcon_read_inspection_records on public.flexcon_inspection_records
   for select to anon, authenticated using (true);
 
+create or replace function public.flexcon_set_inspection_moisture_average()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  select round(avg(measured.value), 2)
+  into new.moisture
+  from unnest(new.moisture_values) as measured(value)
+  where measured.value is not null;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists flexcon_inspection_moisture_average
+  on public.flexcon_inspection_records;
+
+create trigger flexcon_inspection_moisture_average
+before insert or update of moisture_values
+on public.flexcon_inspection_records
+for each row
+execute function public.flexcon_set_inspection_moisture_average();
+
+update public.flexcon_inspection_records as inspection
+set moisture = (
+  select round(avg(measured.value), 2)
+  from unnest(inspection.moisture_values) as measured(value)
+  where measured.value is not null
+);
+
 create or replace function public.flexcon_save_inspection_record(
   p_worker_id text,
   p_record_id uuid,
@@ -61,7 +92,6 @@ declare
   v_recommended_flexcon integer;
   v_paper_bags integer;
   v_bulk_quantity integer;
-  v_moisture numeric(5, 2);
   v_moisture_values numeric(5, 2)[];
 begin
   v_worker := public.flexcon_require_active_worker(p_worker_id);
@@ -72,7 +102,6 @@ begin
   v_recommended_flexcon := nullif(p_record->>'recommended_flexcon', '')::integer;
   v_paper_bags := nullif(p_record->>'paper_bags', '')::integer;
   v_bulk_quantity := nullif(p_record->>'bulk_quantity', '')::integer;
-  v_moisture := nullif(p_record->>'moisture', '')::numeric;
 
   select coalesce(
     array_agg(
@@ -101,9 +130,6 @@ begin
      or coalesce(v_paper_bags, 0) < 0
      or coalesce(v_bulk_quantity, 0) < 0 then
     raise exception '推フレ、紙袋、バラは0以上で入力してください。';
-  end if;
-  if v_moisture is not null and v_moisture not between 0 and 100 then
-    raise exception '水分は0から100の範囲で入力してください。';
   end if;
   if cardinality(v_moisture_values) > 100 then
     raise exception '水分測定値は100件以内で入力してください。';
@@ -141,7 +167,6 @@ begin
       paper_bags,
       bulk_quantity,
       grade,
-      moisture,
       reason,
       moisture_values,
       created_by_worker_id,
@@ -161,7 +186,6 @@ begin
       v_paper_bags,
       v_bulk_quantity,
       nullif(btrim(p_record->>'grade'), ''),
-      v_moisture,
       nullif(btrim(p_record->>'reason'), ''),
       v_moisture_values,
       v_worker.worker_id,
@@ -184,7 +208,6 @@ begin
         paper_bags = v_paper_bags,
         bulk_quantity = v_bulk_quantity,
         grade = nullif(btrim(p_record->>'grade'), ''),
-        moisture = v_moisture,
         reason = nullif(btrim(p_record->>'reason'), ''),
         moisture_values = v_moisture_values,
         updated_by_worker_id = v_worker.worker_id,
@@ -202,6 +225,8 @@ end;
 $$;
 
 revoke all on function public.flexcon_save_inspection_record(text, uuid, jsonb)
+  from public;
+revoke all on function public.flexcon_set_inspection_moisture_average()
   from public;
 
 grant select on public.flexcon_inspection_records to anon, authenticated;
