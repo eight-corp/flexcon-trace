@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { FileSpreadsheet, Plus, Save, Search, X } from 'lucide-react'
+import { CopyPlus, FileSpreadsheet, Plus, Save, Search, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import type { AuthorizationRecord, InspectionOption, InspectionRecord, InspectionWeight } from '../types'
 
@@ -26,6 +26,7 @@ type InspectionForm = {
 }
 
 type TextFormField = Exclude<keyof InspectionForm, 'moisture_values'>
+type SplitDetails = Pick<InspectionForm, 'recommended_flexcon' | 'paper_bags' | 'bulk_quantity' | 'grade' | 'reason'>
 
 const MOISTURE_COUNT = 100
 const DEFAULT_BRANDED_RICE_WEIGHT = 1020
@@ -57,6 +58,16 @@ function emptyForm(recordNo = 1): InspectionForm {
     grade: '',
     reason: '',
     moisture_values: emptyMoistureValues(),
+  }
+}
+
+function emptySplitDetails(): SplitDetails {
+  return {
+    recommended_flexcon: '',
+    paper_bags: '',
+    bulk_quantity: '',
+    grade: '',
+    reason: '',
   }
 }
 
@@ -182,6 +193,7 @@ export function InspectionRecordManager({ workerId }: Props) {
   const [version, setVersion] = useState(0)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState<InspectionForm>(() => emptyForm())
+  const [splitDetails, setSplitDetails] = useState<SplitDetails | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
   const [busy, setBusy] = useState(false)
 
@@ -273,6 +285,7 @@ export function InspectionRecordManager({ workerId }: Props) {
     const fiscalYear = currentFiscalYear()
     setEditingId(null)
     setForm(emptyForm(nextRecordNo(items, fiscalYear)))
+    setSplitDetails(null)
     setNotice(null)
     setModalOpen(true)
   }
@@ -280,12 +293,17 @@ export function InspectionRecordManager({ workerId }: Props) {
   const beginEdit = (record: InspectionRecord) => {
     setEditingId(record.id)
     setForm(formFromRecord(record))
+    setSplitDetails(null)
     setNotice(null)
     setModalOpen(true)
   }
 
   const setText = (field: TextFormField, value: string) => {
     setForm((current) => ({ ...current, [field]: value }))
+  }
+
+  const setSplitText = (field: keyof SplitDetails, value: string) => {
+    setSplitDetails((current) => current ? { ...current, [field]: value } : current)
   }
 
   const setPrefecture = (value: string) => {
@@ -348,6 +366,7 @@ export function InspectionRecordManager({ workerId }: Props) {
 
   const recommendedFlexconCount = Number(form.recommended_flexcon)
   const canCreateCertificate = editingId !== null
+    && splitDetails === null
     && Number.isInteger(recommendedFlexconCount)
     && recommendedFlexconCount > 0
 
@@ -393,34 +412,53 @@ export function InspectionRecordManager({ workerId }: Props) {
 
     setBusy(true)
     setNotice(null)
-    const { error } = await supabase.rpc('flexcon_save_inspection_record', {
-      p_worker_id: workerId,
-      p_record_id: editingId,
-      p_record: {
-        record_no: Number(form.record_no),
-        fiscal_year: Number(form.fiscal_year),
-        purchase_date: form.purchase_date || null,
-        inspection_date: form.inspection_date || null,
-        full_name: form.full_name.trim(),
-        prefecture: form.prefecture.trim() || null,
-        municipality: form.municipality.trim() || null,
-        inspection_location: form.inspection_location.trim() || null,
-        authorization_no: form.authorization_no.trim() || null,
-        brand: form.brand.trim() || null,
-        recommended_flexcon: optionalNumber(form.recommended_flexcon),
-        paper_bags: optionalNumber(form.paper_bags),
-        bulk_quantity: optionalNumber(form.bulk_quantity),
-        grade: form.grade.trim() || null,
-        reason: form.reason.trim() || null,
-        moisture_values: form.moisture_values.map(optionalNumber),
-      },
-    })
+    const recordPayload = {
+      record_no: Number(form.record_no),
+      fiscal_year: Number(form.fiscal_year),
+      purchase_date: form.purchase_date || null,
+      inspection_date: form.inspection_date || null,
+      full_name: form.full_name.trim(),
+      prefecture: form.prefecture.trim() || null,
+      municipality: form.municipality.trim() || null,
+      inspection_location: form.inspection_location.trim() || null,
+      authorization_no: form.authorization_no.trim() || null,
+      brand: form.brand.trim() || null,
+      recommended_flexcon: optionalNumber(form.recommended_flexcon),
+      paper_bags: optionalNumber(form.paper_bags),
+      bulk_quantity: optionalNumber(form.bulk_quantity),
+      grade: form.grade.trim() || null,
+      reason: form.reason.trim() || null,
+      moisture_values: form.moisture_values.map(optionalNumber),
+    }
+
+    const { error } = splitDetails && editingId
+      ? await supabase.rpc('flexcon_split_inspection_record', {
+          p_worker_id: workerId,
+          p_record_id: editingId,
+          p_record: recordPayload,
+          p_split_details: {
+            recommended_flexcon: optionalNumber(splitDetails.recommended_flexcon),
+            paper_bags: optionalNumber(splitDetails.paper_bags),
+            bulk_quantity: optionalNumber(splitDetails.bulk_quantity),
+            grade: splitDetails.grade.trim() || null,
+            reason: splitDetails.reason.trim() || null,
+          },
+        })
+      : await supabase.rpc('flexcon_save_inspection_record', {
+          p_worker_id: workerId,
+          p_record_id: editingId,
+          p_record: recordPayload,
+        })
 
     if (error) {
       setNotice({ type: 'error', text: error.message })
     } else {
       setModalOpen(false)
-      setNotice({ type: 'success', text: editingId ? '検査記録を更新しました。' : '検査記録を追加しました。' })
+      setNotice({
+        type: 'success',
+        text: splitDetails ? '検査記録を2件に分割して保存しました。' : editingId ? '検査記録を更新しました。' : '検査記録を追加しました。',
+      })
+      setSplitDetails(null)
       setVersion((value) => value + 1)
     }
     setBusy(false)
@@ -440,6 +478,13 @@ export function InspectionRecordManager({ workerId }: Props) {
     form.bulk_quantity,
     inspectionWeights,
   )
+  const splitTotalQuantity = splitDetails ? calculateTotalQuantity(
+    form.brand,
+    splitDetails.recommended_flexcon,
+    splitDetails.paper_bags,
+    splitDetails.bulk_quantity,
+    inspectionWeights,
+  ) : null
 
   return (
     <div className="inspection-page">
@@ -587,45 +632,104 @@ export function InspectionRecordManager({ workerId }: Props) {
                   {authorizations.map((item) => <option key={item.id} value={item.full_name}>{item.authorization_no}</option>)}
                 </datalist>
 
-                <div className="inspection-form-grid inspection-form-row-three">
-                  <label>銘柄
-                    <select value={form.brand} onChange={(event) => setText('brand', event.target.value)} disabled={selectedBrandType === null}>
-                      <option value="">{selectedBrandType === null ? '県名を入力してください' : '選択してください'}</option>
-                      {form.brand && !brandOptions.some((item) => item.name === form.brand) && (
-                        <option value={form.brand}>{form.brand}</option>
-                      )}
-                      {brandOptions.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}
-                    </select>
-                  </label>
-                  <label>推フレ<input type="number" min="0" step="1" value={form.recommended_flexcon} onChange={(event) => setText('recommended_flexcon', event.target.value)} /></label>
-                  <label>紙袋<input type="number" min="0" step="1" value={form.paper_bags} onChange={(event) => setText('paper_bags', event.target.value)} /></label>
-                  <label>バラ<input type="number" min="0" step="1" value={form.bulk_quantity} onChange={(event) => setText('bulk_quantity', event.target.value)} /></label>
-                  <label>総数量<input className="inspection-total-input" value={totalQuantity ?? ''} readOnly /></label>
-                  <label>等級
-                    <select value={form.grade} onChange={(event) => setText('grade', event.target.value)}>
-                      <option value="">選択してください</option>
-                      {form.grade && !gradeOptions.some((item) => item.name === form.grade) && (
-                        <option value={form.grade}>{form.grade}</option>
-                      )}
-                      {gradeOptions.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}
-                    </select>
-                  </label>
-                  <label>理由<input value={form.reason} onChange={(event) => setText('reason', event.target.value)} /></label>
-                  <label>水分
-                    <input
-                      className={`inspection-average-input ${isHighMoisture(averageMoisture(form.moisture_values)) ? 'moisture-high' : ''}`.trim()}
-                      value={averageMoisture(form.moisture_values)}
-                      readOnly
-                    />
-                  </label>
-                </div>
+                {splitDetails ? (
+                  <>
+                    <div className="inspection-form-grid inspection-form-row-common">
+                      <label>銘柄
+                        <select value={form.brand} onChange={(event) => setText('brand', event.target.value)} disabled={selectedBrandType === null}>
+                          <option value="">{selectedBrandType === null ? '県名を入力してください' : '選択してください'}</option>
+                          {form.brand && !brandOptions.some((item) => item.name === form.brand) && (
+                            <option value={form.brand}>{form.brand}</option>
+                          )}
+                          {brandOptions.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}
+                        </select>
+                      </label>
+                      <label>水分
+                        <input
+                          className={`inspection-average-input ${isHighMoisture(averageMoisture(form.moisture_values)) ? 'moisture-high' : ''}`.trim()}
+                          value={averageMoisture(form.moisture_values)}
+                          readOnly
+                        />
+                      </label>
+                    </div>
+                    <div className="inspection-split-grid">
+                      <fieldset className="inspection-split-record">
+                        <legend>分割後1（ナンバー {form.record_no}）</legend>
+                        <div className="inspection-split-fields">
+                          <label>推フレ<input type="number" min="0" step="1" value={form.recommended_flexcon} onChange={(event) => setText('recommended_flexcon', event.target.value)} /></label>
+                          <label>紙袋<input type="number" min="0" step="1" value={form.paper_bags} onChange={(event) => setText('paper_bags', event.target.value)} /></label>
+                          <label>バラ<input type="number" min="0" step="1" value={form.bulk_quantity} onChange={(event) => setText('bulk_quantity', event.target.value)} /></label>
+                          <label>総数量<input className="inspection-total-input" value={totalQuantity ?? ''} readOnly /></label>
+                          <label>等級
+                            <select value={form.grade} onChange={(event) => setText('grade', event.target.value)}>
+                              <option value="">選択してください</option>
+                              {form.grade && !gradeOptions.some((item) => item.name === form.grade) && <option value={form.grade}>{form.grade}</option>}
+                              {gradeOptions.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}
+                            </select>
+                          </label>
+                          <label>理由<input value={form.reason} onChange={(event) => setText('reason', event.target.value)} /></label>
+                        </div>
+                      </fieldset>
+                      <fieldset className="inspection-split-record">
+                        <legend>分割後2（新しいナンバー）</legend>
+                        <div className="inspection-split-fields">
+                          <label>推フレ<input type="number" min="0" step="1" value={splitDetails.recommended_flexcon} onChange={(event) => setSplitText('recommended_flexcon', event.target.value)} /></label>
+                          <label>紙袋<input type="number" min="0" step="1" value={splitDetails.paper_bags} onChange={(event) => setSplitText('paper_bags', event.target.value)} /></label>
+                          <label>バラ<input type="number" min="0" step="1" value={splitDetails.bulk_quantity} onChange={(event) => setSplitText('bulk_quantity', event.target.value)} /></label>
+                          <label>総数量<input className="inspection-total-input" value={splitTotalQuantity ?? ''} readOnly /></label>
+                          <label>等級
+                            <select value={splitDetails.grade} onChange={(event) => setSplitText('grade', event.target.value)}>
+                              <option value="">選択してください</option>
+                              {gradeOptions.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}
+                            </select>
+                          </label>
+                          <label>理由<input value={splitDetails.reason} onChange={(event) => setSplitText('reason', event.target.value)} /></label>
+                        </div>
+                      </fieldset>
+                    </div>
+                  </>
+                ) : (
+                  <div className="inspection-form-grid inspection-form-row-three">
+                    <label>銘柄
+                      <select value={form.brand} onChange={(event) => setText('brand', event.target.value)} disabled={selectedBrandType === null}>
+                        <option value="">{selectedBrandType === null ? '県名を入力してください' : '選択してください'}</option>
+                        {form.brand && !brandOptions.some((item) => item.name === form.brand) && <option value={form.brand}>{form.brand}</option>}
+                        {brandOptions.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}
+                      </select>
+                    </label>
+                    <label>推フレ<input type="number" min="0" step="1" value={form.recommended_flexcon} onChange={(event) => setText('recommended_flexcon', event.target.value)} /></label>
+                    <label>紙袋<input type="number" min="0" step="1" value={form.paper_bags} onChange={(event) => setText('paper_bags', event.target.value)} /></label>
+                    <label>バラ<input type="number" min="0" step="1" value={form.bulk_quantity} onChange={(event) => setText('bulk_quantity', event.target.value)} /></label>
+                    <label>総数量<input className="inspection-total-input" value={totalQuantity ?? ''} readOnly /></label>
+                    <label>等級
+                      <select value={form.grade} onChange={(event) => setText('grade', event.target.value)}>
+                        <option value="">選択してください</option>
+                        {form.grade && !gradeOptions.some((item) => item.name === form.grade) && <option value={form.grade}>{form.grade}</option>}
+                        {gradeOptions.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}
+                      </select>
+                    </label>
+                    <label>理由<input value={form.reason} onChange={(event) => setText('reason', event.target.value)} /></label>
+                    <label>水分
+                      <input
+                        className={`inspection-average-input ${isHighMoisture(averageMoisture(form.moisture_values)) ? 'moisture-high' : ''}`.trim()}
+                        value={averageMoisture(form.moisture_values)}
+                        readOnly
+                      />
+                    </label>
+                  </div>
+                )}
 
                 <div className="modal-actions inspection-form-actions">
+                  {editingId && (
+                    <button className="secondary-button" type="button" onClick={() => setSplitDetails((current) => current ? null : emptySplitDetails())} disabled={busy}>
+                      <CopyPlus size={18} />{splitDetails ? '分割を取り消す' : '2件に分割'}
+                    </button>
+                  )}
                   {editingId && (
                     <button
                       className="secondary-button certificate-create-button"
                       type="button"
-                      title={canCreateCertificate ? '検査証明書取込用CSVを作成' : '推フレ本数を入力してください'}
+                      title={splitDetails ? '分割を保存してから作成してください' : canCreateCertificate ? '検査証明書取込用CSVを作成' : '推フレ本数を入力してください'}
                       disabled={busy || !canCreateCertificate}
                       onClick={createCertificateCsv}
                     >

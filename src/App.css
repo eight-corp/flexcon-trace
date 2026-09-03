@@ -193,7 +193,14 @@
 .inspection-form-row-one { grid-template-columns: minmax(90px, .7fr) minmax(90px, .7fr) repeat(2, minmax(145px, 1fr)); }
 .inspection-form-row-two { grid-template-columns: minmax(120px, .85fr) minmax(150px, 1.2fr) minmax(100px, .8fr) minmax(120px, 1fr) minmax(140px, 1fr); }
 .inspection-form-row-three { grid-template-columns: minmax(150px, 1.2fr) repeat(5, minmax(78px, .65fr)) minmax(150px, 1.3fr) minmax(86px, .7fr); }
+.inspection-form-row-common { grid-template-columns: minmax(180px, 1fr) minmax(90px, 160px); }
 .inspection-form-grid label, .inspection-fieldset > label, .moisture-input-grid label { margin: 0; }
+.inspection-split-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 10px; }
+.inspection-split-record { min-width: 0; margin: 0; padding: 12px; border: 1px solid #b9c8bd; border-radius: 6px; background: #f8faf8; }
+.inspection-split-record legend { padding: 0 6px; color: var(--green-dark); font-size: 13px; font-weight: 700; }
+.inspection-split-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; }
+.inspection-split-fields label { min-width: 0; margin: 0; }
+.inspection-split-fields label:last-child { grid-column: span 2; }
 .moisture-input-grid { display: grid; grid-template-columns: repeat(10, minmax(74px, 1fr)); gap: 8px; }
 .moisture-input-grid label { color: #4b574f; font-size: 11px; }
 .moisture-input-grid input { min-width: 0; padding: 7px 6px; }
@@ -233,6 +240,7 @@
 
 @media (max-width: 900px) {
   .inspection-form-row-one, .inspection-form-row-two, .inspection-form-row-three { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .inspection-split-grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 560px) {
@@ -250,7 +258,9 @@
   .authorization-flags { grid-template-columns: 1fr; }
   .inspection-heading { align-items: stretch; flex-direction: column; }
   .inspection-heading > button { width: 100%; }
-  .inspection-form-row-one, .inspection-form-row-two, .inspection-form-row-three { grid-template-columns: 1fr; }
+  .inspection-form-row-one, .inspection-form-row-two, .inspection-form-row-three, .inspection-form-row-common { grid-template-columns: 1fr; }
+  .inspection-split-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .inspection-split-fields label:last-child { grid-column: 1 / -1; }
   .moisture-input-grid { grid-template-columns: repeat(4, minmax(62px, 1fr)); }
   .inspection-form-actions { flex-wrap: wrap; }
   .inspection-form-actions .certificate-create-button { flex-basis: 100%; }
