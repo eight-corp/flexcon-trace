@@ -1,4 +1,4 @@
--- 分割後2を分割後1の直後へ挿入し、後続ナンバーを1つずつ繰り下げます。
+-- 分割後2を分割後1の直後へ挿入し、後続№を1つずつ繰り下げます。
 -- 202609040001_split_inspection_records.sql の実行後に適用してください。
 
 create or replace function public.flexcon_split_inspection_record(
@@ -44,7 +44,7 @@ begin
 
   v_original_record_no := nullif(p_record->>'record_no', '')::integer;
   if v_original_record_no is null or v_original_record_no <= 0 then
-    raise exception 'ナンバーは1以上の整数で入力してください。';
+    raise exception '№は1以上の整数で入力してください。';
   end if;
 
   if p_split_details is null then

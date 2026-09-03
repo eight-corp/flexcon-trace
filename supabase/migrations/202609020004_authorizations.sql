@@ -58,7 +58,7 @@ begin
   v_worker := public.flexcon_require_active_worker(p_worker_id);
 
   if char_length(btrim(coalesce(p_authorization_no, ''))) not between 1 and 40 then
-    raise exception 'ナンバーを1文字から40文字で入力してください。';
+    raise exception '№を1文字から40文字で入力してください。';
   end if;
   if char_length(btrim(coalesce(p_full_name, ''))) not between 1 and 120 then
     raise exception '氏名を1文字から120文字で入力してください。';
@@ -67,7 +67,7 @@ begin
     select 1 from public.flexcon_authorizations
     where authorization_no = btrim(p_authorization_no)
   ) then
-    raise exception '同じナンバーがすでに登録されています。';
+    raise exception '同じ№がすでに登録されています。';
   end if;
 
   insert into public.flexcon_authorizations (
@@ -126,7 +126,7 @@ begin
   perform public.flexcon_require_active_worker(p_worker_id);
 
   if char_length(btrim(coalesce(p_authorization_no, ''))) not between 1 and 40 then
-    raise exception 'ナンバーを1文字から40文字で入力してください。';
+    raise exception '№を1文字から40文字で入力してください。';
   end if;
   if char_length(btrim(coalesce(p_full_name, ''))) not between 1 and 120 then
     raise exception '氏名を1文字から120文字で入力してください。';
@@ -136,7 +136,7 @@ begin
     where id <> p_authorization_id
       and authorization_no = btrim(p_authorization_no)
   ) then
-    raise exception '同じナンバーがすでに登録されています。';
+    raise exception '同じ№がすでに登録されています。';
   end if;
 
   update public.flexcon_authorizations

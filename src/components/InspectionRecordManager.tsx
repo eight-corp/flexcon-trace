@@ -374,7 +374,7 @@ export function InspectionRecordManager({ workerId }: Props) {
     if (!canCreateCertificate) return
 
     const rows: (string | number)[][] = [
-      ['委任状ナンバー', '氏名', '県名', '銘柄', '推フレ本数'],
+      ['委任状№', '氏名', '県名', '銘柄', '推フレ本数'],
       [
         form.authorization_no.trim(),
         form.full_name.trim(),
@@ -398,7 +398,7 @@ export function InspectionRecordManager({ workerId }: Props) {
     if (busy) return
 
     if (!form.record_no || Number(form.record_no) <= 0) {
-      setNotice({ type: 'error', text: 'ナンバーを入力してください。' })
+      setNotice({ type: 'error', text: '№を入力してください。' })
       return
     }
     if (!form.fiscal_year || Number(form.fiscal_year) <= 0) {
@@ -497,14 +497,14 @@ export function InspectionRecordManager({ workerId }: Props) {
       </div>
 
       <div className="search-row">
-        <div className="search-input-wrap"><Search size={18} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="ナンバー・氏名・場所・銘柄などで検索" /></div>
+        <div className="search-input-wrap"><Search size={18} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="№・氏名・場所・銘柄などで検索" /></div>
       </div>
 
       <div className="inspection-table-wrap">
         <table className="inspection-table">
           <thead>
             <tr>
-              <th>ナンバー</th>
+              <th>№</th>
               <th>年度</th>
               <th>仕入日</th>
               <th>検査日</th>
@@ -512,7 +512,7 @@ export function InspectionRecordManager({ workerId }: Props) {
               <th>県名</th>
               <th>市町村名</th>
               <th>検査場所</th>
-              <th>委任状ナンバー</th>
+              <th>委任状№</th>
               <th>銘柄</th>
               <th>推フレ</th>
               <th>紙袋</th>
@@ -585,14 +585,14 @@ export function InspectionRecordManager({ workerId }: Props) {
               <fieldset className="inspection-fieldset">
                 <legend>基本情報</legend>
                 <div className="inspection-form-grid inspection-form-row-one">
-                  <label>ナンバー<input type="number" min="1" step="1" value={form.record_no} onChange={(event) => setText('record_no', event.target.value)} required /></label>
+                  <label>№<input type="number" min="1" step="1" value={form.record_no} onChange={(event) => setText('record_no', event.target.value)} required /></label>
                   <label>年度<input type="number" min="1" max="99" step="1" value={form.fiscal_year} onChange={(event) => setText('fiscal_year', event.target.value)} required /></label>
                   <label>仕入日<input type="date" value={form.purchase_date} onChange={(event) => setText('purchase_date', event.target.value)} /></label>
                   <label>検査日<input type="date" value={form.inspection_date} onChange={(event) => setText('inspection_date', event.target.value)} /></label>
                 </div>
 
                 <div className="inspection-form-grid inspection-form-row-two">
-                  <label>委任状ナンバー
+                  <label>委任状№
                     <input
                       list="inspection-authorization-options"
                       value={form.authorization_no}
@@ -657,7 +657,7 @@ export function InspectionRecordManager({ workerId }: Props) {
                     </div>
                     <div className="inspection-split-grid">
                       <fieldset className="inspection-split-record">
-                        <legend>分割後1（ナンバー {form.record_no}）</legend>
+                        <legend>分割後1（№ {form.record_no}）</legend>
                         <div className="inspection-split-fields">
                           <label>推フレ<input type="number" min="0" step="1" value={form.recommended_flexcon} onChange={(event) => setText('recommended_flexcon', event.target.value)} /></label>
                           <label>紙袋<input type="number" min="0" step="1" value={form.paper_bags} onChange={(event) => setText('paper_bags', event.target.value)} /></label>
@@ -674,7 +674,7 @@ export function InspectionRecordManager({ workerId }: Props) {
                         </div>
                       </fieldset>
                       <fieldset className="inspection-split-record">
-                        <legend>分割後2（ナンバー {splitRecordNo}）</legend>
+                        <legend>分割後2（№ {splitRecordNo}）</legend>
                         <div className="inspection-split-fields">
                           <label>推フレ<input type="number" min="0" step="1" value={splitDetails.recommended_flexcon} onChange={(event) => setSplitText('recommended_flexcon', event.target.value)} /></label>
                           <label>紙袋<input type="number" min="0" step="1" value={splitDetails.paper_bags} onChange={(event) => setSplitText('paper_bags', event.target.value)} /></label>

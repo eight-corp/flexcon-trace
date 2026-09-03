@@ -119,7 +119,7 @@ begin
     with ordinality as item(value, ordinality);
 
   if v_record_no is null or v_record_no <= 0 then
-    raise exception 'ナンバーは1以上の整数で入力してください。';
+    raise exception '№は1以上の整数で入力してください。';
   end if;
   if v_fiscal_year is null or v_fiscal_year not between 1 and 99 then
     raise exception '年度は1から99の整数で入力してください。';
@@ -149,7 +149,7 @@ begin
       and inspection.record_no = v_record_no
       and (p_record_id is null or inspection.id <> p_record_id)
   ) then
-    raise exception '同じ年度とナンバーの検査記録がすでに登録されています。';
+    raise exception '同じ年度と№の検査記録がすでに登録されています。';
   end if;
 
   if p_record_id is null then

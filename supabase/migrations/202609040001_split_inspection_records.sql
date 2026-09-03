@@ -44,7 +44,7 @@ begin
 
   v_original_record_no := nullif(p_record->>'record_no', '')::integer;
   if v_original_record_no is null or v_original_record_no <= 0 then
-    raise exception 'ナンバーは1以上の整数で入力してください。';
+    raise exception '№は1以上の整数で入力してください。';
   end if;
 
   if p_split_details is null then

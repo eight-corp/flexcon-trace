@@ -243,7 +243,7 @@ export function AuthorizationManager({ workerId }: Props) {
 
     const value = editingCell.value.trim()
     if ((editingCell.field === 'authorization_no' || editingCell.field === 'full_name') && !value) {
-      setNotice({ type: 'error', text: editingCell.field === 'authorization_no' ? 'ナンバーを入力してください。' : '氏名を入力してください。' })
+      setNotice({ type: 'error', text: editingCell.field === 'authorization_no' ? '№を入力してください。' : '氏名を入力してください。' })
       return
     }
 
@@ -438,7 +438,7 @@ export function AuthorizationManager({ workerId }: Props) {
         .map((record) => record.authorization_no)
         .filter((value, index, all) => all.indexOf(value) !== index)
       if (duplicateNos.length > 0) {
-        throw new Error(`同じナンバーが複数あります: ${[...new Set(duplicateNos)].slice(0, 10).join(', ')}`)
+        throw new Error(`同じ№が複数あります: ${[...new Set(duplicateNos)].slice(0, 10).join(', ')}`)
       }
 
       const duplicateNames = parsed
@@ -454,7 +454,7 @@ export function AuthorizationManager({ workerId }: Props) {
         && normalizeName(item.full_name) === normalizeName(record.full_name)
       )))
       if (existingNameConflict) {
-        throw new Error(`氏名「${existingNameConflict.full_name}」は別のナンバーで登録済みです。`)
+        throw new Error(`氏名「${existingNameConflict.full_name}」は別の№で登録済みです。`)
       }
       if (parsed.length === 0) throw new Error('取込可能な委任状情報がありません。')
 
@@ -560,14 +560,14 @@ export function AuthorizationManager({ workerId }: Props) {
       </div>
 
       <div className="search-row">
-        <div style={{ position: 'relative', flex: 1 }}><Search size={18} style={{ position: 'absolute', left: 12, top: 13, color: '#6b756d' }} /><input style={{ paddingLeft: 38 }} value={search} onChange={(event) => setSearch(event.target.value)} placeholder="ナンバー・氏名・住所などで検索" /></div>
+        <div style={{ position: 'relative', flex: 1 }}><Search size={18} style={{ position: 'absolute', left: 12, top: 13, color: '#6b756d' }} /><input style={{ paddingLeft: 38 }} value={search} onChange={(event) => setSearch(event.target.value)} placeholder="№・氏名・住所などで検索" /></div>
       </div>
 
       <div className="authorization-table-wrap">
         <table className="authorization-table">
           <thead>
             <tr>
-              <th>ナンバー</th>
+              <th>№</th>
               <th>氏名</th>
               <th>種子購入伝票フラグ</th>
               <th>営農計画書フラグ</th>
@@ -662,7 +662,7 @@ export function AuthorizationManager({ workerId }: Props) {
 
             <form className="form-grid" onSubmit={(event) => void save(event)}>
               <div className="form-grid two">
-                <label>ナンバー<input value={form.authorization_no} onChange={(event) => setText('authorization_no', event.target.value)} required /></label>
+                <label>№<input value={form.authorization_no} onChange={(event) => setText('authorization_no', event.target.value)} required /></label>
                 <label>氏名<input value={form.full_name} onChange={(event) => setText('full_name', event.target.value)} required /></label>
               </div>
 
@@ -699,12 +699,12 @@ export function AuthorizationManager({ workerId }: Props) {
             </div>
 
             {importError && <div className="notice error">{importError}</div>}
-            <div className="import-summary"><strong>{importRecords.length}件</strong><span>同じナンバーは更新、新しいナンバーは追加されます。</span></div>
+            <div className="import-summary"><strong>{importRecords.length}件</strong><span>同じ№は更新、新しい№は追加されます。</span></div>
             <p className="import-note">Excelで空欄のフラグは、登録済みの値を変更しません。</p>
 
             <div className="import-preview">
               <table>
-                <thead><tr><th>ナンバー</th><th>氏名</th><th>市町村</th><th>農作物の種類</th></tr></thead>
+                <thead><tr><th>№</th><th>氏名</th><th>市町村</th><th>農作物の種類</th></tr></thead>
                 <tbody>
                   {importRecords.slice(0, 5).map((record) => (
                     <tr key={record.authorization_no}><td>{record.authorization_no}</td><td>{record.full_name}</td><td>{record.municipality ?? ''}</td><td>{record.crop_type ?? ''}</td></tr>

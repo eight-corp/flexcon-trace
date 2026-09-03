@@ -41,10 +41,10 @@ begin
     v_plan_supplied := jsonb_typeof(v_record -> 'farming_plan') = 'boolean';
 
     if char_length(v_authorization_no) not between 1 and 40 then
-      raise exception 'ナンバーを1文字から40文字で入力してください。';
+      raise exception '№を1文字から40文字で入力してください。';
     end if;
     if char_length(v_full_name) not between 1 and 120 then
-      raise exception 'ナンバー%の氏名を1文字から120文字で入力してください。', v_authorization_no;
+      raise exception '№%の氏名を1文字から120文字で入力してください。', v_authorization_no;
     end if;
 
     select exists (
