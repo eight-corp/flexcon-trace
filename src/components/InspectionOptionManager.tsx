@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Check, MapPin, Pencil, Plus, Tags, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, Check, MapPin, Pencil, Plus, Tags, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import type { InspectionOption } from '../types'
 import { ToggleSwitch } from './ToggleSwitch'
@@ -65,6 +65,19 @@ function OptionSection({ workerId, optionType, title, items, onChanged, onError 
     else onChanged(`${item.name}を${item.active ? '無効' : '有効'}にしました。`)
   }
 
+  const move = async (item: InspectionOption, direction: -1 | 1) => {
+    if (busy) return
+    setBusy(true)
+    const { error } = await supabase.rpc('flexcon_reorder_inspection_option', {
+      p_worker_id: workerId,
+      p_option_id: item.id,
+      p_direction: direction,
+    })
+    setBusy(false)
+    if (error) onError(error.message)
+    else onChanged(`${item.name}の表示順を変更しました。`)
+  }
+
   const Icon = optionType === 'location' ? MapPin : Tags
 
   return (
@@ -85,10 +98,14 @@ function OptionSection({ workerId, optionType, title, items, onChanged, onError 
       </form>
 
       <div className="inspection-option-list">
-        {items.map((item) => (
+        {items.map((item, index) => (
           <div className={`inspection-option-row ${item.active ? '' : 'inactive-item'}`} key={item.id}>
             <Icon size={19} color={item.active ? '#236640' : '#7a847c'} />
             <strong>{item.name}</strong>
+            <div className="inspection-option-order-buttons">
+              <button className="icon-button" type="button" title="上へ移動" aria-label={`${item.name}を上へ移動`} onClick={() => void move(item, -1)} disabled={busy || index === 0}><ArrowUp size={16} /></button>
+              <button className="icon-button" type="button" title="下へ移動" aria-label={`${item.name}を下へ移動`} onClick={() => void move(item, 1)} disabled={busy || index === items.length - 1}><ArrowDown size={16} /></button>
+            </div>
             <button className="icon-button" type="button" title="編集" aria-label={`${item.name}を編集`} onClick={() => beginEdit(item)} disabled={busy}><Pencil size={17} /></button>
             <ToggleSwitch checked={item.active} label={`${item.name}を${item.active ? '無効' : '有効'}にする`} onChange={() => void toggle(item)} />
           </div>
@@ -108,7 +125,8 @@ export function InspectionOptionManager({ workerId }: Props) {
     void supabase
       .from('flexcon_inspection_options')
       .select('*')
-      .order('active', { ascending: false })
+      .order('option_type')
+      .order('sort_order')
       .order('name')
       .then(({ data, error }) => {
         if (error) setNotice({ type: 'error', text: '検査項目を取得できません。追加SQLを実行してください。' })

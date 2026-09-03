@@ -150,6 +150,7 @@ export function InspectionRecordManager({ workerId }: Props) {
         .from('flexcon_inspection_options')
         .select('*')
         .eq('active', true)
+        .order('sort_order')
         .order('name'),
     ]).then(([inspectionResult, authorizationResult, optionResult]) => {
       if (inspectionResult.error) {

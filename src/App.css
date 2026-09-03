@@ -204,9 +204,11 @@
 .inspection-option-form { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; margin-bottom: 12px; }
 .inspection-option-form input { min-width: 0; }
 .inspection-option-list { display: grid; gap: 7px; max-height: calc(100vh - 270px); overflow-y: auto; }
-.inspection-option-row { min-height: 48px; display: grid; grid-template-columns: auto minmax(0, 1fr) 38px 48px; align-items: center; gap: 9px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
+.inspection-option-row { min-height: 48px; display: grid; grid-template-columns: auto minmax(0, 1fr) 68px 38px 48px; align-items: center; gap: 9px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
 .inspection-option-row strong { min-width: 0; overflow-wrap: anywhere; }
 .inspection-option-row .icon-button { width: 36px; height: 36px; }
+.inspection-option-order-buttons { display: flex; align-items: center; }
+.inspection-option-order-buttons .icon-button { width: 32px; height: 32px; }
 
 @media (min-width: 760px) {
   .app-shell { padding-bottom: 0; padding-left: 188px; }

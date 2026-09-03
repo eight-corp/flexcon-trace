@@ -87,6 +87,7 @@ export type InspectionOption = {
   option_type: 'location' | 'brand'
   name: string
   active: boolean
+  sort_order: number
   created_at: string
   updated_at: string
 }
