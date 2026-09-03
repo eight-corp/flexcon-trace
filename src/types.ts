@@ -56,3 +56,28 @@ export type AuthorizationRecord = {
   created_at: string
   updated_at: string
 }
+
+export type InspectionRecord = {
+  id: string
+  record_no: number
+  fiscal_year: number
+  purchase_date: string | null
+  inspection_date: string | null
+  full_name: string
+  prefecture: string | null
+  municipality: string | null
+  inspection_location: string | null
+  authorization_no: string | null
+  brand: string | null
+  recommended_flexcon: number | null
+  paper_bags: number | null
+  bulk_quantity: number | null
+  grade: string | null
+  moisture: number | null
+  reason: string | null
+  moisture_values: (number | null)[]
+  created_by_worker_id: string
+  updated_by_worker_id: string
+  created_at: string
+  updated_at: string
+}

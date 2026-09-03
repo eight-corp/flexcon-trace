@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import { FileSignature, History, LogOut, MapPinned, ScanLine, Truck, Wheat } from 'lucide-react'
+import { ClipboardList, FileSignature, History, LogOut, MapPinned, ScanLine, Truck, Wheat } from 'lucide-react'
 import { AuthScreen } from './components/AuthScreen'
 import { AuthorizationManager } from './components/AuthorizationManager'
 import { DestinationManager } from './components/DestinationManager'
+import { InspectionRecordManager } from './components/InspectionRecordManager'
 import { ShipmentHistory } from './components/ShipmentHistory'
 import { ShipmentScanner } from './components/ShipmentScanner'
 import { TransportManager } from './components/TransportManager'
@@ -10,7 +11,7 @@ import { clearWorkerSession, restoreWorkerSession } from './lib/workerAuth'
 import type { Worker } from './types'
 import './App.css'
 
-type Tab = 'scan' | 'history' | 'destinations' | 'transport' | 'authorizations'
+type Tab = 'scan' | 'history' | 'destinations' | 'transport' | 'authorizations' | 'inspections'
 
 function App() {
   const [worker, setWorker] = useState<Worker | null>(null)
@@ -61,7 +62,7 @@ function App() {
         </button>
       </header>
 
-      <main className={`app-main ${tab === 'authorizations' ? 'app-main-wide' : ''}`}>
+      <main className={`app-main ${tab === 'authorizations' || tab === 'inspections' ? 'app-main-wide' : ''}`}>
         {tab === 'scan' && (
           <ShipmentScanner
             key={worker.worker_id}
@@ -74,6 +75,7 @@ function App() {
         {tab === 'destinations' && <DestinationManager workerId={worker.worker_id} />}
         {tab === 'transport' && <TransportManager workerId={worker.worker_id} />}
         {tab === 'authorizations' && <AuthorizationManager workerId={worker.worker_id} />}
+        {tab === 'inspections' && <InspectionRecordManager workerId={worker.worker_id} />}
       </main>
 
       <nav className="bottom-nav" aria-label="メインメニュー">
@@ -91,6 +93,9 @@ function App() {
         </button>
         <button className={tab === 'authorizations' ? 'active' : ''} onClick={() => setTab('authorizations')}>
           <FileSignature size={22} /><span>委任状一覧</span>
+        </button>
+        <button className={tab === 'inspections' ? 'active' : ''} onClick={() => setTab('inspections')}>
+          <ClipboardList size={22} /><span>検査記録</span>
         </button>
       </nav>
     </div>
