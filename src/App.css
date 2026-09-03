@@ -190,16 +190,16 @@
 .inspection-fieldset { margin: 0; padding: 14px; border: 1px solid var(--line); border-radius: 6px; }
 .inspection-fieldset legend { padding: 0 6px; color: #334039; font-size: 14px; font-weight: 700; }
 .inspection-form-grid { display: grid; gap: 10px; margin-bottom: 10px; }
-.inspection-form-grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.inspection-form-grid.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.inspection-form-row-one { grid-template-columns: minmax(90px, .7fr) minmax(90px, .7fr) repeat(2, minmax(145px, 1fr)); }
+.inspection-form-row-two { grid-template-columns: minmax(120px, .85fr) minmax(150px, 1.2fr) minmax(100px, .8fr) minmax(120px, 1fr) minmax(140px, 1fr); }
+.inspection-form-row-three { grid-template-columns: minmax(150px, 1.2fr) repeat(4, minmax(78px, .65fr)) minmax(150px, 1.3fr) minmax(86px, .7fr); }
 .inspection-form-grid label, .inspection-fieldset > label, .moisture-input-grid label { margin: 0; }
 .moisture-input-grid { display: grid; grid-template-columns: repeat(10, minmax(74px, 1fr)); gap: 8px; }
 .moisture-input-grid label { color: #4b574f; font-size: 11px; }
 .moisture-input-grid input { min-width: 0; padding: 7px 6px; }
 .inspection-average-input { background: #edf1ee; color: #334039; font-weight: 700; }
 .moisture-high { color: var(--red) !important; font-weight: 700; }
-.inspection-reason-actions { display: grid; grid-template-columns: minmax(220px, 460px) auto; align-items: end; justify-content: space-between; gap: 16px; }
-.inspection-reason-actions .modal-actions { flex-wrap: nowrap; }
+.inspection-form-actions { flex-wrap: nowrap; margin-top: 4px; }
 .certificate-create-button { color: var(--green-dark); border-color: #8db59a; }
 .inspection-master-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
 .inspection-option-section { min-width: 0; }
@@ -227,6 +227,10 @@
   .scanner-layout { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(280px, .8fr); gap: 16px; align-items: start; }
 }
 
+@media (max-width: 900px) {
+  .inspection-form-row-one, .inspection-form-row-two, .inspection-form-row-three { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
 @media (max-width: 560px) {
   .form-grid.two { grid-template-columns: 1fr; }
   .auth-panel { padding: 22px 18px; }
@@ -242,11 +246,10 @@
   .authorization-flags { grid-template-columns: 1fr; }
   .inspection-heading { align-items: stretch; flex-direction: column; }
   .inspection-heading > button { width: 100%; }
-  .inspection-form-grid.three, .inspection-form-grid.four { grid-template-columns: 1fr; }
+  .inspection-form-row-one, .inspection-form-row-two, .inspection-form-row-three { grid-template-columns: 1fr; }
   .moisture-input-grid { grid-template-columns: repeat(4, minmax(62px, 1fr)); }
-  .inspection-reason-actions { grid-template-columns: 1fr; }
-  .inspection-reason-actions .modal-actions { flex-wrap: wrap; }
-  .inspection-reason-actions .certificate-create-button { flex-basis: 100%; }
+  .inspection-form-actions { flex-wrap: wrap; }
+  .inspection-form-actions .certificate-create-button { flex-basis: 100%; }
   .inspection-master-grid { grid-template-columns: 1fr; }
   .inspection-option-list { max-height: none; }
 }

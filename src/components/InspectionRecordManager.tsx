@@ -445,14 +445,14 @@ export function InspectionRecordManager({ workerId }: Props) {
             <form className="inspection-form" onSubmit={(event) => void save(event)}>
               <fieldset className="inspection-fieldset">
                 <legend>基本情報</legend>
-                <div className="inspection-form-grid four">
+                <div className="inspection-form-grid inspection-form-row-one">
                   <label>ナンバー<input type="number" min="1" step="1" value={form.record_no} onChange={(event) => setText('record_no', event.target.value)} required /></label>
                   <label>年度<input type="number" min="1" max="99" step="1" value={form.fiscal_year} onChange={(event) => setText('fiscal_year', event.target.value)} required /></label>
                   <label>仕入日<input type="date" value={form.purchase_date} onChange={(event) => setText('purchase_date', event.target.value)} /></label>
                   <label>検査日<input type="date" value={form.inspection_date} onChange={(event) => setText('inspection_date', event.target.value)} /></label>
                 </div>
 
-                <div className="inspection-form-grid three">
+                <div className="inspection-form-grid inspection-form-row-two">
                   <label>委任状ナンバー
                     <input
                       list="inspection-authorization-options"
@@ -476,6 +476,8 @@ export function InspectionRecordManager({ workerId }: Props) {
                       required
                     />
                   </label>
+                  <label>県名<input value={form.prefecture} onChange={(event) => setText('prefecture', event.target.value)} /></label>
+                  <label>市町村名<input value={form.municipality} onChange={(event) => setText('municipality', event.target.value)} /></label>
                   <label>検査場所
                     <select value={form.inspection_location} onChange={(event) => setText('inspection_location', event.target.value)}>
                       <option value="">選択してください</option>
@@ -494,9 +496,7 @@ export function InspectionRecordManager({ workerId }: Props) {
                   {authorizations.map((item) => <option key={item.id} value={item.full_name}>{item.authorization_no}</option>)}
                 </datalist>
 
-                <div className="inspection-form-grid four">
-                  <label>県名<input value={form.prefecture} onChange={(event) => setText('prefecture', event.target.value)} /></label>
-                  <label>市町村名<input value={form.municipality} onChange={(event) => setText('municipality', event.target.value)} /></label>
+                <div className="inspection-form-grid inspection-form-row-three">
                   <label>銘柄
                     <select value={form.brand} onChange={(event) => setText('brand', event.target.value)}>
                       <option value="">選択してください</option>
@@ -506,13 +506,11 @@ export function InspectionRecordManager({ workerId }: Props) {
                       {brandOptions.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}
                     </select>
                   </label>
-                  <label>等級<input value={form.grade} onChange={(event) => setText('grade', event.target.value)} /></label>
-                </div>
-
-                <div className="inspection-form-grid four">
                   <label>推フレ<input type="number" min="0" step="1" value={form.recommended_flexcon} onChange={(event) => setText('recommended_flexcon', event.target.value)} /></label>
                   <label>紙袋<input type="number" min="0" step="1" value={form.paper_bags} onChange={(event) => setText('paper_bags', event.target.value)} /></label>
                   <label>バラ<input type="number" min="0" step="1" value={form.bulk_quantity} onChange={(event) => setText('bulk_quantity', event.target.value)} /></label>
+                  <label>等級<input value={form.grade} onChange={(event) => setText('grade', event.target.value)} /></label>
+                  <label>理由<input value={form.reason} onChange={(event) => setText('reason', event.target.value)} /></label>
                   <label>水分
                     <input
                       className={`inspection-average-input ${isHighMoisture(averageMoisture(form.moisture_values)) ? 'moisture-high' : ''}`.trim()}
@@ -522,23 +520,20 @@ export function InspectionRecordManager({ workerId }: Props) {
                   </label>
                 </div>
 
-                <div className="inspection-reason-actions">
-                  <label>理由<input value={form.reason} onChange={(event) => setText('reason', event.target.value)} /></label>
-                  <div className="modal-actions">
-                    {editingId && (
-                      <button
-                        className="secondary-button certificate-create-button"
-                        type="button"
-                        title={canCreateCertificate ? '検査証明書取込用CSVを作成' : '推フレ本数を入力してください'}
-                        disabled={busy || !canCreateCertificate}
-                        onClick={createCertificateCsv}
-                      >
-                        <FileSpreadsheet size={18} />検査証明書作成
-                      </button>
-                    )}
-                    <button className="secondary-button" type="button" onClick={() => setModalOpen(false)} disabled={busy}>取消</button>
-                    <button className="primary-button" type="submit" disabled={busy}><Save size={18} />{busy ? '保存中...' : '保存'}</button>
-                  </div>
+                <div className="modal-actions inspection-form-actions">
+                  {editingId && (
+                    <button
+                      className="secondary-button certificate-create-button"
+                      type="button"
+                      title={canCreateCertificate ? '検査証明書取込用CSVを作成' : '推フレ本数を入力してください'}
+                      disabled={busy || !canCreateCertificate}
+                      onClick={createCertificateCsv}
+                    >
+                      <FileSpreadsheet size={18} />検査証明書作成
+                    </button>
+                  )}
+                  <button className="primary-button" type="submit" disabled={busy}><Save size={18} />{busy ? '保存中...' : '保存'}</button>
+                  <button className="secondary-button" type="button" onClick={() => setModalOpen(false)} disabled={busy}>取り消し</button>
                 </div>
               </fieldset>
 
