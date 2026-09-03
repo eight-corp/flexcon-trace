@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Plus, Save, Search, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import type { AuthorizationRecord, InspectionRecord } from '../types'
+import type { AuthorizationRecord, InspectionOption, InspectionRecord } from '../types'
 
 type Props = { workerId: string }
 type Notice = { type: 'success' | 'error'; text: string } | null
@@ -125,6 +125,7 @@ function averageMoisture(values: string[]): string {
 export function InspectionRecordManager({ workerId }: Props) {
   const [items, setItems] = useState<InspectionRecord[]>([])
   const [authorizations, setAuthorizations] = useState<AuthorizationRecord[]>([])
+  const [inspectionOptions, setInspectionOptions] = useState<InspectionOption[]>([])
   const [search, setSearch] = useState('')
   const [notice, setNotice] = useState<Notice>(null)
   const [version, setVersion] = useState(0)
@@ -145,7 +146,12 @@ export function InspectionRecordManager({ workerId }: Props) {
         .from('flexcon_authorizations')
         .select('*')
         .order('authorization_no'),
-    ]).then(([inspectionResult, authorizationResult]) => {
+      supabase
+        .from('flexcon_inspection_options')
+        .select('*')
+        .eq('active', true)
+        .order('name'),
+    ]).then(([inspectionResult, authorizationResult, optionResult]) => {
       if (inspectionResult.error) {
         setNotice({ type: 'error', text: '検査記録を取得できません。追加SQLを実行してください。' })
       } else {
@@ -156,6 +162,12 @@ export function InspectionRecordManager({ workerId }: Props) {
         setNotice({ type: 'error', text: authorizationResult.error.message })
       } else {
         setAuthorizations((authorizationResult.data ?? []) as AuthorizationRecord[])
+      }
+
+      if (optionResult.error) {
+        setNotice({ type: 'error', text: '検査場所と銘柄を取得できません。検査項目用SQLを実行してください。' })
+      } else {
+        setInspectionOptions((optionResult.data ?? []) as InspectionOption[])
       }
     })
   }, [version])
@@ -281,6 +293,8 @@ export function InspectionRecordManager({ workerId }: Props) {
   }
 
   const moistureHeaders = Array.from({ length: MOISTURE_COUNT }, (_, index) => `水分${index + 1}`)
+  const locationOptions = inspectionOptions.filter((item) => item.option_type === 'location')
+  const brandOptions = inspectionOptions.filter((item) => item.option_type === 'brand')
 
   return (
     <div className="inspection-page">
@@ -395,7 +409,15 @@ export function InspectionRecordManager({ workerId }: Props) {
                       required
                     />
                   </label>
-                  <label>検査場所<input value={form.inspection_location} onChange={(event) => setText('inspection_location', event.target.value)} /></label>
+                  <label>検査場所
+                    <select value={form.inspection_location} onChange={(event) => setText('inspection_location', event.target.value)}>
+                      <option value="">選択してください</option>
+                      {form.inspection_location && !locationOptions.some((item) => item.name === form.inspection_location) && (
+                        <option value={form.inspection_location}>{form.inspection_location}</option>
+                      )}
+                      {locationOptions.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}
+                    </select>
+                  </label>
                 </div>
 
                 <datalist id="inspection-authorization-options">
@@ -408,7 +430,15 @@ export function InspectionRecordManager({ workerId }: Props) {
                 <div className="inspection-form-grid four">
                   <label>県名<input value={form.prefecture} onChange={(event) => setText('prefecture', event.target.value)} /></label>
                   <label>市町村名<input value={form.municipality} onChange={(event) => setText('municipality', event.target.value)} /></label>
-                  <label>銘柄<input value={form.brand} onChange={(event) => setText('brand', event.target.value)} /></label>
+                  <label>銘柄
+                    <select value={form.brand} onChange={(event) => setText('brand', event.target.value)}>
+                      <option value="">選択してください</option>
+                      {form.brand && !brandOptions.some((item) => item.name === form.brand) && (
+                        <option value={form.brand}>{form.brand}</option>
+                      )}
+                      {brandOptions.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}
+                    </select>
+                  </label>
                   <label>等級<input value={form.grade} onChange={(event) => setText('grade', event.target.value)} /></label>
                 </div>
 
@@ -419,7 +449,13 @@ export function InspectionRecordManager({ workerId }: Props) {
                   <label>水分<input className="inspection-average-input" value={averageMoisture(form.moisture_values)} readOnly /></label>
                 </div>
 
-                <label>理由<input value={form.reason} onChange={(event) => setText('reason', event.target.value)} /></label>
+                <div className="inspection-reason-actions">
+                  <label>理由<input value={form.reason} onChange={(event) => setText('reason', event.target.value)} /></label>
+                  <div className="modal-actions">
+                    <button className="secondary-button" type="button" onClick={() => setModalOpen(false)} disabled={busy}>取消</button>
+                    <button className="primary-button" type="submit" disabled={busy}><Save size={18} />{busy ? '保存中...' : '保存'}</button>
+                  </div>
+                </div>
               </fieldset>
 
               <fieldset className="inspection-fieldset">
@@ -440,10 +476,6 @@ export function InspectionRecordManager({ workerId }: Props) {
                 </div>
               </fieldset>
 
-              <div className="modal-actions inspection-modal-actions">
-                <button className="secondary-button" type="button" onClick={() => setModalOpen(false)} disabled={busy}>取消</button>
-                <button className="primary-button" type="submit" disabled={busy}><Save size={18} />{busy ? '保存中...' : '保存'}</button>
-              </div>
             </form>
           </section>
         </div>

@@ -81,3 +81,12 @@ export type InspectionRecord = {
   created_at: string
   updated_at: string
 }
+
+export type InspectionOption = {
+  id: string
+  option_type: 'location' | 'brand'
+  name: string
+  active: boolean
+  created_at: string
+  updated_at: string
+}
