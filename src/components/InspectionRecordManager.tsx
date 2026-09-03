@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Plus, Save, Search, X } from 'lucide-react'
+import { FileSpreadsheet, Plus, Save, Search, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import type { AuthorizationRecord, InspectionOption, InspectionRecord } from '../types'
 
@@ -106,6 +106,14 @@ function displayNumber(value: number | null): string {
 
 function optionalNumber(value: string): number | null {
   return value.trim() === '' ? null : Number(value)
+}
+
+function csvValue(value: string | number): string {
+  return `"${String(value).replaceAll('"', '""')}"`
+}
+
+function safeFilePart(value: string): string {
+  return value.trim().replace(/[\\/:*?"<>|]/g, '_') || '未設定'
 }
 
 function normalizeName(value: string): string {
@@ -239,6 +247,34 @@ export function InspectionRecordManager({ workerId }: Props) {
       values[index] = value
       return { ...current, moisture_values: values }
     })
+  }
+
+  const recommendedFlexconCount = Number(form.recommended_flexcon)
+  const canCreateCertificate = editingId !== null
+    && Number.isInteger(recommendedFlexconCount)
+    && recommendedFlexconCount > 0
+
+  const createCertificateCsv = () => {
+    if (!canCreateCertificate) return
+
+    const rows: (string | number)[][] = [
+      ['委任状ナンバー', '氏名', '県名', '銘柄', '推フレ本数'],
+      [
+        form.authorization_no.trim(),
+        form.full_name.trim(),
+        form.prefecture.trim(),
+        form.brand.trim(),
+        recommendedFlexconCount,
+      ],
+    ]
+    const csv = '\uFEFF' + rows.map((row) => row.map(csvValue).join(',')).join('\r\n')
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
+    const anchor = document.createElement('a')
+    const timestamp = new Date().toISOString().replace(/[-:]/g, '').slice(0, 15)
+    anchor.href = url
+    anchor.download = `検査証明書取込_${safeFilePart(form.authorization_no)}_${timestamp}.csv`
+    anchor.click()
+    URL.revokeObjectURL(url)
   }
 
   const save = async (event: React.FormEvent) => {
@@ -453,6 +489,17 @@ export function InspectionRecordManager({ workerId }: Props) {
                 <div className="inspection-reason-actions">
                   <label>理由<input value={form.reason} onChange={(event) => setText('reason', event.target.value)} /></label>
                   <div className="modal-actions">
+                    {editingId && (
+                      <button
+                        className="secondary-button certificate-create-button"
+                        type="button"
+                        title={canCreateCertificate ? '検査証明書取込用CSVを作成' : '推フレ本数を入力してください'}
+                        disabled={busy || !canCreateCertificate}
+                        onClick={createCertificateCsv}
+                      >
+                        <FileSpreadsheet size={18} />検査証明書作成
+                      </button>
+                    )}
                     <button className="secondary-button" type="button" onClick={() => setModalOpen(false)} disabled={busy}>取消</button>
                     <button className="primary-button" type="submit" disabled={busy}><Save size={18} />{busy ? '保存中...' : '保存'}</button>
                   </div>

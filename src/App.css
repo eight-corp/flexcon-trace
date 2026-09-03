@@ -199,6 +199,7 @@
 .inspection-average-input { background: #edf1ee; color: #334039; font-weight: 700; }
 .inspection-reason-actions { display: grid; grid-template-columns: minmax(220px, 460px) auto; align-items: end; justify-content: space-between; gap: 16px; }
 .inspection-reason-actions .modal-actions { flex-wrap: nowrap; }
+.certificate-create-button { color: var(--green-dark); border-color: #8db59a; }
 .inspection-master-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
 .inspection-option-section { min-width: 0; }
 .inspection-option-form { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; margin-bottom: 12px; }
@@ -243,6 +244,8 @@
   .inspection-form-grid.three, .inspection-form-grid.four { grid-template-columns: 1fr; }
   .moisture-input-grid { grid-template-columns: repeat(4, minmax(62px, 1fr)); }
   .inspection-reason-actions { grid-template-columns: 1fr; }
+  .inspection-reason-actions .modal-actions { flex-wrap: wrap; }
+  .inspection-reason-actions .certificate-create-button { flex-basis: 100%; }
   .inspection-master-grid { grid-template-columns: 1fr; }
   .inspection-option-list { max-height: none; }
 }
