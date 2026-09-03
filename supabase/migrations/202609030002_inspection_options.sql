@@ -3,7 +3,7 @@
 
 create table if not exists public.flexcon_inspection_options (
   id uuid primary key default gen_random_uuid(),
-  option_type text not null check (option_type in ('location', 'brand_aomori', 'brand_iwate')),
+  option_type text not null check (option_type in ('location', 'brand_aomori', 'brand_iwate', 'grade')),
   name text not null check (char_length(btrim(name)) between 1 and 120),
   active boolean not null default true,
   created_by_worker_id text references public.workers(worker_id),
@@ -40,7 +40,11 @@ values
   ('brand_iwate', 'ひとめぼれ'),
   ('brand_iwate', 'いわてっこ'),
   ('brand_iwate', 'つきあかり'),
-  ('brand_iwate', '岩手141号')
+  ('brand_iwate', '岩手141号'),
+  ('grade', '1等'),
+  ('grade', '2等'),
+  ('grade', '3等'),
+  ('grade', '合格')
 on conflict (option_type, name) do nothing;
 
 create or replace function public.flexcon_save_inspection_option(
@@ -62,7 +66,7 @@ begin
   v_worker := public.flexcon_require_active_worker(p_worker_id);
   v_name := btrim(coalesce(p_name, ''));
 
-  if p_option_type not in ('location', 'brand_aomori', 'brand_iwate') then
+  if p_option_type not in ('location', 'brand_aomori', 'brand_iwate', 'grade') then
     raise exception '検査項目の種類が正しくありません。';
   end if;
   if char_length(v_name) not between 1 and 120 then

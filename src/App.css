@@ -201,7 +201,7 @@
 .moisture-high { color: var(--red) !important; font-weight: 700; }
 .inspection-form-actions { flex-wrap: nowrap; margin-top: 4px; }
 .certificate-create-button { color: var(--green-dark); border-color: #8db59a; }
-.inspection-master-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; align-items: start; }
+.inspection-master-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
 .inspection-option-section { min-width: 0; }
 .inspection-option-form { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; margin-bottom: 12px; }
 .inspection-option-form input { min-width: 0; }

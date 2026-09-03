@@ -393,6 +393,7 @@ export function InspectionRecordManager({ workerId }: Props) {
   const brandOptions = inspectionOptions.filter((item) => (
     item.option_type === selectedBrandType || item.option_type === 'brand'
   ))
+  const gradeOptions = inspectionOptions.filter((item) => item.option_type === 'grade')
 
   return (
     <div className="inspection-page">
@@ -545,7 +546,15 @@ export function InspectionRecordManager({ workerId }: Props) {
                   <label>推フレ<input type="number" min="0" step="1" value={form.recommended_flexcon} onChange={(event) => setText('recommended_flexcon', event.target.value)} /></label>
                   <label>紙袋<input type="number" min="0" step="1" value={form.paper_bags} onChange={(event) => setText('paper_bags', event.target.value)} /></label>
                   <label>バラ<input type="number" min="0" step="1" value={form.bulk_quantity} onChange={(event) => setText('bulk_quantity', event.target.value)} /></label>
-                  <label>等級<input value={form.grade} onChange={(event) => setText('grade', event.target.value)} /></label>
+                  <label>等級
+                    <select value={form.grade} onChange={(event) => setText('grade', event.target.value)}>
+                      <option value="">選択してください</option>
+                      {form.grade && !gradeOptions.some((item) => item.name === form.grade) && (
+                        <option value={form.grade}>{form.grade}</option>
+                      )}
+                      {gradeOptions.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}
+                    </select>
+                  </label>
                   <label>理由<input value={form.reason} onChange={(event) => setText('reason', event.target.value)} /></label>
                   <label>水分
                     <input

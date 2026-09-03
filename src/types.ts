@@ -84,7 +84,7 @@ export type InspectionRecord = {
 
 export type InspectionOption = {
   id: string
-  option_type: 'location' | 'brand' | 'brand_aomori' | 'brand_iwate'
+  option_type: 'location' | 'brand' | 'brand_aomori' | 'brand_iwate' | 'grade'
   name: string
   active: boolean
   sort_order: number

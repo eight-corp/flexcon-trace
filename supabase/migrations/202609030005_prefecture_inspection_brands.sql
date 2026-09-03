@@ -17,7 +17,7 @@ where option_type = 'brand';
 
 alter table public.flexcon_inspection_options
   add constraint flexcon_inspection_options_option_type_check
-  check (option_type in ('location', 'brand_aomori', 'brand_iwate'));
+  check (option_type in ('location', 'brand_aomori', 'brand_iwate', 'grade'));
 
 insert into public.flexcon_inspection_options (
   option_type,
@@ -116,7 +116,7 @@ begin
   v_worker := public.flexcon_require_active_worker(p_worker_id);
   v_name := btrim(coalesce(p_name, ''));
 
-  if p_option_type not in ('location', 'brand_aomori', 'brand_iwate') then
+  if p_option_type not in ('location', 'brand_aomori', 'brand_iwate', 'grade') then
     raise exception '検査項目の種類が正しくありません。';
   end if;
   if char_length(v_name) not between 1 and 120 then
