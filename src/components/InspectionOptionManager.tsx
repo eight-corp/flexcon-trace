@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
-import { ArrowDown, ArrowUp, Award, Check, MapPin, Pencil, Plus, Tags, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, Award, Check, MapPin, Pencil, Plus, Scale, Tags, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import type { InspectionOption } from '../types'
+import type { InspectionOption, InspectionWeight } from '../types'
 import { ToggleSwitch } from './ToggleSwitch'
 
 type Props = { workerId: string }
 type OptionType = InspectionOption['option_type']
 type Notice = { type: 'success' | 'error'; text: string } | null
+type WeightValues = Record<InspectionWeight['weight_type'], number>
 
 type SectionProps = {
   workerId: string
@@ -116,22 +117,93 @@ function OptionSection({ workerId, optionType, title, items, onChanged, onError 
   )
 }
 
+function InspectionWeightSection({
+  workerId,
+  weights,
+  onChanged,
+  onError,
+}: {
+  workerId: string
+  weights: WeightValues
+  onChanged: (message: string) => void
+  onError: (message: string) => void
+}) {
+  const [brandedRiceWeight, setBrandedRiceWeight] = useState(String(weights.branded_rice))
+  const [feedRiceWeight, setFeedRiceWeight] = useState(String(weights.feed_rice))
+  const [busy, setBusy] = useState(false)
+
+  const save = async (event: React.FormEvent) => {
+    event.preventDefault()
+    if (busy) return
+
+    const branded = Number(brandedRiceWeight)
+    const feed = Number(feedRiceWeight)
+    if (!Number.isInteger(branded) || branded <= 0 || !Number.isInteger(feed) || feed <= 0) {
+      onError('量目は1以上の整数で入力してください。')
+      return
+    }
+
+    setBusy(true)
+    const { error } = await supabase.rpc('flexcon_save_inspection_weights', {
+      p_worker_id: workerId,
+      p_branded_rice_weight: branded,
+      p_feed_rice_weight: feed,
+    })
+    setBusy(false)
+
+    if (error) onError(error.message)
+    else onChanged('量目を更新しました。')
+  }
+
+  return (
+    <section className="inspection-option-section inspection-weight-section">
+      <div className="section-title">
+        <h2><Scale className="inline-icon" size={19} />量目</h2>
+      </div>
+      <form className="inspection-weight-form" onSubmit={(event) => void save(event)}>
+        <label>銘柄米
+          <input type="number" min="1" step="1" value={brandedRiceWeight} onChange={(event) => setBrandedRiceWeight(event.target.value)} required />
+        </label>
+        <label>飼料用玄米
+          <input type="number" min="1" step="1" value={feedRiceWeight} onChange={(event) => setFeedRiceWeight(event.target.value)} required />
+        </label>
+        <button className="primary-button" type="submit" disabled={busy}><Check size={18} />{busy ? '保存中...' : '保存'}</button>
+      </form>
+    </section>
+  )
+}
+
 export function InspectionOptionManager({ workerId }: Props) {
   const [items, setItems] = useState<InspectionOption[]>([])
+  const [weights, setWeights] = useState<WeightValues>({ branded_rice: 1020, feed_rice: 1000 })
   const [notice, setNotice] = useState<Notice>(null)
   const [version, setVersion] = useState(0)
 
   useEffect(() => {
-    void supabase
-      .from('flexcon_inspection_options')
-      .select('*')
-      .order('option_type')
-      .order('sort_order')
-      .order('name')
-      .then(({ data, error }) => {
-        if (error) setNotice({ type: 'error', text: '検査項目を取得できません。追加SQLを実行してください。' })
-        else setItems((data ?? []) as InspectionOption[])
-      })
+    void Promise.all([
+      supabase
+        .from('flexcon_inspection_options')
+        .select('*')
+        .order('option_type')
+        .order('sort_order')
+        .order('name'),
+      supabase
+        .from('flexcon_inspection_weights')
+        .select('*'),
+    ]).then(([optionResult, weightResult]) => {
+      if (optionResult.error) setNotice({ type: 'error', text: '検査項目を取得できません。追加SQLを実行してください。' })
+      else setItems((optionResult.data ?? []) as InspectionOption[])
+
+      if (weightResult.error) {
+        setNotice({ type: 'error', text: '量目を取得できません。量目用SQLを実行してください。' })
+      } else {
+        const data = weightResult.data as InspectionWeight[]
+        setWeights({
+          branded_rice: data.find((item) => item.weight_type === 'branded_rice')?.weight_kg ?? 1020,
+          feed_rice: data.find((item) => item.weight_type === 'feed_rice')?.weight_kg ?? 1000,
+        })
+      }
+    })
   }, [workerId, version])
 
   const changed = (message: string) => {
@@ -174,6 +246,13 @@ export function InspectionOptionManager({ workerId }: Props) {
           optionType="grade"
           title="等級"
           items={items.filter((item) => item.option_type === 'grade')}
+          onChanged={changed}
+          onError={failed}
+        />
+        <InspectionWeightSection
+          key={`${weights.branded_rice}-${weights.feed_rice}`}
+          workerId={workerId}
+          weights={weights}
           onChanged={changed}
           onError={failed}
         />

@@ -16,6 +16,7 @@ create table if not exists public.flexcon_inspection_records (
   recommended_flexcon integer check (recommended_flexcon is null or recommended_flexcon >= 0),
   paper_bags integer check (paper_bags is null or paper_bags >= 0),
   bulk_quantity integer check (bulk_quantity is null or bulk_quantity >= 0),
+  total_quantity bigint check (total_quantity is null or total_quantity >= 0),
   grade text,
   moisture numeric(5, 2) check (moisture is null or moisture between 0 and 100),
   reason text,

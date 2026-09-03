@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { FileSpreadsheet, Plus, Save, Search, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import type { AuthorizationRecord, InspectionOption, InspectionRecord } from '../types'
+import type { AuthorizationRecord, InspectionOption, InspectionRecord, InspectionWeight } from '../types'
 
 type Props = { workerId: string }
 type Notice = { type: 'success' | 'error'; text: string } | null
@@ -28,6 +28,8 @@ type InspectionForm = {
 type TextFormField = Exclude<keyof InspectionForm, 'moisture_values'>
 
 const MOISTURE_COUNT = 100
+const DEFAULT_BRANDED_RICE_WEIGHT = 1020
+const DEFAULT_FEED_RICE_WEIGHT = 1000
 
 function currentFiscalYear(): number {
   return new Date().getFullYear() - 2018
@@ -139,6 +141,27 @@ function isHighMoisture(value: string | number | null | undefined): boolean {
   return Number(value) > 16
 }
 
+function calculateTotalQuantity(
+  brand: string,
+  recommendedFlexcon: string | number | null,
+  paperBags: string | number | null,
+  bulkQuantity: string | number | null,
+  weights: Record<InspectionWeight['weight_type'], number>,
+): number | null {
+  const values = [recommendedFlexcon, paperBags, bulkQuantity]
+  if (values.every((value) => value === null || value === '')) return null
+  const quantities = values.map((value) => Number(value || 0))
+  if (quantities.some((value) => !Number.isFinite(value))) return null
+
+  const flexconWeight = brand.trim() === '飼料用玄米'
+    ? weights.feed_rice
+    : weights.branded_rice
+
+  return flexconWeight * quantities[0]
+    + 30 * quantities[1]
+    + quantities[2]
+}
+
 function brandTypeForPrefecture(prefecture: string): 'brand_aomori' | 'brand_iwate' | null {
   const normalized = prefecture.trim().replace(/県$/, '')
   if (normalized === '青森') return 'brand_aomori'
@@ -150,6 +173,10 @@ export function InspectionRecordManager({ workerId }: Props) {
   const [items, setItems] = useState<InspectionRecord[]>([])
   const [authorizations, setAuthorizations] = useState<AuthorizationRecord[]>([])
   const [inspectionOptions, setInspectionOptions] = useState<InspectionOption[]>([])
+  const [inspectionWeights, setInspectionWeights] = useState<Record<InspectionWeight['weight_type'], number>>({
+    branded_rice: DEFAULT_BRANDED_RICE_WEIGHT,
+    feed_rice: DEFAULT_FEED_RICE_WEIGHT,
+  })
   const [search, setSearch] = useState('')
   const [notice, setNotice] = useState<Notice>(null)
   const [version, setVersion] = useState(0)
@@ -170,6 +197,9 @@ export function InspectionRecordManager({ workerId }: Props) {
         .from('flexcon_authorizations')
         .select('*')
         .order('authorization_no')
+      const weightRequest = supabase
+        .from('flexcon_inspection_weights')
+        .select('*')
 
       let optionResult = await supabase
         .from('flexcon_inspection_options')
@@ -186,9 +216,10 @@ export function InspectionRecordManager({ workerId }: Props) {
           .order('name')
       }
 
-      const [inspectionResult, authorizationResult] = await Promise.all([
+      const [inspectionResult, authorizationResult, weightResult] = await Promise.all([
         inspectionRequest,
         authorizationRequest,
+        weightRequest,
       ])
 
       if (inspectionResult.error) {
@@ -201,6 +232,14 @@ export function InspectionRecordManager({ workerId }: Props) {
         setNotice({ type: 'error', text: authorizationResult.error.message })
       } else {
         setAuthorizations((authorizationResult.data ?? []) as AuthorizationRecord[])
+      }
+
+      if (!weightResult.error) {
+        const weights = weightResult.data as InspectionWeight[]
+        setInspectionWeights({
+          branded_rice: weights.find((item) => item.weight_type === 'branded_rice')?.weight_kg ?? DEFAULT_BRANDED_RICE_WEIGHT,
+          feed_rice: weights.find((item) => item.weight_type === 'feed_rice')?.weight_kg ?? DEFAULT_FEED_RICE_WEIGHT,
+        })
       }
 
       if (optionResult.error) {
@@ -394,6 +433,13 @@ export function InspectionRecordManager({ workerId }: Props) {
     item.option_type === selectedBrandType || item.option_type === 'brand'
   ))
   const gradeOptions = inspectionOptions.filter((item) => item.option_type === 'grade')
+  const totalQuantity = calculateTotalQuantity(
+    form.brand,
+    form.recommended_flexcon,
+    form.paper_bags,
+    form.bulk_quantity,
+    inspectionWeights,
+  )
 
   return (
     <div className="inspection-page">
@@ -423,6 +469,7 @@ export function InspectionRecordManager({ workerId }: Props) {
               <th>推フレ</th>
               <th>紙袋</th>
               <th>バラ</th>
+              <th>総数量</th>
               <th>等級</th>
               <th>水分</th>
               <th>理由</th>
@@ -451,6 +498,13 @@ export function InspectionRecordManager({ workerId }: Props) {
                 <td>{displayNumber(record.recommended_flexcon)}</td>
                 <td>{displayNumber(record.paper_bags)}</td>
                 <td>{displayNumber(record.bulk_quantity)}</td>
+                <td>{displayNumber(record.total_quantity ?? calculateTotalQuantity(
+                  record.brand ?? '',
+                  record.recommended_flexcon,
+                  record.paper_bags,
+                  record.bulk_quantity,
+                  inspectionWeights,
+                ))}</td>
                 <td>{record.grade ?? ''}</td>
                 <td className={isHighMoisture(record.moisture) ? 'moisture-high' : ''}>{displayAverageMoisture(record.moisture)}</td>
                 <td>{record.reason ?? ''}</td>
@@ -546,6 +600,7 @@ export function InspectionRecordManager({ workerId }: Props) {
                   <label>推フレ<input type="number" min="0" step="1" value={form.recommended_flexcon} onChange={(event) => setText('recommended_flexcon', event.target.value)} /></label>
                   <label>紙袋<input type="number" min="0" step="1" value={form.paper_bags} onChange={(event) => setText('paper_bags', event.target.value)} /></label>
                   <label>バラ<input type="number" min="0" step="1" value={form.bulk_quantity} onChange={(event) => setText('bulk_quantity', event.target.value)} /></label>
+                  <label>総数量<input className="inspection-total-input" value={totalQuantity ?? ''} readOnly /></label>
                   <label>等級
                     <select value={form.grade} onChange={(event) => setText('grade', event.target.value)}>
                       <option value="">選択してください</option>

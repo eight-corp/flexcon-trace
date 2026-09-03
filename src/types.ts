@@ -72,6 +72,7 @@ export type InspectionRecord = {
   recommended_flexcon: number | null
   paper_bags: number | null
   bulk_quantity: number | null
+  total_quantity: number | null
   grade: string | null
   moisture: number | null
   reason: string | null
@@ -79,6 +80,12 @@ export type InspectionRecord = {
   created_by_worker_id: string
   updated_by_worker_id: string
   created_at: string
+  updated_at: string
+}
+
+export type InspectionWeight = {
+  weight_type: 'branded_rice' | 'feed_rice'
+  weight_kg: number
   updated_at: string
 }
 
