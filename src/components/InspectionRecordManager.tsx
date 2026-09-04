@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, FileSpreadsheet, Plus, Search, TableRowsSplit, Trash2, X } from 'lucide-react'
+import { ArrowLeft, ExternalLink, FileText, Plus, Printer, Search, TableRowsSplit, Trash2, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import type { AuthorizationRecord, FlexconInspection, InspectionOption, InspectionWeight, PaperBagInspection } from '../types'
 
@@ -28,6 +28,13 @@ type InlineDetailDraft = {
   grade: string
   reason: string
   moisture: string
+}
+type GeneratedCertificate = {
+  url: string
+  fileName: string
+  flexconIds: string[]
+  count: number
+  previouslyPrintedCount: number
 }
 
 const DEFAULT_BRANDED_RICE_WEIGHT = 1020
@@ -61,8 +68,6 @@ function brandTypeForPrefecture(prefecture: string | null): 'brand_aomori' | 'br
   if (normalized === '岩手') return 'brand_iwate'
   return null
 }
-function csvValue(value: string | number) { return `"${String(value).replaceAll('"', '""')}"` }
-
 export function InspectionRecordManager({ workerId, selectedAuthorizationId, onSelectedAuthorizationChange }: Props) {
   const [authorizations, setAuthorizations] = useState<AuthorizationRecord[]>([])
   const [flexcons, setFlexcons] = useState<FlexconInspection[]>([])
@@ -77,6 +82,11 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
   const [notice, setNotice] = useState<Notice>(null)
   const [version, setVersion] = useState(0)
   const [busy, setBusy] = useState(false)
+  const [certificateDialogOpen, setCertificateDialogOpen] = useState(false)
+  const [certificateRange, setCertificateRange] = useState({ start: '', end: '' })
+  const [certificateBusy, setCertificateBusy] = useState(false)
+  const [certificateError, setCertificateError] = useState('')
+  const [generatedCertificate, setGeneratedCertificate] = useState<GeneratedCertificate | null>(null)
   const detailSaveChains = useRef(new Map<string, Promise<void>>())
 
   useEffect(() => {
@@ -114,7 +124,9 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
   }, [version])
 
   const selectedAuthorization = authorizations.find((item) => item.id === selectedAuthorizationId) ?? null
-  const selectedFlexcons = flexcons.filter((item) => item.authorization_id === selectedAuthorizationId)
+  const selectedFlexcons = flexcons
+    .filter((item) => item.authorization_id === selectedAuthorizationId)
+    .sort((left, right) => left.flexcon_no - right.flexcon_no)
   const selectedPaperBags = paperBags.filter((item) => item.authorization_id === selectedAuthorizationId)
 
   const summaryRows = useMemo(() => authorizations.map((authorization) => {
@@ -329,18 +341,128 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
     setNotice({ type: 'success', text: `紙袋${first + second}袋を${first}袋と${second}袋に分割しました。` })
     setVersion((value) => value + 1)
   }
-  const createCertificateCsv = () => {
-    if (!selectedAuthorization || selectedFlexcons.length === 0) return
-    const brandCounts = Object.entries(selectedFlexcons.reduce<Record<string, number>>((counts, item) => {
-      const brand = item.brand ?? '未設定'
-      counts[brand] = (counts[brand] ?? 0) + 1
-      return counts
-    }, {}))
-    const rows: (string | number)[][] = [['委任状№', '氏名', '県名', '銘柄', '推フレ本数'], ...brandCounts.map(([brand, count]) => [selectedAuthorization.authorization_no, selectedAuthorization.full_name, selectedAuthorization.prefecture ?? '', brand, count])]
-    const csv = '\uFEFF' + rows.map((row) => row.map(csvValue).join(',')).join('\r\n')
-    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
-    const anchor = document.createElement('a')
-    anchor.href = url; anchor.download = `検査証明書取込_${selectedAuthorization.authorization_no}.csv`; anchor.click(); URL.revokeObjectURL(url)
+  const openCertificateDialog = () => {
+    if (selectedFlexcons.length === 0) return
+    if (generatedCertificate) URL.revokeObjectURL(generatedCertificate.url)
+    setGeneratedCertificate(null)
+    setCertificateError('')
+    setCertificateRange({
+      start: String(selectedFlexcons[0].flexcon_no),
+      end: String(selectedFlexcons[selectedFlexcons.length - 1].flexcon_no),
+    })
+    setCertificateDialogOpen(true)
+  }
+  const closeCertificateDialog = () => {
+    if (certificateBusy) return
+    if (generatedCertificate) URL.revokeObjectURL(generatedCertificate.url)
+    setGeneratedCertificate(null)
+    setCertificateError('')
+    setCertificateDialogOpen(false)
+  }
+  const certificateTargets = () => {
+    const start = Number(certificateRange.start)
+    const end = Number(certificateRange.end)
+    if (!Number.isInteger(start) || !Number.isInteger(end)) return []
+    return selectedFlexcons.filter((item) => item.flexcon_no >= start && item.flexcon_no <= end)
+  }
+  const createCertificatePdf = async (event: React.FormEvent) => {
+    event.preventDefault()
+    if (!selectedAuthorization || certificateBusy) return
+    const start = Number(certificateRange.start)
+    const end = Number(certificateRange.end)
+    if (!Number.isInteger(start) || !Number.isInteger(end) || start <= 0 || end <= 0) {
+      setCertificateError('開始№と終了№は1以上の整数で入力してください。')
+      return
+    }
+    if (start > end) {
+      setCertificateError('開始№は終了№以下にしてください。')
+      return
+    }
+    const targets = certificateTargets()
+    if (targets.length === 0) {
+      setCertificateError('指定範囲に印刷できるフレコンがありません。')
+      return
+    }
+
+    const pdfWindow = window.open('', '_blank')
+    if (pdfWindow) {
+      pdfWindow.document.title = '検査証明書を作成中'
+      pdfWindow.document.body.textContent = '検査証明書PDFを作成しています...'
+    }
+    setCertificateBusy(true)
+    setCertificateError('')
+    try {
+      const { generateInspectionCertificatePdf } = await import('../lib/certificatePdf')
+      const blob = await generateInspectionCertificatePdf({
+        authorization: {
+          authorizationNo: selectedAuthorization.authorization_no,
+          fullName: selectedAuthorization.full_name,
+          address: selectedAuthorization.address ?? '',
+          prefecture: selectedAuthorization.prefecture ?? '',
+          feedRiceVariety: selectedAuthorization.feed_rice_variety ?? '',
+        },
+        flexcons: targets.map((item) => ({
+          flexconNo: item.flexcon_no,
+          lotNumber: item.lot_number || `${selectedAuthorization.authorization_no.padStart(3, '0')}${String(item.flexcon_no).padStart(3, '0')}`,
+          fiscalYear: item.fiscal_year,
+          inspectionDate: item.inspection_date,
+          brand: item.brand ?? '',
+          quantityKg: item.quantity_kg,
+          grade: item.grade ?? '',
+          reason: item.reason ?? '',
+        })),
+      })
+      if (generatedCertificate) URL.revokeObjectURL(generatedCertificate.url)
+      const url = URL.createObjectURL(blob)
+      const fileName = `検査証明書_${selectedAuthorization.authorization_no}_${start}-${end}.pdf`
+      setGeneratedCertificate({
+        url,
+        fileName,
+        flexconIds: targets.map((item) => item.id),
+        count: targets.length,
+        previouslyPrintedCount: targets.filter((item) => (item.certificate_print_count ?? 0) > 0).length,
+      })
+      if (pdfWindow) {
+        pdfWindow.location.href = url
+      } else {
+        const anchor = document.createElement('a')
+        anchor.href = url
+        anchor.download = fileName
+        anchor.click()
+      }
+    } catch (error) {
+      if (pdfWindow) pdfWindow.close()
+      setCertificateError(error instanceof Error ? error.message : '検査証明書PDFを作成できませんでした。')
+    } finally {
+      setCertificateBusy(false)
+    }
+  }
+  const reopenCertificatePdf = () => {
+    if (!generatedCertificate) return
+    window.open(generatedCertificate.url, '_blank')
+  }
+  const markCertificatePrinted = async () => {
+    if (!generatedCertificate || certificateBusy) return
+    setCertificateBusy(true)
+    setCertificateError('')
+    const { error } = await supabase.rpc('flexcon_mark_certificates_printed', {
+      p_worker_id: workerId,
+      p_flexcon_ids: generatedCertificate.flexconIds,
+    })
+    setCertificateBusy(false)
+    if (error) {
+      setCertificateError(error.message)
+      return
+    }
+    const printedAt = new Date().toISOString()
+    const printedIds = new Set(generatedCertificate.flexconIds)
+    setFlexcons((current) => current.map((item) => printedIds.has(item.id) ? {
+      ...item,
+      certificate_print_count: (item.certificate_print_count ?? 0) + 1,
+      certificate_last_printed_at: printedAt,
+      certificate_last_printed_by_worker_id: workerId,
+    } : item))
+    closeCertificateDialog()
   }
 
   if (!selectedAuthorization) {
@@ -381,13 +503,30 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
       </table></div>
     </section>
     <section className="section-band inspection-detail-section">
-      <div className="section-title"><div><h2>フレコン</h2><span>{selectedFlexcons.length}本</span></div><button className="secondary-button certificate-create-button" type="button" disabled={selectedFlexcons.length === 0} onClick={createCertificateCsv}><FileSpreadsheet size={18} />検査証明書作成</button></div>
+      <div className="section-title"><div><h2>フレコン</h2><span>{selectedFlexcons.length}本</span></div><div className="button-row"><span className="certificate-status-key"><span aria-hidden="true" />印刷済み</span><button className="secondary-button certificate-create-button" type="button" disabled={selectedFlexcons.length === 0} onClick={openCertificateDialog}><FileText size={18} />検査証明書作成</button></div></div>
       <div className="inspection-detail-table-wrap"><table className="inspection-detail-table">
         <thead><tr><th>№</th><th>年度</th><th>仕入日</th><th>検査日</th><th>検査場所</th><th>銘柄</th><th>数量（kg）</th><th>水分</th><th>等級</th><th>理由</th><th></th></tr></thead>
-        <tbody>{selectedFlexcons.map((item) => <tr key={item.id}><td>{item.flexcon_no}</td>{renderInlineMetadataFields('flexcon', item)}{renderInlineProductFields('flexcon', item)}{renderInlineResultFields('flexcon', item)}<td className="inspection-row-actions"><button className="icon-button delete-icon" type="button" title="削除" aria-label={`№${item.flexcon_no}を削除`} onClick={() => void deleteFlexcon(item)}><Trash2 size={17} /></button></td></tr>)}
+        <tbody>{selectedFlexcons.map((item) => <tr className={(item.certificate_print_count ?? 0) > 0 ? 'certificate-printed-row' : undefined} title={(item.certificate_print_count ?? 0) > 0 ? `印刷済み（${item.certificate_print_count}回）` : '未印刷'} key={item.id}><td>{item.flexcon_no}</td>{renderInlineMetadataFields('flexcon', item)}{renderInlineProductFields('flexcon', item)}{renderInlineResultFields('flexcon', item)}<td className="inspection-row-actions"><button className="icon-button delete-icon" type="button" title="削除" aria-label={`№${item.flexcon_no}を削除`} onClick={() => void deleteFlexcon(item)}><Trash2 size={17} /></button></td></tr>)}
         {selectedFlexcons.length === 0 && <tr><td colSpan={11} className="empty-state">フレコンは登録されていません</td></tr>}</tbody>
       </table></div>
     </section>
+    {certificateDialogOpen && <div className="modal-backdrop"><section className="registration-modal certificate-modal" role="dialog" aria-modal="true" aria-labelledby="certificate-dialog-title">
+      <div className="modal-header"><div><h2 id="certificate-dialog-title">検査証明書作成</h2><p>{selectedAuthorization.full_name}　委任状№ {selectedAuthorization.authorization_no}</p></div><button className="icon-button" type="button" title="閉じる" aria-label="閉じる" onClick={closeCertificateDialog} disabled={certificateBusy}><X size={20} /></button></div>
+      {!generatedCertificate ? <form className="certificate-range-form" onSubmit={(event) => void createCertificatePdf(event)}>
+        <div className="certificate-range-fields">
+          <label>開始№<input type="number" min="1" step="1" value={certificateRange.start} onChange={(event) => setCertificateRange((current) => ({ ...current, start: event.target.value }))} required autoFocus /></label>
+          <span aria-hidden="true">から</span>
+          <label>終了№<input type="number" min="1" step="1" value={certificateRange.end} onChange={(event) => setCertificateRange((current) => ({ ...current, end: event.target.value }))} required /></label>
+        </div>
+        <div className="certificate-range-summary">対象 {certificateTargets().length}本　印刷済み {certificateTargets().filter((item) => (item.certificate_print_count ?? 0) > 0).length}本</div>
+        {certificateError && <div className="inline-error">{certificateError}</div>}
+        <div className="modal-actions"><button className="primary-button" type="submit" disabled={certificateBusy}><FileText size={18} />{certificateBusy ? 'PDF作成中...' : 'PDFを作成'}</button><button className="secondary-button" type="button" onClick={closeCertificateDialog} disabled={certificateBusy}>取り消し</button></div>
+      </form> : <div className="certificate-created-panel">
+        <div className="certificate-created-message"><FileText size={28} /><div><strong>{generatedCertificate.count}ページのPDFを作成しました</strong><span>{generatedCertificate.previouslyPrintedCount > 0 ? `印刷済みのフレコンを${generatedCertificate.previouslyPrintedCount}本含みます。` : 'PDFの画面で印刷してください。'}</span></div></div>
+        {certificateError && <div className="inline-error">{certificateError}</div>}
+        <div className="modal-actions"><button className="secondary-button" type="button" onClick={reopenCertificatePdf}><ExternalLink size={18} />PDFを開く</button><button className="primary-button" type="button" onClick={() => void markCertificatePrinted()} disabled={certificateBusy}><Printer size={18} />{certificateBusy ? '記録中...' : '印刷完了'}</button><button className="secondary-button" type="button" onClick={closeCertificateDialog} disabled={certificateBusy}>閉じる</button></div>
+      </div>}
+    </section></div>}
     {splitPaper && <div className="modal-backdrop"><section className="registration-modal paper-split-modal" role="dialog" aria-modal="true" aria-labelledby="paper-split-title">
       <div className="modal-header"><div><h2 id="paper-split-title">紙袋を2行に分割</h2><p>{splitPaper.brand}　元の数量 {splitPaper.bag_count}袋</p></div><button className="icon-button" type="button" title="閉じる" aria-label="閉じる" onClick={() => setSplitPaper(null)} disabled={busy}><X size={20} /></button></div>
       <form className="paper-split-form" onSubmit={(event) => void splitPaperBags(event)}>

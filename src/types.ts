@@ -98,6 +98,9 @@ export type FlexconInspection = {
   reason: string | null
   moisture: number | null
   moisture_values: (number | null)[]
+  certificate_print_count: number
+  certificate_last_printed_at: string | null
+  certificate_last_printed_by_worker_id: string | null
   created_by_worker_id: string
   updated_by_worker_id: string
   created_at: string

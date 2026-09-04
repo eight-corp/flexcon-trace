@@ -262,6 +262,23 @@
 .inspection-brand-cell { min-width: 160px; }
 .inspection-quantity-cell { min-width: 108px; }
 .inspection-inline-cell select:disabled { background: #edf1ee; color: #7a847c; cursor: not-allowed; }
+.certificate-status-key { display: inline-flex; align-items: center; gap: 6px; color: #4b6553; font-size: 12px; white-space: nowrap; }
+.certificate-status-key > span { width: 16px; height: 16px; border: 1px solid #9cc9a8; border-radius: 3px; background: #e4f2e7; }
+.inspection-detail-table tbody tr.certificate-printed-row { background: #e4f2e7; }
+.inspection-detail-table tbody tr.certificate-printed-row:hover { background: #d8ecdd; }
+.certificate-printed-row .inspection-inline-cell input,
+.certificate-printed-row .inspection-inline-cell select { background: #f1f8f3; border-color: #a9cdb2; }
+.certificate-modal { width: min(100%, 560px); }
+.certificate-range-form, .certificate-created-panel { display: grid; gap: 16px; }
+.certificate-range-fields { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: end; gap: 12px; }
+.certificate-range-fields label { margin: 0; }
+.certificate-range-fields input { width: 100%; }
+.certificate-range-fields > span { padding-bottom: 11px; color: var(--muted); font-size: 13px; }
+.certificate-range-summary { padding: 11px 12px; border: 1px solid var(--line); border-radius: 5px; background: #f3f6f3; color: #3b493f; font-weight: 700; text-align: center; }
+.certificate-created-message { display: flex; align-items: center; gap: 13px; padding: 14px; border: 1px solid #afd0b8; border-radius: 6px; background: var(--green-soft); color: var(--green-dark); }
+.certificate-created-message svg { flex: 0 0 auto; }
+.certificate-created-message strong, .certificate-created-message span { display: block; }
+.certificate-created-message span { margin-top: 3px; font-size: 12px; font-weight: 400; }
 .paper-split-modal { width: min(100%, 520px); }
 .paper-split-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .paper-split-form label { min-width: 0; margin: 0; }
@@ -321,6 +338,10 @@
   .inspection-group-add { grid-template-columns: 1fr; }
   .inspection-detail-section .section-title { align-items: stretch; flex-direction: column; }
   .inspection-detail-section .section-title .button-row > * { flex: 1; }
+  .inspection-detail-section .section-title .certificate-status-key { flex: 0 0 auto; }
+  .certificate-range-fields { grid-template-columns: 1fr; align-items: stretch; }
+  .certificate-range-fields > span { padding: 0; text-align: center; }
+  .certificate-created-panel .modal-actions { flex-wrap: wrap; }
   .paper-split-form { grid-template-columns: 1fr; }
   .paper-split-total, .paper-split-form .modal-actions { grid-column: 1; }
 }

@@ -21,6 +21,8 @@
 - フレコン1本ごとの銘柄、数量、等級、水分、理由の直接入力
 - 紙袋行の銘柄、数量、等級、水分、理由の直接入力と2行分割
 - 生産者ごとの検査数量集計
+- №範囲を指定したA5横の検査証明書PDF作成
+- 検査証明書の印刷回数・最終印刷日時の記録と印刷済み表示
 
 ## ローカル起動
 
@@ -55,9 +57,10 @@ supabase/migrations/202609040004_brand_group_inspection_entries.sql
 supabase/migrations/202609040005_inline_inspection_fields.sql
 supabase/migrations/202609040006_flat_producer_inspections.sql
 supabase/migrations/202609040007_split_paper_bags.sql
+supabase/migrations/202609050001_certificate_print_status.sql
 ```
 
-`202609040006_flat_producer_inspections.sql` まで実行済みの場合は、`202609040007_split_paper_bags.sql` の全内容だけを追加実行してください。委任状№ごとに全仕入日のフレコン・紙袋を一覧表示し、年度、仕入日、検査日、検査場所、銘柄、数量、水分、等級、理由は各行で直接編集します。紙袋は合計袋数を変えずに2行へ分割できます。
+`202609040007_split_paper_bags.sql` まで実行済みの場合は、`202609050001_certificate_print_status.sql` の全内容だけを追加実行してください。委任状№ごとに全仕入日のフレコン・紙袋を一覧表示し、年度、仕入日、検査日、検査場所、銘柄、数量、水分、等級、理由は各行で直接編集します。紙袋は合計袋数を変えずに2行へ分割できます。検査証明書はExcelを起動せず、ブラウザ内でA5横の複数ページPDFとして作成します。
 
 委任状一覧の `Excel取込` では `.xlsm` または `.xlsx` を選択します。シート名と見出しを検証してから、№が同じ行を更新し、新しい№を追加します。Excel側で空欄のフラグは、登録済みの値を変更しません。
 
