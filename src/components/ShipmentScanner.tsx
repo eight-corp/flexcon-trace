@@ -84,14 +84,6 @@ function normalizeAuthorizationNo(value: string) {
   return /^\d+$/.test(trimmed) ? String(Number(trimmed)) : trimmed
 }
 
-function inspectionLotNumber(authorizationNo: string, recordNo: number) {
-  const normalizedAuthorizationNo = normalizeAuthorizationNo(authorizationNo)
-  const authorizationNumber = Number(normalizedAuthorizationNo)
-  if (!Number.isInteger(authorizationNumber) || authorizationNumber < 0 || authorizationNumber > 999) return null
-  if (!Number.isInteger(recordNo) || recordNo < 0 || recordNo > 999) return null
-  return `${String(authorizationNumber).padStart(3, '0')}${String(recordNo).padStart(3, '0')}`
-}
-
 export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
   const storageKey = `${STORAGE_KEY_PREFIX}-${workerId}`
   const [initialDraft] = useState(() => loadShipmentDraft(storageKey))
@@ -118,13 +110,10 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
     void Promise.all([
       supabase.from('flexcon_destinations').select('*').eq('active', true).order('name'),
       supabase.from('flexcon_transport_profiles').select('*').eq('active', true).order('company_name'),
-      supabase.from('flexcon_authorizations').select('authorization_no, full_name'),
-      supabase
-        .from('flexcon_inspection_records')
-        .select('record_no, fiscal_year, authorization_no, prefecture, municipality, brand')
-        .order('fiscal_year', { ascending: false })
-        .order('updated_at', { ascending: false }),
-    ]).then(([destinationResult, transportResult, authorizationResult, inspectionResult]) => {
+      supabase.from('flexcon_authorizations').select('id, authorization_no, full_name, prefecture, municipality'),
+      supabase.from('flexcon_inspection_batches').select('id, authorization_id, brand'),
+      supabase.from('flexcon_inspection_flexcons').select('batch_id, lot_number'),
+    ]).then(([destinationResult, transportResult, authorizationResult, batchResult, flexconResult]) => {
       if (destinationResult.error) setNotice({ type: 'error', text: '納品先を取得できません。SupabaseのSQL設定を確認してください。' })
       else setDestinations((destinationResult.data ?? []) as Destination[])
       if (transportResult.error) setNotice({ type: 'error', text: '運送会社を取得できません。追加SQLを実行してください。' })
@@ -138,21 +127,23 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
         ]))
         setAuthorizationNames(names)
       }
-      if (inspectionResult.error) {
+      if (batchResult.error || flexconResult.error) {
         setNotice({ type: 'error', text: '検査記録を取得できません。追加SQLを実行してください。' })
       } else {
         const details: Record<string, InspectionLotDetails> = {}
-        for (const record of inspectionResult.data ?? []) {
-          if (!record.authorization_no) continue
-          const lotNumber = inspectionLotNumber(String(record.authorization_no), Number(record.record_no))
-          if (!lotNumber || details[lotNumber]) continue
-          const origin = [record.prefecture, record.municipality]
+        const authorizationById = Object.fromEntries((authorizationResult.data ?? []).map((record) => [record.id, record]))
+        const batchById = Object.fromEntries((batchResult.data ?? []).map((batch) => [batch.id, batch]))
+        for (const flexcon of flexconResult.data ?? []) {
+          const batch = batchById[flexcon.batch_id]
+          const authorization = batch ? authorizationById[batch.authorization_id] : null
+          if (!batch || !authorization) continue
+          const origin = [authorization.prefecture, authorization.municipality]
             .map((value) => String(value ?? '').trim())
             .filter(Boolean)
             .join(' ')
-          details[lotNumber] = {
+          details[flexcon.lot_number] = {
             origin: origin || '産地未登録',
-            brand: String(record.brand ?? '').trim() || '銘柄未登録',
+            brand: String(batch.brand ?? '').trim() || '銘柄未登録',
           }
         }
         setInspectionLotDetails(details)

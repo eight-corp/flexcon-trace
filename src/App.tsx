@@ -19,6 +19,7 @@ function App() {
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<Tab>('scan')
   const [historyVersion, setHistoryVersion] = useState(0)
+  const [inspectionAuthorizationId, setInspectionAuthorizationId] = useState<string | null>(null)
 
   useEffect(() => {
     void restoreWorkerSession()
@@ -75,8 +76,23 @@ function App() {
         {tab === 'history' && <ShipmentHistory refreshKey={historyVersion} workerId={worker.worker_id} isAdmin={worker.role === 'admin'} />}
         {tab === 'destinations' && <DestinationManager workerId={worker.worker_id} />}
         {tab === 'transport' && <TransportManager workerId={worker.worker_id} />}
-        {tab === 'authorizations' && <AuthorizationManager workerId={worker.worker_id} />}
-        {tab === 'inspections' && <InspectionRecordManager workerId={worker.worker_id} />}
+        {tab === 'authorizations' && (
+          <AuthorizationManager
+            workerId={worker.worker_id}
+            onOpenInspections={(authorizationId) => {
+              setInspectionAuthorizationId(authorizationId)
+              setTab('inspections')
+            }}
+          />
+        )}
+        {tab === 'inspections' && (
+          <InspectionRecordManager
+            key={inspectionAuthorizationId ?? 'inspection-summary'}
+            workerId={worker.worker_id}
+            selectedAuthorizationId={inspectionAuthorizationId}
+            onSelectedAuthorizationChange={setInspectionAuthorizationId}
+          />
+        )}
         {tab === 'inspection-options' && <InspectionOptionManager workerId={worker.worker_id} />}
       </main>
 
@@ -96,7 +112,7 @@ function App() {
         <button className={tab === 'authorizations' ? 'active' : ''} onClick={() => setTab('authorizations')}>
           <FileSignature size={22} /><span>委任状一覧</span>
         </button>
-        <button className={tab === 'inspections' ? 'active' : ''} onClick={() => setTab('inspections')}>
+        <button className={tab === 'inspections' ? 'active' : ''} onClick={() => { setInspectionAuthorizationId(null); setTab('inspections') }}>
           <ClipboardList size={22} /><span>検査記録</span>
         </button>
         <button className={tab === 'inspection-options' ? 'active' : ''} onClick={() => setTab('inspection-options')}>

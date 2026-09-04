@@ -5,7 +5,10 @@ import { supabase } from '../lib/supabase'
 import type { AuthorizationRecord } from '../types'
 import { ToggleSwitch } from './ToggleSwitch'
 
-type Props = { workerId: string }
+type Props = {
+  workerId: string
+  onOpenInspections: (authorizationId: string) => void
+}
 type Notice = { type: 'success' | 'error'; text: string } | null
 
 type ImportRecord = {
@@ -138,7 +141,7 @@ function nextAuthorizationNo(items: AuthorizationRecord[]): string {
   return String((numericNos.length > 0 ? Math.max(...numericNos) : 0) + 1)
 }
 
-export function AuthorizationManager({ workerId }: Props) {
+export function AuthorizationManager({ workerId, onOpenInspections }: Props) {
   const [items, setItems] = useState<AuthorizationRecord[]>([])
   const [search, setSearch] = useState('')
   const [notice, setNotice] = useState<Notice>(null)
@@ -153,6 +156,11 @@ export function AuthorizationManager({ workerId }: Props) {
   const [importRecords, setImportRecords] = useState<ImportRecord[]>([])
   const [importError, setImportError] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const openInspectionTimerRef = useRef<number | null>(null)
+
+  useEffect(() => () => {
+    if (openInspectionTimerRef.current !== null) window.clearTimeout(openInspectionTimerRef.current)
+  }, [])
 
   useEffect(() => {
     void supabase.from('flexcon_authorizations').select('*').order('authorization_no')
@@ -229,8 +237,21 @@ export function AuthorizationManager({ workerId }: Props) {
 
   const beginInlineEdit = (record: AuthorizationRecord, field: EditableTextField) => {
     if (busy) return
+    if (openInspectionTimerRef.current !== null) {
+      window.clearTimeout(openInspectionTimerRef.current)
+      openInspectionTimerRef.current = null
+    }
     setNotice(null)
     setEditingCell({ recordId: record.id, field, value: record[field] ?? '' })
+  }
+
+  const scheduleOpenInspections = (record: AuthorizationRecord, event: React.MouseEvent<HTMLTableRowElement>) => {
+    if ((event.target as HTMLElement).closest('button, input, select, textarea')) return
+    if (openInspectionTimerRef.current !== null) window.clearTimeout(openInspectionTimerRef.current)
+    openInspectionTimerRef.current = window.setTimeout(() => {
+      onOpenInspections(record.id)
+      openInspectionTimerRef.current = null
+    }, 240)
   }
 
   const saveInlineEdit = async () => {
@@ -583,7 +604,7 @@ export function AuthorizationManager({ workerId }: Props) {
           </thead>
           <tbody>
             {filtered.map((record) => (
-              <tr key={record.id}>
+              <tr className="authorization-data-row" key={record.id} onClick={(event) => scheduleOpenInspections(record, event)}>
                 {editableCell(record, 'authorization_no', 'authorization-no')}
                 {editableCell(record, 'full_name', 'authorization-name')}
                 <td className="flag-cell">
