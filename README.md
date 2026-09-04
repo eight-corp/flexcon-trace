@@ -1,6 +1,6 @@
 # フレコントレース
 
-玄米フレコンの6桁ロット番号をスマートフォンで連続読取し、納品先ごとに一括出荷登録するPWAです。
+玄米フレコンの7桁ロット番号（委任状№4桁＋フレコン№3桁）をスマートフォンで連続読取し、納品先ごとに一括出荷登録するPWAです。移行前に発行した6桁QRも読み取れます。
 
 ## 主な機能
 
@@ -58,9 +58,10 @@ supabase/migrations/202609040005_inline_inspection_fields.sql
 supabase/migrations/202609040006_flat_producer_inspections.sql
 supabase/migrations/202609040007_split_paper_bags.sql
 supabase/migrations/202609050001_certificate_print_status.sql
+supabase/migrations/202609050002_seven_digit_lot_numbers.sql
 ```
 
-`202609040007_split_paper_bags.sql` まで実行済みの場合は、`202609050001_certificate_print_status.sql` の全内容だけを追加実行してください。委任状№ごとに全仕入日のフレコン・紙袋を一覧表示し、年度、仕入日、検査日、検査場所、銘柄、数量、水分、等級、理由は各行で直接編集します。紙袋は合計袋数を変えずに2行へ分割できます。検査証明書はExcelを起動せず、ブラウザ内でA5横の複数ページPDFとして作成します。
+`202609050001_certificate_print_status.sql` まで実行済みの場合は、`202609050002_seven_digit_lot_numbers.sql` の全内容だけを追加実行してください。委任状№ごとに全仕入日のフレコン・紙袋を一覧表示し、年度、仕入日、検査日、検査場所、銘柄、数量、水分、等級、理由は各行で直接編集します。紙袋は合計袋数を変えずに2行へ分割できます。検査証明書はExcelを起動せず、ブラウザ内でA5横の複数ページPDFとして作成します。新しいQRは委任状№4桁＋フレコン№3桁の7桁です。
 
 委任状一覧の `Excel取込` では `.xlsm` または `.xlsx` を選択します。シート名と見出しを検証してから、№が同じ行を更新し、新しい№を追加します。Excel側で空欄のフラグは、登録済みの値を変更しません。
 

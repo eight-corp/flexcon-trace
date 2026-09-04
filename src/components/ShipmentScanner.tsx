@@ -84,6 +84,13 @@ function normalizeAuthorizationNo(value: string) {
   return /^\d+$/.test(trimmed) ? String(Number(trimmed)) : trimmed
 }
 
+function authorizationNoFromLot(lotNumber: string) {
+  const authorizationDigits = lotNumber.length === 7
+    ? lotNumber.slice(0, 4)
+    : lotNumber.slice(0, 3)
+  return normalizeAuthorizationNo(authorizationDigits)
+}
+
 export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
   const storageKey = `${STORAGE_KEY_PREFIX}-${workerId}`
   const [initialDraft] = useState(() => loadShipmentDraft(storageKey))
@@ -138,9 +145,13 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
             .map((value) => String(value ?? '').trim())
             .filter(Boolean)
             .join(' ')
-          details[flexcon.lot_number] = {
+          const detail = {
             origin: origin || '産地未登録',
             brand: String(flexcon.brand ?? '').trim() || '銘柄未登録',
+          }
+          details[flexcon.lot_number] = detail
+          if (/^0\d{6}$/.test(flexcon.lot_number)) {
+            details[flexcon.lot_number.slice(1)] = detail
           }
         }
         setInspectionLotDetails(details)
@@ -180,8 +191,8 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
     if (lastRead.current.value === value && now - lastRead.current.time < 1800) return
     lastRead.current = { value, time: now }
 
-    if (!/^\d{6}$/.test(value)) {
-      setNotice({ type: 'error', text: `「${value.slice(0, 24)}」は6桁のロット番号ではありません。` })
+    if (!/^\d{7}$/.test(value) && !/^\d{6}$/.test(value)) {
+      setNotice({ type: 'error', text: `「${value.slice(0, 24)}」は7桁のロット番号ではありません。` })
       return
     }
     setLots((current) => {
@@ -280,8 +291,8 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
               <li key={lot}>
                 <span className="sequence">{index + 1}</span><CheckCircle2 size={18} color="#236640" />
                 <div className="lot-information">
-                  <span className={`lot-producer-name ${authorizationNames[normalizeAuthorizationNo(lot.slice(0, 3))] ? '' : 'unknown'}`} title="生産者">
-                    {authorizationNames[normalizeAuthorizationNo(lot.slice(0, 3))] ?? '委任状未登録'}
+                  <span className={`lot-producer-name ${authorizationNames[authorizationNoFromLot(lot)] ? '' : 'unknown'}`} title="生産者">
+                    {authorizationNames[authorizationNoFromLot(lot)] ?? '委任状未登録'}
                   </span>
                   <span className={`lot-origin ${inspectionLotDetails[lot] ? '' : 'unknown'}`} title="産地">
                     {inspectionLotDetails[lot]?.origin ?? '検査記録未登録'}
@@ -298,7 +309,7 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
         )}
 
         <div className="manual-entry">
-          <input inputMode="numeric" maxLength={6} value={manualLot} onChange={(e) => setManualLot(e.target.value.replace(/\D/g, ''))} placeholder="6桁を手入力" onKeyDown={(e) => { if (e.key === 'Enter') addManual() }} />
+          <input inputMode="numeric" maxLength={7} value={manualLot} onChange={(e) => setManualLot(e.target.value.replace(/\D/g, ''))} placeholder="7桁を手入力" onKeyDown={(e) => { if (e.key === 'Enter') addManual() }} />
           <button className="secondary-button" type="button" onClick={addManual}><Plus size={18} />追加</button>
         </div>
 

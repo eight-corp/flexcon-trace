@@ -403,7 +403,7 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
         },
         flexcons: targets.map((item) => ({
           flexconNo: item.flexcon_no,
-          lotNumber: item.lot_number || `${selectedAuthorization.authorization_no.padStart(3, '0')}${String(item.flexcon_no).padStart(3, '0')}`,
+          lotNumber: item.lot_number || `${selectedAuthorization.authorization_no.padStart(4, '0')}${String(item.flexcon_no).padStart(3, '0')}`,
           fiscalYear: item.fiscal_year,
           inspectionDate: item.inspection_date,
           brand: item.brand ?? '',
