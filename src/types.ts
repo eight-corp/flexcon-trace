@@ -83,23 +83,13 @@ export type InspectionRecord = {
   updated_at: string
 }
 
-export type ProducerInspectionBatch = {
-  id: string
-  authorization_id: string
-  purchase_date: string
-  fiscal_year: number
-  inspection_date: string | null
-  inspection_location: string | null
-  brand: string | null
-  created_by_worker_id: string
-  updated_by_worker_id: string
-  created_at: string
-  updated_at: string
-}
-
 export type FlexconInspection = {
   id: string
-  batch_id: string
+  authorization_id: string
+  fiscal_year: number
+  purchase_date: string
+  inspection_date: string | null
+  inspection_location: string | null
   flexcon_no: number
   lot_number: string
   brand: string | null
@@ -116,7 +106,11 @@ export type FlexconInspection = {
 
 export type PaperBagInspection = {
   id: string
-  batch_id: string
+  authorization_id: string
+  fiscal_year: number
+  purchase_date: string
+  inspection_date: string | null
+  inspection_location: string | null
   brand: string | null
   bag_count: number
   grade: string | null

@@ -17,7 +17,7 @@
 - 管理者による出荷履歴の編集・削除
 - 委任状情報の一覧・検索・追加・編集・削除
 - `検査記録.xlsm` の「委任状一覧」シートから確認付き一括取込
-- 委任状と連携した生産者・仕入日別の検査入力
+- 委任状と連携した生産者別の検査入力
 - フレコン1本ごとのロット、等級、水分、理由の直接入力
 - 銘柄追加ごとの紙袋数量、等級、水分、理由の直接入力
 - 生産者ごとの検査数量集計
@@ -53,9 +53,10 @@ supabase/migrations/202609020005_authorization_excel_import.sql
 supabase/migrations/202609040003_producer_inspection_records.sql
 supabase/migrations/202609040004_brand_group_inspection_entries.sql
 supabase/migrations/202609040005_inline_inspection_fields.sql
+supabase/migrations/202609040006_flat_producer_inspections.sql
 ```
 
-`202609040004_brand_group_inspection_entries.sql` まで実行済みの場合は、`202609040005_inline_inspection_fields.sql` の全内容だけを追加実行してください。銘柄、フレコン本数、紙袋数を追加するたび、フレコンは1本1行、紙袋は追加1回につき1行で作成されます。水分、等級、理由は表内で直接入力し、1等と合格では理由を入力できません。
+`202609040005_inline_inspection_fields.sql` まで実行済みの場合は、`202609040006_flat_producer_inspections.sql` の全内容だけを追加実行してください。既存の仕入日情報を各明細へ引き継ぎ、委任状№ごとに全仕入日のフレコン・紙袋を一覧表示する構造へ移行します。年度、仕入日、検査日、検査場所、水分、等級、理由は各行で直接編集します。
 
 委任状一覧の `Excel取込` では `.xlsm` または `.xlsx` を選択します。シート名と見出しを検証してから、№が同じ行を更新し、新しい№を追加します。Excel側で空欄のフラグは、登録済みの値を変更しません。
 

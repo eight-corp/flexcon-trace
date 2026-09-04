@@ -111,9 +111,8 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
       supabase.from('flexcon_destinations').select('*').eq('active', true).order('name'),
       supabase.from('flexcon_transport_profiles').select('*').eq('active', true).order('company_name'),
       supabase.from('flexcon_authorizations').select('id, authorization_no, full_name, prefecture, municipality'),
-      supabase.from('flexcon_inspection_batches').select('id, authorization_id'),
-      supabase.from('flexcon_inspection_flexcons').select('batch_id, lot_number, brand'),
-    ]).then(([destinationResult, transportResult, authorizationResult, batchResult, flexconResult]) => {
+      supabase.from('flexcon_inspection_flexcons').select('authorization_id, lot_number, brand'),
+    ]).then(([destinationResult, transportResult, authorizationResult, flexconResult]) => {
       if (destinationResult.error) setNotice({ type: 'error', text: '納品先を取得できません。SupabaseのSQL設定を確認してください。' })
       else setDestinations((destinationResult.data ?? []) as Destination[])
       if (transportResult.error) setNotice({ type: 'error', text: '運送会社を取得できません。追加SQLを実行してください。' })
@@ -127,16 +126,14 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
         ]))
         setAuthorizationNames(names)
       }
-      if (batchResult.error || flexconResult.error) {
+      if (flexconResult.error) {
         setNotice({ type: 'error', text: '検査記録を取得できません。追加SQLを実行してください。' })
       } else {
         const details: Record<string, InspectionLotDetails> = {}
         const authorizationById = Object.fromEntries((authorizationResult.data ?? []).map((record) => [record.id, record]))
-        const batchById = Object.fromEntries((batchResult.data ?? []).map((batch) => [batch.id, batch]))
         for (const flexcon of flexconResult.data ?? []) {
-          const batch = batchById[flexcon.batch_id]
-          const authorization = batch ? authorizationById[batch.authorization_id] : null
-          if (!batch || !authorization) continue
+          const authorization = authorizationById[flexcon.authorization_id]
+          if (!authorization) continue
           const origin = [authorization.prefecture, authorization.municipality]
             .map((value) => String(value ?? '').trim())
             .filter(Boolean)
