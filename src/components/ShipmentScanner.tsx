@@ -111,8 +111,8 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
       supabase.from('flexcon_destinations').select('*').eq('active', true).order('name'),
       supabase.from('flexcon_transport_profiles').select('*').eq('active', true).order('company_name'),
       supabase.from('flexcon_authorizations').select('id, authorization_no, full_name, prefecture, municipality'),
-      supabase.from('flexcon_inspection_batches').select('id, authorization_id, brand'),
-      supabase.from('flexcon_inspection_flexcons').select('batch_id, lot_number'),
+      supabase.from('flexcon_inspection_batches').select('id, authorization_id'),
+      supabase.from('flexcon_inspection_flexcons').select('batch_id, lot_number, brand'),
     ]).then(([destinationResult, transportResult, authorizationResult, batchResult, flexconResult]) => {
       if (destinationResult.error) setNotice({ type: 'error', text: '納品先を取得できません。SupabaseのSQL設定を確認してください。' })
       else setDestinations((destinationResult.data ?? []) as Destination[])
@@ -143,7 +143,7 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
             .join(' ')
           details[flexcon.lot_number] = {
             origin: origin || '産地未登録',
-            brand: String(batch.brand ?? '').trim() || '銘柄未登録',
+            brand: String(flexcon.brand ?? '').trim() || '銘柄未登録',
           }
         }
         setInspectionLotDetails(details)

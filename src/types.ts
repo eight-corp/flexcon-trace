@@ -102,6 +102,7 @@ export type FlexconInspection = {
   batch_id: string
   flexcon_no: number
   lot_number: string
+  brand: string | null
   quantity_kg: number
   grade: string | null
   reason: string | null
@@ -116,6 +117,7 @@ export type FlexconInspection = {
 export type PaperBagInspection = {
   id: string
   batch_id: string
+  brand: string | null
   bag_count: number
   grade: string | null
   reason: string | null

@@ -51,7 +51,10 @@ supabase/migrations/202609020005_authorization_excel_import.sql
 
 ```text
 supabase/migrations/202609040003_producer_inspection_records.sql
+supabase/migrations/202609040004_brand_group_inspection_entries.sql
 ```
+
+`202609040003_producer_inspection_records.sql` を実行済みの場合は、`202609040004_brand_group_inspection_entries.sql` の全内容だけを追加実行してください。銘柄、フレコン本数、紙袋数を追加するたび、フレコンは1本1行、紙袋は追加1回につき1行で作成されます。水分は各行に1件入力します。
 
 委任状一覧の `Excel取込` では `.xlsm` または `.xlsx` を選択します。シート名と見出しを検証してから、№が同じ行を更新し、新しい№を追加します。Excel側で空欄のフラグは、登録済みの値を変更しません。
 
