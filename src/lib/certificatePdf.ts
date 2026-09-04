@@ -1,4 +1,4 @@
-import { PDFDocument } from 'pdf-lib'
+import { PDFDocument, PrintScaling } from 'pdf-lib'
 import QRCode from 'qrcode'
 
 export type CertificateAuthorization = {
@@ -25,8 +25,10 @@ type CertificateData = {
   flexcons: CertificateFlexcon[]
 }
 
-const PAGE_WIDTH = 595.28
-const PAGE_HEIGHT = 420.94
+const DESIGN_WIDTH = 595.2
+const DESIGN_HEIGHT = 420.72
+const PAGE_WIDTH = 210 * 72 / 25.4
+const PAGE_HEIGHT = 148 * 72 / 25.4
 const CANVAS_SCALE = 4
 const FONT_FAMILY = '"Yu Mincho", "Yu Gothic", "Noto Serif JP", "Noto Sans JP", serif'
 
@@ -98,6 +100,7 @@ function createOverlayCanvas() {
   canvas.height = Math.round(PAGE_HEIGHT * CANVAS_SCALE)
   const context = canvas.getContext('2d')
   if (!context) throw new Error('PDF描画用の画面を作成できませんでした。')
+  context.scale(PAGE_WIDTH / DESIGN_WIDTH, PAGE_HEIGHT / DESIGN_HEIGHT)
   context.fillStyle = '#000'
   return { canvas, context }
 }
@@ -159,6 +162,9 @@ export async function generateInspectionCertificatePdf({ authorization, flexcons
   const templateBytes = await templateResponse.arrayBuffer()
   const pdf = await PDFDocument.create()
   const [templatePage] = await pdf.embedPdf(templateBytes, [0])
+  const viewerPreferences = pdf.catalog.getOrCreateViewerPreferences()
+  viewerPreferences.setPrintScaling(PrintScaling.None)
+  viewerPreferences.setPickTrayByPDFSize(true)
 
   for (const flexcon of flexcons) {
     const overlayCanvas = await drawCertificateOverlay(authorization, flexcon)
