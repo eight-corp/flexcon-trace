@@ -65,7 +65,7 @@
 .notice.success { background: var(--green-soft); border-color: #b9d6c1; color: var(--green-dark); }
 .notice.error { background: var(--red-soft); border-color: #efc2bd; color: #8f2d26; }
 .notice.warning { background: var(--amber-soft); border-color: #ebd19f; color: #6e4706; }
-.operation-log { position: fixed; left: 16px; right: 16px; top: 76px; z-index: 110; width: min(720px, calc(100% - 32px)); margin: 0 auto; box-shadow: 0 8px 24px rgba(20, 34, 25, .18); }
+.operation-log { display: none; }
 .destination-list, .shipment-list { display: grid; gap: 10px; }
 .destination-item, .shipment-item { border: 1px solid var(--line); background: #fff; border-radius: 7px; padding: 14px; }
 .destination-item { display: flex; align-items: flex-start; gap: 12px; }
@@ -280,7 +280,6 @@
   .app-main-wide .authorization-table-wrap { flex: 1; min-height: 0; }
   .app-main-wide .inspection-page { height: 100%; min-height: 0; display: flex; flex-direction: column; }
   .app-main-wide .inspection-table-wrap { flex: 1; min-height: 0; }
-  .operation-log { left: 216px; right: 28px; top: 76px; width: min(720px, calc(100% - 244px)); }
   .scanner-layout { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(280px, .8fr); gap: 16px; align-items: start; }
 }
 
