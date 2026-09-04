@@ -42,6 +42,7 @@ const DEFAULT_FEED_RICE_WEIGHT = 1000
 const AUTHORIZATION_NO_COLLATOR = new Intl.Collator('ja', { numeric: true, sensitivity: 'base' })
 
 function currentFiscalYear() { return new Date().getFullYear() - 2018 }
+function westernYear(fiscalYear: number) { return fiscalYear >= 2000 ? fiscalYear : fiscalYear + 2018 }
 function today() {
   const date = new Date()
   date.setMinutes(date.getMinutes() - date.getTimezoneOffset())
@@ -403,7 +404,7 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
         },
         flexcons: targets.map((item) => ({
           flexconNo: item.flexcon_no,
-          lotNumber: item.lot_number || `${selectedAuthorization.authorization_no.padStart(4, '0')}${String(item.flexcon_no).padStart(3, '0')}`,
+          lotNumber: item.lot_number || `${westernYear(item.fiscal_year)}${selectedAuthorization.authorization_no.padStart(4, '0')}${String(item.flexcon_no).padStart(3, '0')}`,
           fiscalYear: item.fiscal_year,
           inspectionDate: item.inspection_date,
           brand: item.brand ?? '',

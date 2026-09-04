@@ -85,9 +85,11 @@ function normalizeAuthorizationNo(value: string) {
 }
 
 function authorizationNoFromLot(lotNumber: string) {
-  const authorizationDigits = lotNumber.length === 7
-    ? lotNumber.slice(0, 4)
-    : lotNumber.slice(0, 3)
+  const authorizationDigits = lotNumber.length === 11
+    ? lotNumber.slice(4, 8)
+    : lotNumber.length === 7
+      ? lotNumber.slice(0, 4)
+      : lotNumber.slice(0, 3)
   return normalizeAuthorizationNo(authorizationDigits)
 }
 
@@ -150,7 +152,11 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
             brand: String(flexcon.brand ?? '').trim() || '銘柄未登録',
           }
           details[flexcon.lot_number] = detail
-          if (/^0\d{6}$/.test(flexcon.lot_number)) {
+          if (/^\d{11}$/.test(flexcon.lot_number)) {
+            const sevenDigitLot = flexcon.lot_number.slice(4)
+            details[sevenDigitLot] = detail
+            if (sevenDigitLot.startsWith('0')) details[sevenDigitLot.slice(1)] = detail
+          } else if (/^0\d{6}$/.test(flexcon.lot_number)) {
             details[flexcon.lot_number.slice(1)] = detail
           }
         }
@@ -191,8 +197,8 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
     if (lastRead.current.value === value && now - lastRead.current.time < 1800) return
     lastRead.current = { value, time: now }
 
-    if (!/^\d{7}$/.test(value) && !/^\d{6}$/.test(value)) {
-      setNotice({ type: 'error', text: `「${value.slice(0, 24)}」は7桁のロット番号ではありません。` })
+    if (!/^\d{11}$/.test(value) && !/^\d{7}$/.test(value) && !/^\d{6}$/.test(value)) {
+      setNotice({ type: 'error', text: `「${value.slice(0, 24)}」は11桁のロット番号ではありません。` })
       return
     }
     setLots((current) => {
@@ -309,7 +315,7 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
         )}
 
         <div className="manual-entry">
-          <input inputMode="numeric" maxLength={7} value={manualLot} onChange={(e) => setManualLot(e.target.value.replace(/\D/g, ''))} placeholder="7桁を手入力" onKeyDown={(e) => { if (e.key === 'Enter') addManual() }} />
+          <input inputMode="numeric" maxLength={11} value={manualLot} onChange={(e) => setManualLot(e.target.value.replace(/\D/g, ''))} placeholder="11桁を手入力" onKeyDown={(e) => { if (e.key === 'Enter') addManual() }} />
           <button className="secondary-button" type="button" onClick={addManual}><Plus size={18} />追加</button>
         </div>
 
