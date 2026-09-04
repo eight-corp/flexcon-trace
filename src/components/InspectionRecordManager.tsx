@@ -275,7 +275,7 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
     </>
   }
   const deleteFlexcon = async (item: FlexconInspection) => {
-    if (!window.confirm(`ロット№${item.lot_number}を削除しますか？`)) return
+    if (!window.confirm(`フレコン№${item.flexcon_no}を削除しますか？`)) return
     setBusy(true)
     const { error } = await supabase.rpc('flexcon_delete_inspection_flexcon', { p_worker_id: workerId, p_flexcon_id: item.id })
     setBusy(false)
@@ -340,7 +340,7 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
       <label>年度<input type="number" min="1" max="99" value={batchForm.fiscal_year} onChange={(event) => setBatchForm((current) => ({ ...current, fiscal_year: event.target.value }))} required /></label>
       <label>検査日<input type="date" value={batchForm.inspection_date} onChange={(event) => setBatchForm((current) => ({ ...current, inspection_date: event.target.value }))} /></label>
       <label>検査場所<select value={batchForm.inspection_location} onChange={(event) => setBatchForm((current) => ({ ...current, inspection_location: event.target.value }))}><option value="">選択してください</option>{locationOptions.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}</select></label>
-      <button className="primary-button" type="submit" disabled={busy}><Save size={18} />保存</button>
+      <button className="primary-button" type="submit" disabled={busy}><Save size={18} />仕入日情報を保存</button>
       {selectedBatch && <button className="icon-button delete-icon" type="button" title="この仕入日を削除" aria-label="この仕入日を削除" onClick={() => void deleteBatch()} disabled={busy}><Trash2 size={18} /></button>}
     </form>}
     {selectedBatch && <>
@@ -353,17 +353,17 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
       <section className="section-band inspection-detail-section">
         <div className="section-title"><div><h2>フレコン</h2><span>{selectedFlexcons.length}本</span></div><button className="secondary-button certificate-create-button" type="button" disabled={selectedFlexcons.length === 0} onClick={createCertificateCsv}><FileSpreadsheet size={18} />検査証明書作成</button></div>
         <div className="inspection-detail-table-wrap"><table className="inspection-detail-table">
-          <thead><tr><th>フレコン№</th><th>ロット№</th><th>銘柄</th><th>数量</th><th>水分</th><th>等級</th><th>理由</th><th></th></tr></thead>
-          <tbody>{selectedFlexcons.map((item) => <tr key={item.id}><td>{item.flexcon_no}</td><td className="lot-cell">{item.lot_number}</td><td>{item.brand ?? ''}</td><td>{item.quantity_kg.toLocaleString()}kg</td>{renderInlineInspectionCells('flexcon', item)}<td className="inspection-row-actions"><button className="icon-button delete-icon" type="button" title="削除" aria-label={`${item.lot_number}を削除`} onClick={() => void deleteFlexcon(item)}><Trash2 size={17} /></button></td></tr>)}
-          {selectedFlexcons.length === 0 && <tr><td colSpan={8} className="empty-state">フレコンは登録されていません</td></tr>}</tbody>
+          <thead><tr><th>フレコン№</th><th>年度</th><th>仕入日</th><th>検査日</th><th>検査場所</th><th>銘柄</th><th>数量</th><th>水分</th><th>等級</th><th>理由</th><th></th></tr></thead>
+          <tbody>{selectedFlexcons.map((item) => <tr key={item.id}><td>{item.flexcon_no}</td><td>{selectedBatch.fiscal_year}</td><td>{displayDate(selectedBatch.purchase_date)}</td><td>{displayDate(selectedBatch.inspection_date)}</td><td>{selectedBatch.inspection_location ?? ''}</td><td>{item.brand ?? ''}</td><td>{item.quantity_kg.toLocaleString()}kg</td>{renderInlineInspectionCells('flexcon', item)}<td className="inspection-row-actions"><button className="icon-button delete-icon" type="button" title="削除" aria-label={`フレコン№${item.flexcon_no}を削除`} onClick={() => void deleteFlexcon(item)}><Trash2 size={17} /></button></td></tr>)}
+          {selectedFlexcons.length === 0 && <tr><td colSpan={11} className="empty-state">フレコンは登録されていません</td></tr>}</tbody>
         </table></div>
       </section>
       <section className="section-band inspection-detail-section">
         <div className="section-title"><div><h2>紙袋</h2><span>追加1回につき1行</span></div></div>
         <div className="inspection-detail-table-wrap"><table className="inspection-detail-table paper-detail-table">
-          <thead><tr><th>銘柄</th><th>数量</th><th>総重量</th><th>水分</th><th>等級</th><th>理由</th><th></th></tr></thead>
-          <tbody>{selectedPaperBags.map((item) => <tr key={item.id}><td>{item.brand ?? ''}</td><td>{item.bag_count}袋</td><td>{(item.bag_count * 30).toLocaleString()}kg</td>{renderInlineInspectionCells('paper', item)}<td className="inspection-row-actions"><button className="icon-button delete-icon" type="button" title="削除" aria-label={`${item.brand ?? ''}の紙袋を削除`} onClick={() => void deletePaperBags(item)}><Trash2 size={17} /></button></td></tr>)}
-          {selectedPaperBags.length === 0 && <tr><td colSpan={7} className="empty-state">紙袋は登録されていません</td></tr>}</tbody>
+          <thead><tr><th>年度</th><th>仕入日</th><th>検査日</th><th>検査場所</th><th>銘柄</th><th>数量</th><th>総重量</th><th>水分</th><th>等級</th><th>理由</th><th></th></tr></thead>
+          <tbody>{selectedPaperBags.map((item) => <tr key={item.id}><td>{selectedBatch.fiscal_year}</td><td>{displayDate(selectedBatch.purchase_date)}</td><td>{displayDate(selectedBatch.inspection_date)}</td><td>{selectedBatch.inspection_location ?? ''}</td><td>{item.brand ?? ''}</td><td>{item.bag_count}袋</td><td>{(item.bag_count * 30).toLocaleString()}kg</td>{renderInlineInspectionCells('paper', item)}<td className="inspection-row-actions"><button className="icon-button delete-icon" type="button" title="削除" aria-label={`${item.brand ?? ''}の紙袋を削除`} onClick={() => void deletePaperBags(item)}><Trash2 size={17} /></button></td></tr>)}
+          {selectedPaperBags.length === 0 && <tr><td colSpan={11} className="empty-state">紙袋は登録されていません</td></tr>}</tbody>
         </table></div>
       </section>
     </>}
