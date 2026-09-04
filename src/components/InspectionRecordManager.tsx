@@ -373,19 +373,19 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
       <button className="primary-button" type="submit" disabled={busy}><Plus size={18} />{busy ? '追加中...' : '追加'}</button>
     </form>
     <section className="section-band inspection-detail-section">
-      <div className="section-title"><div><h2>フレコン</h2><span>{selectedFlexcons.length}本</span></div><button className="secondary-button certificate-create-button" type="button" disabled={selectedFlexcons.length === 0} onClick={createCertificateCsv}><FileSpreadsheet size={18} />検査証明書作成</button></div>
-      <div className="inspection-detail-table-wrap"><table className="inspection-detail-table">
-        <thead><tr><th>№</th><th>年度</th><th>仕入日</th><th>検査日</th><th>検査場所</th><th>銘柄</th><th>数量（kg）</th><th>水分</th><th>等級</th><th>理由</th><th></th></tr></thead>
-        <tbody>{selectedFlexcons.map((item) => <tr key={item.id}><td>{item.flexcon_no}</td>{renderInlineMetadataFields('flexcon', item)}{renderInlineProductFields('flexcon', item)}{renderInlineResultFields('flexcon', item)}<td className="inspection-row-actions"><button className="icon-button delete-icon" type="button" title="削除" aria-label={`№${item.flexcon_no}を削除`} onClick={() => void deleteFlexcon(item)}><Trash2 size={17} /></button></td></tr>)}
-        {selectedFlexcons.length === 0 && <tr><td colSpan={11} className="empty-state">フレコンは登録されていません</td></tr>}</tbody>
-      </table></div>
-    </section>
-    <section className="section-band inspection-detail-section">
       <div className="section-title"><div><h2>紙袋</h2><span>{selectedPaperBags.length}件</span></div></div>
       <div className="inspection-detail-table-wrap"><table className="inspection-detail-table paper-detail-table">
         <thead><tr><th>年度</th><th>仕入日</th><th>検査日</th><th>検査場所</th><th>銘柄</th><th>数量（袋）</th><th>総重量</th><th>水分</th><th>等級</th><th>理由</th><th></th></tr></thead>
         <tbody>{selectedPaperBags.map((item) => <tr key={item.id}>{renderInlineMetadataFields('paper', item)}{renderInlineProductFields('paper', item)}<td>{(Number(detailDraft(item).quantity || 0) * 30).toLocaleString()}kg</td>{renderInlineResultFields('paper', item)}<td className="inspection-row-actions inspection-row-actions-wide"><button className="icon-button" type="button" title="2行に分割" aria-label={`${item.brand ?? ''}の紙袋を2行に分割`} disabled={busy || item.bag_count < 2} onClick={() => beginSplitPaperBags(item)}><TableRowsSplit size={17} /></button><button className="icon-button delete-icon" type="button" title="削除" aria-label={`${item.brand ?? ''}の紙袋を削除`} onClick={() => void deletePaperBags(item)}><Trash2 size={17} /></button></td></tr>)}
         {selectedPaperBags.length === 0 && <tr><td colSpan={11} className="empty-state">紙袋は登録されていません</td></tr>}</tbody>
+      </table></div>
+    </section>
+    <section className="section-band inspection-detail-section">
+      <div className="section-title"><div><h2>フレコン</h2><span>{selectedFlexcons.length}本</span></div><button className="secondary-button certificate-create-button" type="button" disabled={selectedFlexcons.length === 0} onClick={createCertificateCsv}><FileSpreadsheet size={18} />検査証明書作成</button></div>
+      <div className="inspection-detail-table-wrap"><table className="inspection-detail-table">
+        <thead><tr><th>№</th><th>年度</th><th>仕入日</th><th>検査日</th><th>検査場所</th><th>銘柄</th><th>数量（kg）</th><th>水分</th><th>等級</th><th>理由</th><th></th></tr></thead>
+        <tbody>{selectedFlexcons.map((item) => <tr key={item.id}><td>{item.flexcon_no}</td>{renderInlineMetadataFields('flexcon', item)}{renderInlineProductFields('flexcon', item)}{renderInlineResultFields('flexcon', item)}<td className="inspection-row-actions"><button className="icon-button delete-icon" type="button" title="削除" aria-label={`№${item.flexcon_no}を削除`} onClick={() => void deleteFlexcon(item)}><Trash2 size={17} /></button></td></tr>)}
+        {selectedFlexcons.length === 0 && <tr><td colSpan={11} className="empty-state">フレコンは登録されていません</td></tr>}</tbody>
       </table></div>
     </section>
     {splitPaper && <div className="modal-backdrop"><section className="registration-modal paper-split-modal" role="dialog" aria-modal="true" aria-labelledby="paper-split-title">
