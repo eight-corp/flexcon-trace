@@ -51,8 +51,11 @@
 .target-control { width: 106px; }
 .scan-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 7px; max-height: 290px; overflow: auto; }
 .scan-list li { min-height: 44px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-soft); display: flex; align-items: center; gap: 10px; padding: 7px 8px 7px 11px; }
-.scan-list .lot-producer-name { flex: 1; min-width: 0; overflow: hidden; color: #28342c; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
-.scan-list .lot-producer-name.unknown { color: var(--red); font-size: 12px; }
+.scan-list .lot-information { flex: 1; min-width: 0; display: grid; grid-template-columns: minmax(90px, 1.15fr) minmax(110px, 1fr) minmax(90px, 1fr); align-items: center; gap: 10px; }
+.scan-list .lot-information > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scan-list .lot-producer-name { color: #28342c; font-weight: 700; }
+.scan-list .lot-origin, .scan-list .lot-brand { color: #46524a; font-size: 13px; }
+.scan-list .lot-information .unknown { color: var(--red); font-size: 12px; }
 .scan-list .lot-number { flex: 0 0 auto; font-family: Consolas, monospace; font-size: 17px; font-weight: 700; }
 .scan-list .sequence { color: var(--muted); font-size: 12px; width: 24px; }
 .manual-entry { display: flex; gap: 8px; margin-top: 12px; }
@@ -246,6 +249,10 @@
   .form-grid.two { grid-template-columns: 1fr; }
   .auth-panel { padding: 22px 18px; }
   .shipment-head { align-items: center; }
+  .scan-list li { display: grid; grid-template-columns: 24px 18px minmax(0, 1fr) 42px; gap: 4px 8px; }
+  .scan-list .lot-information { grid-column: 3; grid-row: 1; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+  .scan-list .lot-number { grid-column: 3; grid-row: 2; }
+  .scan-list li > .icon-button { grid-column: 4; grid-row: 1 / 3; }
   .scan-actions > *, .modal-actions > * { flex: 1; }
   .modal-backdrop { align-items: end; padding: 0; }
   .registration-modal { width: 100%; max-height: 94vh; border-radius: 8px 8px 0 0; padding: 18px 16px calc(18px + env(safe-area-inset-bottom)); }

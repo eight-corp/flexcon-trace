@@ -23,6 +23,11 @@ type ShipmentDraft = {
   note: string
 }
 
+type InspectionLotDetails = {
+  origin: string
+  brand: string
+}
+
 function currentLocalDateTime() {
   const date = new Date()
   date.setMinutes(date.getMinutes() - date.getTimezoneOffset())
@@ -79,12 +84,21 @@ function normalizeAuthorizationNo(value: string) {
   return /^\d+$/.test(trimmed) ? String(Number(trimmed)) : trimmed
 }
 
+function inspectionLotNumber(authorizationNo: string, recordNo: number) {
+  const normalizedAuthorizationNo = normalizeAuthorizationNo(authorizationNo)
+  const authorizationNumber = Number(normalizedAuthorizationNo)
+  if (!Number.isInteger(authorizationNumber) || authorizationNumber < 0 || authorizationNumber > 999) return null
+  if (!Number.isInteger(recordNo) || recordNo < 0 || recordNo > 999) return null
+  return `${String(authorizationNumber).padStart(3, '0')}${String(recordNo).padStart(3, '0')}`
+}
+
 export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
   const storageKey = `${STORAGE_KEY_PREFIX}-${workerId}`
   const [initialDraft] = useState(() => loadShipmentDraft(storageKey))
   const [destinations, setDestinations] = useState<Destination[]>([])
   const [transportProfiles, setTransportProfiles] = useState<TransportProfile[]>([])
   const [authorizationNames, setAuthorizationNames] = useState<Record<string, string>>({})
+  const [inspectionLotDetails, setInspectionLotDetails] = useState<Record<string, InspectionLotDetails>>({})
   const [shippedAt, setShippedAt] = useState(initialDraft.shippedAt)
   const [destinationId, setDestinationId] = useState(initialDraft.destinationId)
   const [transportProfileId, setTransportProfileId] = useState(initialDraft.transportProfileId)
@@ -105,7 +119,12 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
       supabase.from('flexcon_destinations').select('*').eq('active', true).order('name'),
       supabase.from('flexcon_transport_profiles').select('*').eq('active', true).order('company_name'),
       supabase.from('flexcon_authorizations').select('authorization_no, full_name'),
-    ]).then(([destinationResult, transportResult, authorizationResult]) => {
+      supabase
+        .from('flexcon_inspection_records')
+        .select('record_no, fiscal_year, authorization_no, prefecture, municipality, brand')
+        .order('fiscal_year', { ascending: false })
+        .order('updated_at', { ascending: false }),
+    ]).then(([destinationResult, transportResult, authorizationResult, inspectionResult]) => {
       if (destinationResult.error) setNotice({ type: 'error', text: '納品先を取得できません。SupabaseのSQL設定を確認してください。' })
       else setDestinations((destinationResult.data ?? []) as Destination[])
       if (transportResult.error) setNotice({ type: 'error', text: '運送会社を取得できません。追加SQLを実行してください。' })
@@ -118,6 +137,25 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
           String(record.full_name),
         ]))
         setAuthorizationNames(names)
+      }
+      if (inspectionResult.error) {
+        setNotice({ type: 'error', text: '検査記録を取得できません。追加SQLを実行してください。' })
+      } else {
+        const details: Record<string, InspectionLotDetails> = {}
+        for (const record of inspectionResult.data ?? []) {
+          if (!record.authorization_no) continue
+          const lotNumber = inspectionLotNumber(String(record.authorization_no), Number(record.record_no))
+          if (!lotNumber || details[lotNumber]) continue
+          const origin = [record.prefecture, record.municipality]
+            .map((value) => String(value ?? '').trim())
+            .filter(Boolean)
+            .join(' ')
+          details[lotNumber] = {
+            origin: origin || '産地未登録',
+            brand: String(record.brand ?? '').trim() || '銘柄未登録',
+          }
+        }
+        setInspectionLotDetails(details)
       }
     })
   }, [workerId])
@@ -253,9 +291,17 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
             {lots.map((lot, index) => (
               <li key={lot}>
                 <span className="sequence">{index + 1}</span><CheckCircle2 size={18} color="#236640" />
-                <span className={`lot-producer-name ${authorizationNames[normalizeAuthorizationNo(lot.slice(0, 3))] ? '' : 'unknown'}`}>
-                  {authorizationNames[normalizeAuthorizationNo(lot.slice(0, 3))] ?? '委任状未登録'}
-                </span>
+                <div className="lot-information">
+                  <span className={`lot-producer-name ${authorizationNames[normalizeAuthorizationNo(lot.slice(0, 3))] ? '' : 'unknown'}`} title="生産者">
+                    {authorizationNames[normalizeAuthorizationNo(lot.slice(0, 3))] ?? '委任状未登録'}
+                  </span>
+                  <span className={`lot-origin ${inspectionLotDetails[lot] ? '' : 'unknown'}`} title="産地">
+                    {inspectionLotDetails[lot]?.origin ?? '検査記録未登録'}
+                  </span>
+                  <span className={`lot-brand ${inspectionLotDetails[lot] ? '' : 'unknown'}`} title="銘柄">
+                    {inspectionLotDetails[lot]?.brand ?? '検査記録未登録'}
+                  </span>
+                </div>
                 <span className="lot-number">{lot}</span>
                 <button className="icon-button" type="button" title="削除" aria-label={`${lot}を削除`} onClick={() => setLots((current) => current.filter((item) => item !== lot))}><X size={18} /></button>
               </li>
