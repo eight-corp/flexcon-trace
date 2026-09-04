@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft, FileSpreadsheet, Plus, Search, TableRowsSplit, Trash2, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import type { AuthorizationRecord, FlexconInspection, InspectionOption, InspectionWeight, PaperBagInspection } from '../types'
@@ -77,6 +77,7 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
   const [notice, setNotice] = useState<Notice>(null)
   const [version, setVersion] = useState(0)
   const [busy, setBusy] = useState(false)
+  const detailSaveChains = useRef(new Map<string, Promise<void>>())
 
   useEffect(() => {
     const load = async () => {
@@ -216,15 +217,45 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
       p_reason: draft.reason.trim() || null,
       p_moisture: moisture,
     }
-    setBusy(true); setNotice(null)
-    const { error } = detailKind === 'flexcon'
-      ? await supabase.rpc('flexcon_save_inspection_flexcon', { ...common, p_flexcon_id: item.id, p_flexcon_no: (item as FlexconInspection).flexcon_no, p_quantity_kg: quantity })
-      : await supabase.rpc('flexcon_save_inspection_paper_bags', { ...common, p_paper_bag_id: item.id, p_bag_count: quantity })
-    setBusy(false)
-    if (error) return setNotice({ type: 'error', text: error.message })
-    setDetailDrafts((current) => { const next = { ...current }; delete next[item.id]; return next })
-    setNotice({ type: 'success', text: detailKind === 'flexcon' ? 'フレコン検査記録を保存しました。' : '紙袋検査記録を保存しました。' })
-    setVersion((value) => value + 1)
+    const runSave = async () => {
+      const { error } = detailKind === 'flexcon'
+        ? await supabase.rpc('flexcon_save_inspection_flexcon', { ...common, p_flexcon_id: item.id, p_flexcon_no: (item as FlexconInspection).flexcon_no, p_quantity_kg: quantity })
+        : await supabase.rpc('flexcon_save_inspection_paper_bags', { ...common, p_paper_bag_id: item.id, p_bag_count: quantity })
+      if (error) {
+        setNotice({ type: 'error', text: error.message })
+        return
+      }
+      const savedValues = {
+        fiscal_year: fiscalYear,
+        purchase_date: draft.purchase_date,
+        inspection_date: draft.inspection_date || null,
+        inspection_location: draft.inspection_location.trim() || null,
+        brand: draft.brand,
+        grade: draft.grade.trim() || null,
+        reason: draft.reason.trim() || null,
+        moisture: moisture === null ? null : Math.round(moisture * 10) / 10,
+        moisture_values: moisture === null ? [] : [moisture],
+        updated_by_worker_id: workerId,
+        updated_at: new Date().toISOString(),
+      }
+      if (detailKind === 'flexcon') {
+        setFlexcons((current) => current.map((record) => record.id === item.id ? { ...record, ...savedValues, quantity_kg: quantity } : record))
+      } else {
+        setPaperBags((current) => current.map((record) => record.id === item.id ? { ...record, ...savedValues, bag_count: quantity } : record))
+      }
+      setDetailDrafts((current) => {
+        if (current[item.id] && JSON.stringify(current[item.id]) !== JSON.stringify(draft)) return current
+        const next = { ...current }
+        delete next[item.id]
+        return next
+      })
+      setNotice({ type: 'success', text: detailKind === 'flexcon' ? 'フレコン検査記録を保存しました。' : '紙袋検査記録を保存しました。' })
+    }
+    const previousSave = detailSaveChains.current.get(item.id) ?? Promise.resolve()
+    const saveTask = previousSave.catch(() => undefined).then(runSave)
+    detailSaveChains.current.set(item.id, saveTask)
+    await saveTask
+    if (detailSaveChains.current.get(item.id) === saveTask) detailSaveChains.current.delete(item.id)
   }
 
   const renderInlineMetadataFields = (detailKind: 'flexcon' | 'paper', item: FlexconInspection | PaperBagInspection) => {
