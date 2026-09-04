@@ -137,7 +137,7 @@ export type InspectionWeight = {
 
 export type InspectionOption = {
   id: string
-  option_type: 'location' | 'brand' | 'brand_aomori' | 'brand_iwate' | 'grade'
+  option_type: 'location' | 'brand' | 'brand_aomori' | 'brand_iwate' | 'grade' | 'grade_reason'
   name: string
   active: boolean
   sort_order: number

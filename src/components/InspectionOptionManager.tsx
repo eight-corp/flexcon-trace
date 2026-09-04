@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ArrowDown, ArrowUp, Award, Check, MapPin, Pencil, Plus, Scale, Tags, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, Award, Check, ListChecks, MapPin, Pencil, Plus, Scale, Tags, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import type { InspectionOption, InspectionWeight } from '../types'
 import { ToggleSwitch } from './ToggleSwitch'
@@ -79,7 +79,7 @@ function OptionSection({ workerId, optionType, title, items, onChanged, onError 
     else onChanged(`${item.name}の表示順を変更しました。`)
   }
 
-  const Icon = optionType === 'location' ? MapPin : optionType === 'grade' ? Award : Tags
+  const Icon = optionType === 'location' ? MapPin : optionType === 'grade' ? Award : optionType === 'grade_reason' ? ListChecks : Tags
 
   return (
     <section className="inspection-option-section">
@@ -246,6 +246,14 @@ export function InspectionOptionManager({ workerId }: Props) {
           optionType="grade"
           title="等級"
           items={items.filter((item) => item.option_type === 'grade')}
+          onChanged={changed}
+          onError={failed}
+        />
+        <OptionSection
+          workerId={workerId}
+          optionType="grade_reason"
+          title="等級の理由"
+          items={items.filter((item) => item.option_type === 'grade_reason')}
           onChanged={changed}
           onError={failed}
         />

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, CalendarPlus, FileSpreadsheet, Plus, Save, Search, Trash2, X } from 'lucide-react'
+import { ArrowLeft, CalendarPlus, FileSpreadsheet, Plus, Save, Search, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import type { AuthorizationRecord, FlexconInspection, InspectionOption, InspectionWeight, PaperBagInspection, ProducerInspectionBatch } from '../types'
 
@@ -9,10 +9,9 @@ type Props = {
   onSelectedAuthorizationChange: (authorizationId: string | null) => void
 }
 type Notice = { type: 'success' | 'error'; text: string } | null
-type DetailKind = 'flexcon' | 'paper'
 type BatchForm = { purchase_date: string; fiscal_year: string; inspection_date: string; inspection_location: string }
 type AddGroupForm = { brand: string; flexcon_count: string; paper_bag_count: string }
-type DetailForm = { flexcon_no: string; brand: string; quantity: string; grade: string; reason: string; moisture: string }
+type InlineDetailDraft = { grade: string; reason: string; moisture: string }
 
 const DEFAULT_BRANDED_RICE_WEIGHT = 1020
 const DEFAULT_FEED_RICE_WEIGHT = 1000
@@ -29,9 +28,6 @@ function emptyBatchForm(): BatchForm {
 }
 function formFromBatch(batch: ProducerInspectionBatch): BatchForm {
   return { purchase_date: batch.purchase_date, fiscal_year: String(batch.fiscal_year), inspection_date: batch.inspection_date ?? '', inspection_location: batch.inspection_location ?? '' }
-}
-function emptyDetailForm(): DetailForm {
-  return { flexcon_no: '', brand: '', quantity: '', grade: '', reason: '', moisture: '' }
 }
 function isHighMoisture(value: string | number | null | undefined) {
   return value !== null && value !== undefined && value !== '' && Number(value) > 16
@@ -56,9 +52,7 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
   const [batchEditingId, setBatchEditingId] = useState<string | null>(null)
   const [batchForm, setBatchForm] = useState<BatchForm>(emptyBatchForm)
   const [addGroupForm, setAddGroupForm] = useState<AddGroupForm>({ brand: '', flexcon_count: '', paper_bag_count: '' })
-  const [detailKind, setDetailKind] = useState<DetailKind | null>(null)
-  const [detailEditingId, setDetailEditingId] = useState<string | null>(null)
-  const [detailForm, setDetailForm] = useState<DetailForm>(emptyDetailForm)
+  const [detailDrafts, setDetailDrafts] = useState<Record<string, InlineDetailDraft>>({})
   const [search, setSearch] = useState('')
   const [notice, setNotice] = useState<Notice>(null)
   const [version, setVersion] = useState(0)
@@ -139,6 +133,7 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
 
   const locationOptions = inspectionOptions.filter((item) => item.option_type === 'location')
   const gradeOptions = inspectionOptions.filter((item) => item.option_type === 'grade')
+  const reasonOptions = inspectionOptions.filter((item) => item.option_type === 'grade_reason')
   const selectedBrandType = brandTypeForPrefecture(selectedAuthorization?.prefecture ?? null)
   const brandOptions = inspectionOptions.filter((item) => item.option_type === selectedBrandType || item.option_type === 'brand')
 
@@ -186,27 +181,98 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
     setNotice({ type: 'success', text: `${addGroupForm.brand}を追加しました。` })
     setVersion((value) => value + 1)
   }
-  const beginEditFlexcon = (item: FlexconInspection) => {
-    setDetailKind('flexcon'); setDetailEditingId(item.id)
-    setDetailForm({ flexcon_no: String(item.flexcon_no), brand: item.brand ?? '', quantity: String(item.quantity_kg), grade: item.grade ?? '', reason: item.reason ?? '', moisture: item.moisture === null ? '' : String(item.moisture) })
+  const detailDraft = (item: FlexconInspection | PaperBagInspection): InlineDetailDraft => detailDrafts[item.id] ?? {
+    grade: item.grade ?? '',
+    reason: item.reason ?? '',
+    moisture: item.moisture === null ? '' : String(item.moisture),
   }
-  const beginEditPaper = (item: PaperBagInspection) => {
-    setDetailKind('paper'); setDetailEditingId(item.id)
-    setDetailForm({ flexcon_no: '', brand: item.brand ?? '', quantity: String(item.bag_count), grade: item.grade ?? '', reason: item.reason ?? '', moisture: item.moisture === null ? '' : String(item.moisture) })
+  const changeDetailDraft = (item: FlexconInspection | PaperBagInspection, values: Partial<InlineDetailDraft>) => {
+    setDetailDrafts((current) => {
+      const previous = current[item.id] ?? {
+        grade: item.grade ?? '',
+        reason: item.reason ?? '',
+        moisture: item.moisture === null ? '' : String(item.moisture),
+      }
+      return { ...current, [item.id]: { ...previous, ...values } }
+    })
   }
-  const saveDetail = async (event: React.FormEvent) => {
-    event.preventDefault()
-    if (!selectedBatch || !detailKind || busy) return
-    const moisture = detailForm.moisture.trim() === '' ? null : Number(detailForm.moisture)
+  const saveInlineDetail = async (
+    detailKind: 'flexcon' | 'paper',
+    item: FlexconInspection | PaperBagInspection,
+    values: Partial<InlineDetailDraft> = {},
+  ) => {
+    if (!selectedBatch || busy) return
+    const draft = { ...detailDraft(item), ...values }
+    const reasonForbidden = draft.grade === '1等' || draft.grade === '合格'
+    if (reasonForbidden) draft.reason = ''
+    const moisture = draft.moisture.trim() === '' ? null : Number(draft.moisture)
+    if (moisture !== null && (!Number.isFinite(moisture) || moisture < 0 || moisture > 100)) {
+      setNotice({ type: 'error', text: '水分は0から100の範囲で入力してください。' })
+      return
+    }
+    changeDetailDraft(item, draft)
     setBusy(true); setNotice(null)
     const { error } = detailKind === 'flexcon'
-      ? await supabase.rpc('flexcon_save_inspection_flexcon', { p_worker_id: workerId, p_flexcon_id: detailEditingId, p_batch_id: selectedBatch.id, p_flexcon_no: Number(detailForm.flexcon_no), p_brand: detailForm.brand, p_quantity_kg: Number(detailForm.quantity), p_grade: detailForm.grade.trim() || null, p_reason: detailForm.reason.trim() || null, p_moisture: moisture })
-      : await supabase.rpc('flexcon_save_inspection_paper_bags', { p_worker_id: workerId, p_paper_bag_id: detailEditingId, p_batch_id: selectedBatch.id, p_brand: detailForm.brand, p_bag_count: Number(detailForm.quantity), p_grade: detailForm.grade.trim() || null, p_reason: detailForm.reason.trim() || null, p_moisture: moisture })
+      ? await supabase.rpc('flexcon_save_inspection_flexcon', { p_worker_id: workerId, p_flexcon_id: item.id, p_batch_id: selectedBatch.id, p_flexcon_no: (item as FlexconInspection).flexcon_no, p_brand: item.brand, p_quantity_kg: (item as FlexconInspection).quantity_kg, p_grade: draft.grade.trim() || null, p_reason: draft.reason.trim() || null, p_moisture: moisture })
+      : await supabase.rpc('flexcon_save_inspection_paper_bags', { p_worker_id: workerId, p_paper_bag_id: item.id, p_batch_id: selectedBatch.id, p_brand: item.brand, p_bag_count: (item as PaperBagInspection).bag_count, p_grade: draft.grade.trim() || null, p_reason: draft.reason.trim() || null, p_moisture: moisture })
     setBusy(false)
     if (error) return setNotice({ type: 'error', text: error.message })
-    setDetailKind(null)
+    setDetailDrafts((current) => { const next = { ...current }; delete next[item.id]; return next })
     setNotice({ type: 'success', text: detailKind === 'flexcon' ? 'フレコン検査記録を保存しました。' : '紙袋検査記録を保存しました。' })
     setVersion((value) => value + 1)
+  }
+  const renderInlineInspectionCells = (detailKind: 'flexcon' | 'paper', item: FlexconInspection | PaperBagInspection) => {
+    const draft = detailDraft(item)
+    const reasonForbidden = draft.grade === '1等' || draft.grade === '合格'
+    return <>
+      <td className="inspection-inline-cell">
+        <input
+          className={isHighMoisture(draft.moisture) ? 'moisture-high' : ''}
+          type="number"
+          min="0"
+          max="100"
+          step="0.1"
+          value={draft.moisture}
+          aria-label="水分"
+          disabled={busy}
+          onChange={(event) => changeDetailDraft(item, { moisture: event.target.value })}
+          onBlur={() => void saveInlineDetail(detailKind, item)}
+          onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur() }}
+        />
+      </td>
+      <td className="inspection-inline-cell">
+        <select
+          value={draft.grade}
+          aria-label="等級"
+          disabled={busy}
+          onChange={(event) => {
+            const grade = event.target.value
+            const reason = grade === '1等' || grade === '合格' ? '' : draft.reason
+            changeDetailDraft(item, { grade, reason })
+            void saveInlineDetail(detailKind, item, { grade, reason })
+          }}
+        >
+          <option value="">未選択</option>
+          {gradeOptions.map((option) => <option key={option.id} value={option.name}>{option.name}</option>)}
+        </select>
+      </td>
+      <td className="inspection-inline-cell inspection-inline-reason-cell">
+        <select
+          value={reasonForbidden ? '' : draft.reason}
+          aria-label="理由"
+          disabled={busy || reasonForbidden}
+          title={reasonForbidden ? '1等と合格には理由を入力できません' : undefined}
+          onChange={(event) => {
+            const reason = event.target.value
+            changeDetailDraft(item, { reason })
+            void saveInlineDetail(detailKind, item, { reason })
+          }}
+        >
+          <option value="">未選択</option>
+          {reasonOptions.map((option) => <option key={option.id} value={option.name}>{option.name}</option>)}
+        </select>
+      </td>
+    </>
   }
   const deleteFlexcon = async (item: FlexconInspection) => {
     if (!window.confirm(`ロット№${item.lot_number}を削除しますか？`)) return
@@ -287,27 +353,20 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
       <section className="section-band inspection-detail-section">
         <div className="section-title"><div><h2>フレコン</h2><span>{selectedFlexcons.length}本</span></div><button className="secondary-button certificate-create-button" type="button" disabled={selectedFlexcons.length === 0} onClick={createCertificateCsv}><FileSpreadsheet size={18} />検査証明書作成</button></div>
         <div className="inspection-detail-table-wrap"><table className="inspection-detail-table">
-          <thead><tr><th>フレコン№</th><th>ロット№</th><th>銘柄</th><th>数量</th><th>等級</th><th>水分</th><th>理由</th><th></th></tr></thead>
-          <tbody>{selectedFlexcons.map((item) => <tr key={item.id} onClick={() => beginEditFlexcon(item)}><td>{item.flexcon_no}</td><td className="lot-cell">{item.lot_number}</td><td>{item.brand ?? ''}</td><td>{item.quantity_kg.toLocaleString()}kg</td><td>{item.grade ?? ''}</td><td className={isHighMoisture(item.moisture) ? 'moisture-high' : ''}>{item.moisture === null ? '' : Number(item.moisture).toFixed(1)}</td><td>{item.reason ?? ''}</td><td className="inspection-row-actions"><button className="icon-button delete-icon" type="button" title="削除" aria-label={`${item.lot_number}を削除`} onClick={(event) => { event.stopPropagation(); void deleteFlexcon(item) }}><Trash2 size={17} /></button></td></tr>)}
+          <thead><tr><th>フレコン№</th><th>ロット№</th><th>銘柄</th><th>数量</th><th>水分</th><th>等級</th><th>理由</th><th></th></tr></thead>
+          <tbody>{selectedFlexcons.map((item) => <tr key={item.id}><td>{item.flexcon_no}</td><td className="lot-cell">{item.lot_number}</td><td>{item.brand ?? ''}</td><td>{item.quantity_kg.toLocaleString()}kg</td>{renderInlineInspectionCells('flexcon', item)}<td className="inspection-row-actions"><button className="icon-button delete-icon" type="button" title="削除" aria-label={`${item.lot_number}を削除`} onClick={() => void deleteFlexcon(item)}><Trash2 size={17} /></button></td></tr>)}
           {selectedFlexcons.length === 0 && <tr><td colSpan={8} className="empty-state">フレコンは登録されていません</td></tr>}</tbody>
         </table></div>
       </section>
       <section className="section-band inspection-detail-section">
         <div className="section-title"><div><h2>紙袋</h2><span>追加1回につき1行</span></div></div>
         <div className="inspection-detail-table-wrap"><table className="inspection-detail-table paper-detail-table">
-          <thead><tr><th>銘柄</th><th>数量</th><th>総重量</th><th>等級</th><th>水分</th><th>理由</th><th></th></tr></thead>
-          <tbody>{selectedPaperBags.map((item) => <tr key={item.id} onClick={() => beginEditPaper(item)}><td>{item.brand ?? ''}</td><td>{item.bag_count}袋</td><td>{(item.bag_count * 30).toLocaleString()}kg</td><td>{item.grade ?? ''}</td><td className={isHighMoisture(item.moisture) ? 'moisture-high' : ''}>{item.moisture === null ? '' : Number(item.moisture).toFixed(1)}</td><td>{item.reason ?? ''}</td><td className="inspection-row-actions"><button className="icon-button delete-icon" type="button" title="削除" aria-label={`${item.brand ?? ''}の紙袋を削除`} onClick={(event) => { event.stopPropagation(); void deletePaperBags(item) }}><Trash2 size={17} /></button></td></tr>)}
+          <thead><tr><th>銘柄</th><th>数量</th><th>総重量</th><th>水分</th><th>等級</th><th>理由</th><th></th></tr></thead>
+          <tbody>{selectedPaperBags.map((item) => <tr key={item.id}><td>{item.brand ?? ''}</td><td>{item.bag_count}袋</td><td>{(item.bag_count * 30).toLocaleString()}kg</td>{renderInlineInspectionCells('paper', item)}<td className="inspection-row-actions"><button className="icon-button delete-icon" type="button" title="削除" aria-label={`${item.brand ?? ''}の紙袋を削除`} onClick={() => void deletePaperBags(item)}><Trash2 size={17} /></button></td></tr>)}
           {selectedPaperBags.length === 0 && <tr><td colSpan={7} className="empty-state">紙袋は登録されていません</td></tr>}</tbody>
         </table></div>
       </section>
     </>}
-    {detailKind && <div className="modal-backdrop"><section className="registration-modal inspection-detail-modal" role="dialog" aria-modal="true" aria-labelledby="inspection-detail-title">
-      <div className="modal-header"><div><h2 id="inspection-detail-title">{detailKind === 'flexcon' ? 'フレコン検査記録' : '紙袋検査記録'}</h2><p>{displayDate(selectedBatch?.purchase_date)}</p></div><button className="icon-button" type="button" title="閉じる" aria-label="閉じる" onClick={() => setDetailKind(null)}><X size={20} /></button></div>
-      <form className="inspection-detail-form" onSubmit={(event) => void saveDetail(event)}>
-        <div className="inspection-detail-main-fields">{detailKind === 'flexcon' && <label>フレコン№<input type="number" min="1" max="999" value={detailForm.flexcon_no} onChange={(event) => setDetailForm((current) => ({ ...current, flexcon_no: event.target.value }))} required /></label>}<label>銘柄<select value={detailForm.brand} onChange={(event) => setDetailForm((current) => ({ ...current, brand: event.target.value }))} required><option value="">選択してください</option>{brandOptions.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}</select></label><label>{detailKind === 'flexcon' ? '数量（kg）' : '数量（袋）'}<input type="number" min="1" value={detailForm.quantity} onChange={(event) => setDetailForm((current) => ({ ...current, quantity: event.target.value }))} required /></label><label>等級<select value={detailForm.grade} onChange={(event) => setDetailForm((current) => ({ ...current, grade: event.target.value }))}><option value="">選択してください</option>{gradeOptions.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}</select></label><label>水分<input className={isHighMoisture(detailForm.moisture) ? 'moisture-high' : ''} type="number" min="0" max="100" step="0.1" value={detailForm.moisture} onChange={(event) => setDetailForm((current) => ({ ...current, moisture: event.target.value }))} /></label><label className="inspection-reason-field">理由<input value={detailForm.reason} onChange={(event) => setDetailForm((current) => ({ ...current, reason: event.target.value }))} /></label></div>
-        <div className="modal-actions"><button className="primary-button" type="submit" disabled={busy}><Save size={18} />{busy ? '保存中...' : '保存'}</button><button className="secondary-button" type="button" onClick={() => setDetailKind(null)} disabled={busy}>取り消し</button></div>
-      </form>
-    </section></div>}
     {notice && <div className={`notice operation-log ${notice.type}`}>{notice.text}</div>}
   </div>
 }
