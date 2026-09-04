@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, FileSpreadsheet, Plus, Search, Trash2 } from 'lucide-react'
+import { ArrowLeft, FileSpreadsheet, Plus, Search, TableRowsSplit, Trash2, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import type { AuthorizationRecord, FlexconInspection, InspectionOption, InspectionWeight, PaperBagInspection } from '../types'
 
@@ -23,6 +23,8 @@ type InlineDetailDraft = {
   purchase_date: string
   inspection_date: string
   inspection_location: string
+  brand: string
+  quantity: string
   grade: string
   reason: string
   moisture: string
@@ -69,6 +71,8 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
   const [weights, setWeights] = useState<Record<InspectionWeight['weight_type'], number>>({ branded_rice: DEFAULT_BRANDED_RICE_WEIGHT, feed_rice: DEFAULT_FEED_RICE_WEIGHT })
   const [addGroupForm, setAddGroupForm] = useState<AddGroupForm>(emptyAddGroupForm)
   const [detailDrafts, setDetailDrafts] = useState<Record<string, InlineDetailDraft>>({})
+  const [splitPaper, setSplitPaper] = useState<PaperBagInspection | null>(null)
+  const [splitCounts, setSplitCounts] = useState({ first: '', second: '' })
   const [search, setSearch] = useState('')
   const [notice, setNotice] = useState<Notice>(null)
   const [version, setVersion] = useState(0)
@@ -171,6 +175,8 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
     purchase_date: item.purchase_date,
     inspection_date: item.inspection_date ?? '',
     inspection_location: item.inspection_location ?? '',
+    brand: item.brand ?? '',
+    quantity: String('quantity_kg' in item ? item.quantity_kg : item.bag_count),
     grade: item.grade ?? '',
     reason: item.reason ?? '',
     moisture: item.moisture === null ? '' : String(item.moisture),
@@ -190,9 +196,12 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
     const draft = { ...detailDraft(item), ...values }
     if (draft.grade === '1等' || draft.grade === '合格') draft.reason = ''
     const fiscalYear = Number(draft.fiscal_year)
+    const quantity = Number(draft.quantity)
     const moisture = draft.moisture.trim() === '' ? null : Number(draft.moisture)
     if (!Number.isInteger(fiscalYear) || fiscalYear < 1 || fiscalYear > 99) return setNotice({ type: 'error', text: '年度は1から99の整数で入力してください。' })
     if (!draft.purchase_date) return setNotice({ type: 'error', text: '仕入日を入力してください。' })
+    if (!draft.brand) return setNotice({ type: 'error', text: '銘柄を選択してください。' })
+    if (!Number.isInteger(quantity) || quantity <= 0) return setNotice({ type: 'error', text: detailKind === 'flexcon' ? '数量は1kg以上の整数で入力してください。' : '紙袋数は1以上の整数で入力してください。' })
     if (moisture !== null && (!Number.isFinite(moisture) || moisture < 0 || moisture > 100)) return setNotice({ type: 'error', text: '水分は0から100の範囲で入力してください。' })
     changeDetailDraft(item, draft)
     const common = {
@@ -202,15 +211,15 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
       p_purchase_date: draft.purchase_date,
       p_inspection_date: draft.inspection_date || null,
       p_inspection_location: draft.inspection_location.trim() || null,
-      p_brand: item.brand,
+      p_brand: draft.brand,
       p_grade: draft.grade.trim() || null,
       p_reason: draft.reason.trim() || null,
       p_moisture: moisture,
     }
     setBusy(true); setNotice(null)
     const { error } = detailKind === 'flexcon'
-      ? await supabase.rpc('flexcon_save_inspection_flexcon', { ...common, p_flexcon_id: item.id, p_flexcon_no: (item as FlexconInspection).flexcon_no, p_quantity_kg: (item as FlexconInspection).quantity_kg })
-      : await supabase.rpc('flexcon_save_inspection_paper_bags', { ...common, p_paper_bag_id: item.id, p_bag_count: (item as PaperBagInspection).bag_count })
+      ? await supabase.rpc('flexcon_save_inspection_flexcon', { ...common, p_flexcon_id: item.id, p_flexcon_no: (item as FlexconInspection).flexcon_no, p_quantity_kg: quantity })
+      : await supabase.rpc('flexcon_save_inspection_paper_bags', { ...common, p_paper_bag_id: item.id, p_bag_count: quantity })
     setBusy(false)
     if (error) return setNotice({ type: 'error', text: error.message })
     setDetailDrafts((current) => { const next = { ...current }; delete next[item.id]; return next })
@@ -238,9 +247,17 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
       <td className="inspection-inline-cell inspection-inline-reason-cell"><select value={reasonForbidden ? '' : draft.reason} aria-label="理由" disabled={busy || reasonForbidden} title={reasonForbidden ? '1等と合格には理由を入力できません' : undefined} onChange={(event) => { const reason = event.target.value; changeDetailDraft(item, { reason }); save({ reason }) }}><option value="">未選択</option>{reasonOptions.map((option) => <option key={option.id} value={option.name}>{option.name}</option>)}</select></td>
     </>
   }
+  const renderInlineProductFields = (detailKind: 'flexcon' | 'paper', item: FlexconInspection | PaperBagInspection) => {
+    const draft = detailDraft(item)
+    const save = (values: Partial<InlineDetailDraft> = {}) => void saveInlineDetail(detailKind, item, values)
+    return <>
+      <td className="inspection-inline-cell inspection-brand-cell"><select value={draft.brand} aria-label="銘柄" disabled={busy} onChange={(event) => { const brand = event.target.value; changeDetailDraft(item, { brand }); save({ brand }) }}><option value="">未選択</option>{brandOptions.map((option) => <option key={option.id} value={option.name}>{option.name}</option>)}</select></td>
+      <td className="inspection-inline-cell inspection-quantity-cell"><input type="number" min="1" step="1" value={draft.quantity} aria-label={detailKind === 'flexcon' ? '数量（kg）' : '数量（袋）'} disabled={busy} onChange={(event) => changeDetailDraft(item, { quantity: event.target.value })} onBlur={() => save()} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur() }} /></td>
+    </>
+  }
 
   const deleteFlexcon = async (item: FlexconInspection) => {
-    if (!window.confirm(`フレコン№${item.flexcon_no}を削除しますか？`)) return
+    if (!window.confirm(`№${item.flexcon_no}を削除しますか？`)) return
     setBusy(true)
     const { error } = await supabase.rpc('flexcon_delete_inspection_flexcon', { p_worker_id: workerId, p_flexcon_id: item.id })
     setBusy(false)
@@ -254,6 +271,32 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
     setBusy(false)
     if (error) return setNotice({ type: 'error', text: error.message })
     setNotice({ type: 'success', text: '紙袋検査記録を削除しました。' }); setVersion((value) => value + 1)
+  }
+  const beginSplitPaperBags = (item: PaperBagInspection) => {
+    const first = Math.floor(item.bag_count / 2)
+    setSplitPaper(item)
+    setSplitCounts({ first: String(first), second: String(item.bag_count - first) })
+    setNotice(null)
+  }
+  const splitPaperBags = async (event: React.FormEvent) => {
+    event.preventDefault()
+    if (!splitPaper || busy) return
+    const first = Number(splitCounts.first)
+    const second = Number(splitCounts.second)
+    if (!Number.isInteger(first) || !Number.isInteger(second) || first <= 0 || second <= 0) return setNotice({ type: 'error', text: '分割後の袋数はどちらも1以上の整数で入力してください。' })
+    if (first + second !== splitPaper.bag_count) return setNotice({ type: 'error', text: `分割後の合計を元の${splitPaper.bag_count}袋に合わせてください。` })
+    setBusy(true); setNotice(null)
+    const { error } = await supabase.rpc('flexcon_split_inspection_paper_bags', {
+      p_worker_id: workerId,
+      p_paper_bag_id: splitPaper.id,
+      p_first_bag_count: first,
+      p_second_bag_count: second,
+    })
+    setBusy(false)
+    if (error) return setNotice({ type: 'error', text: error.message })
+    setSplitPaper(null)
+    setNotice({ type: 'success', text: `紙袋${first + second}袋を${first}袋と${second}袋に分割しました。` })
+    setVersion((value) => value + 1)
   }
   const createCertificateCsv = () => {
     if (!selectedAuthorization || selectedFlexcons.length === 0) return
@@ -301,19 +344,28 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
     <section className="section-band inspection-detail-section">
       <div className="section-title"><div><h2>フレコン</h2><span>{selectedFlexcons.length}本</span></div><button className="secondary-button certificate-create-button" type="button" disabled={selectedFlexcons.length === 0} onClick={createCertificateCsv}><FileSpreadsheet size={18} />検査証明書作成</button></div>
       <div className="inspection-detail-table-wrap"><table className="inspection-detail-table">
-        <thead><tr><th>フレコン№</th><th>年度</th><th>仕入日</th><th>検査日</th><th>検査場所</th><th>銘柄</th><th>数量</th><th>水分</th><th>等級</th><th>理由</th><th></th></tr></thead>
-        <tbody>{selectedFlexcons.map((item) => <tr key={item.id}><td>{item.flexcon_no}</td>{renderInlineMetadataFields('flexcon', item)}<td>{item.brand ?? ''}</td><td>{item.quantity_kg.toLocaleString()}kg</td>{renderInlineResultFields('flexcon', item)}<td className="inspection-row-actions"><button className="icon-button delete-icon" type="button" title="削除" aria-label={`フレコン№${item.flexcon_no}を削除`} onClick={() => void deleteFlexcon(item)}><Trash2 size={17} /></button></td></tr>)}
+        <thead><tr><th>№</th><th>年度</th><th>仕入日</th><th>検査日</th><th>検査場所</th><th>銘柄</th><th>数量（kg）</th><th>水分</th><th>等級</th><th>理由</th><th></th></tr></thead>
+        <tbody>{selectedFlexcons.map((item) => <tr key={item.id}><td>{item.flexcon_no}</td>{renderInlineMetadataFields('flexcon', item)}{renderInlineProductFields('flexcon', item)}{renderInlineResultFields('flexcon', item)}<td className="inspection-row-actions"><button className="icon-button delete-icon" type="button" title="削除" aria-label={`№${item.flexcon_no}を削除`} onClick={() => void deleteFlexcon(item)}><Trash2 size={17} /></button></td></tr>)}
         {selectedFlexcons.length === 0 && <tr><td colSpan={11} className="empty-state">フレコンは登録されていません</td></tr>}</tbody>
       </table></div>
     </section>
     <section className="section-band inspection-detail-section">
       <div className="section-title"><div><h2>紙袋</h2><span>{selectedPaperBags.length}件</span></div></div>
       <div className="inspection-detail-table-wrap"><table className="inspection-detail-table paper-detail-table">
-        <thead><tr><th>年度</th><th>仕入日</th><th>検査日</th><th>検査場所</th><th>銘柄</th><th>数量</th><th>総重量</th><th>水分</th><th>等級</th><th>理由</th><th></th></tr></thead>
-        <tbody>{selectedPaperBags.map((item) => <tr key={item.id}>{renderInlineMetadataFields('paper', item)}<td>{item.brand ?? ''}</td><td>{item.bag_count}袋</td><td>{(item.bag_count * 30).toLocaleString()}kg</td>{renderInlineResultFields('paper', item)}<td className="inspection-row-actions"><button className="icon-button delete-icon" type="button" title="削除" aria-label={`${item.brand ?? ''}の紙袋を削除`} onClick={() => void deletePaperBags(item)}><Trash2 size={17} /></button></td></tr>)}
+        <thead><tr><th>年度</th><th>仕入日</th><th>検査日</th><th>検査場所</th><th>銘柄</th><th>数量（袋）</th><th>総重量</th><th>水分</th><th>等級</th><th>理由</th><th></th></tr></thead>
+        <tbody>{selectedPaperBags.map((item) => <tr key={item.id}>{renderInlineMetadataFields('paper', item)}{renderInlineProductFields('paper', item)}<td>{(Number(detailDraft(item).quantity || 0) * 30).toLocaleString()}kg</td>{renderInlineResultFields('paper', item)}<td className="inspection-row-actions inspection-row-actions-wide"><button className="icon-button" type="button" title="2行に分割" aria-label={`${item.brand ?? ''}の紙袋を2行に分割`} disabled={busy || item.bag_count < 2} onClick={() => beginSplitPaperBags(item)}><TableRowsSplit size={17} /></button><button className="icon-button delete-icon" type="button" title="削除" aria-label={`${item.brand ?? ''}の紙袋を削除`} onClick={() => void deletePaperBags(item)}><Trash2 size={17} /></button></td></tr>)}
         {selectedPaperBags.length === 0 && <tr><td colSpan={11} className="empty-state">紙袋は登録されていません</td></tr>}</tbody>
       </table></div>
     </section>
+    {splitPaper && <div className="modal-backdrop"><section className="registration-modal paper-split-modal" role="dialog" aria-modal="true" aria-labelledby="paper-split-title">
+      <div className="modal-header"><div><h2 id="paper-split-title">紙袋を2行に分割</h2><p>{splitPaper.brand}　元の数量 {splitPaper.bag_count}袋</p></div><button className="icon-button" type="button" title="閉じる" aria-label="閉じる" onClick={() => setSplitPaper(null)} disabled={busy}><X size={20} /></button></div>
+      <form className="paper-split-form" onSubmit={(event) => void splitPaperBags(event)}>
+        <label>1行目の数量（袋）<input type="number" min="1" step="1" value={splitCounts.first} onChange={(event) => setSplitCounts((current) => ({ ...current, first: event.target.value }))} required /></label>
+        <label>2行目の数量（袋）<input type="number" min="1" step="1" value={splitCounts.second} onChange={(event) => setSplitCounts((current) => ({ ...current, second: event.target.value }))} required /></label>
+        <div className="paper-split-total">合計 {(Number(splitCounts.first) || 0) + (Number(splitCounts.second) || 0)} / {splitPaper.bag_count}袋</div>
+        <div className="modal-actions"><button className="primary-button" type="submit" disabled={busy}><TableRowsSplit size={18} />{busy ? '分割中...' : '分割する'}</button><button className="secondary-button" type="button" onClick={() => setSplitPaper(null)} disabled={busy}>取り消し</button></div>
+      </form>
+    </section></div>}
     {notice && <div className={`notice operation-log ${notice.type}`}>{notice.text}</div>}
   </div>
 }
