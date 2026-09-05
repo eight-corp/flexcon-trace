@@ -483,10 +483,10 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
   const createGradingNoticePdf = async () => {
     if (!selectedAuthorization || gradingNoticeBusy) return
     const authorizationById = new Map(authorizations.map((authorization) => [authorization.id, authorization]))
-    const targetFlexcons = flexcons.filter((item) => item.authorization_id === selectedAuthorization.id)
-    const targetPaperBags = paperBags.filter((item) => item.authorization_id === selectedAuthorization.id)
+    const targetFlexcons = flexcons.filter((item) => item.authorization_id === selectedAuthorization.id && isInspectionResultComplete(item))
+    const targetPaperBags = paperBags.filter((item) => item.authorization_id === selectedAuthorization.id && isInspectionResultComplete(item))
     if (targetFlexcons.length === 0 && targetPaperBags.length === 0) {
-      setNotice({ type: 'error', text: 'この委任状には格付結果通知書に出力する検査記録がありません。' })
+      setNotice({ type: 'error', text: 'この委任状には検査が完了した記録がありません。' })
       return
     }
 
