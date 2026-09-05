@@ -49,8 +49,8 @@ function App() {
         <div className="brand-lockup">
           <span className="brand-mark"><Wheat size={21} aria-hidden="true" /></span>
           <div>
-            <strong>フレコントレース</strong>
-            <small>玄米出荷管理 / {worker.worker_name}</small>
+            <strong>米穀出荷管理</strong>
+            <small>作業者 / {worker.worker_name}</small>
           </div>
         </div>
         <button

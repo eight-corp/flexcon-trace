@@ -13,9 +13,9 @@ export default defineConfig(() => {
       VitePWA({
         registerType: 'autoUpdate',
         manifest: {
-          name: 'フレコントレース',
-          short_name: 'フレコン',
-          description: '玄米フレコンのQR出荷管理',
+          name: '米穀出荷管理',
+          short_name: '米穀出荷',
+          description: '米穀のQR出荷管理',
           lang: 'ja',
           theme_color: '#236640',
           background_color: '#f3f5f2',

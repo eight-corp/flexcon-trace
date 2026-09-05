@@ -40,7 +40,7 @@ export function AuthScreen({ onLogin }: { onLogin: (worker: Worker) => void }) {
       <section className="auth-panel">
         <div className="auth-brand">
           <span className="brand-mark"><Wheat size={22} /></span>
-          <div><h1>フレコントレース</h1><p>玄米フレコン出荷管理</p></div>
+          <div><h1>米穀出荷管理</h1><p>玄米フレコン出荷管理</p></div>
         </div>
         {message && <div className="notice error">{message}</div>}
         <form className="form-grid" onSubmit={submit}>

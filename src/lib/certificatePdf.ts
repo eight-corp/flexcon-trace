@@ -194,7 +194,7 @@ export async function generateInspectionCertificatePdf({ authorization, flexcons
 
   pdf.setTitle(`検査証明書 ${authorization.fullName}`)
   pdf.setSubject('農産物検査証明書')
-  pdf.setCreator('フレコントレース')
+  pdf.setCreator('米穀出荷管理')
   const savedBytes = await pdf.save()
   const savedBuffer = savedBytes.buffer.slice(
     savedBytes.byteOffset,
