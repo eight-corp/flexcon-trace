@@ -4,6 +4,7 @@ export type Destination = {
   address: string | null
   contact_name: string | null
   active: boolean
+  sort_order?: number
   created_at: string
 }
 
@@ -22,6 +23,7 @@ export type TransportProfile = {
   driver_name: string | null
   vehicle_no: string | null
   active: boolean
+  sort_order?: number
   created_at: string
   updated_at: string
 }

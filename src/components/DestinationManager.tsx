@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Check, MapPin, Pencil, Plus, Trash2, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, Check, MapPin, Pencil, Plus, Trash2, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import type { Destination } from '../types'
 import { ToggleSwitch } from './ToggleSwitch'
@@ -15,6 +15,11 @@ export function DestinationManager({ workerId, embedded = false, onCountChange }
   const formRef = useRef<HTMLFormElement>(null)
   const deleting = useRef(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [movingId, setMovingId] = useState<string | null>(null)
+
+  const sortItems = (rows: Destination[]) => rows.sort((a, b) =>
+    (a.sort_order ?? Number.MAX_SAFE_INTEGER) - (b.sort_order ?? Number.MAX_SAFE_INTEGER)
+      || a.name.localeCompare(b.name, 'ja'))
 
   useEffect(() => {
     onCountChange?.(items.filter((item) => item.active).length)
@@ -47,14 +52,14 @@ export function DestinationManager({ workerId, embedded = false, onCountChange }
   const load = async () => {
     const { data, error } = await supabase.from('flexcon_destinations').select('*').order('active', { ascending: false }).order('name')
     if (error) setNotice({ type: 'error', text: error.message })
-    else setItems((data ?? []) as Destination[])
+    else setItems(sortItems((data ?? []) as Destination[]))
   }
 
   useEffect(() => {
     void supabase.from('flexcon_destinations').select('*').order('active', { ascending: false }).order('name')
       .then(({ data, error }) => {
         if (error) setNotice({ type: 'error', text: error.message })
-        else setItems((data ?? []) as Destination[])
+        else setItems(sortItems((data ?? []) as Destination[]))
       })
   }, [workerId])
 
@@ -106,6 +111,19 @@ export function DestinationManager({ workerId, embedded = false, onCountChange }
     else await load()
   }
 
+  const move = async (item: Destination, direction: -1 | 1) => {
+    if (movingId) return
+    setMovingId(item.id)
+    const { error } = await supabase.rpc('flexcon_reorder_destination', {
+      p_worker_id: workerId,
+      p_destination_id: item.id,
+      p_direction: direction,
+    })
+    setMovingId(null)
+    if (error) setNotice({ type: 'error', text: error.message })
+    else await load()
+  }
+
   return (
     <div>
       {!embedded && <div className="page-heading"><h1>納品先管理</h1><p>出荷登録で選択する納品先を管理します。</p></div>}
@@ -121,10 +139,14 @@ export function DestinationManager({ workerId, embedded = false, onCountChange }
       <section>
         {!embedded && <div className="section-title"><h2>登録済み納品先</h2><span>{items.filter((item) => item.active).length}件使用中</span></div>}
         <div className="destination-list">
-          {items.map((item) => (
-            <article className={`destination-item ${item.active ? '' : 'inactive-item'}`} key={item.id}>
-              <MapPin size={21} color={item.active ? '#236640' : '#7a847c'} />
-              <div><strong>{item.name}</strong>{item.address && <small>{item.address}</small>}</div>
+          {items.map((item, index) => (
+            <article className={`inspection-option-row ${item.active ? '' : 'inactive-item'}`} key={item.id}>
+              <MapPin size={19} color={item.active ? '#236640' : '#7a847c'} />
+              <strong>{item.name}</strong>
+              <div className="inspection-option-order-buttons">
+                <button className="icon-button" type="button" title="上へ移動" aria-label={`${item.name}を上へ移動`} onClick={() => void move(item, -1)} disabled={movingId !== null || index === 0}><ArrowUp size={16} /></button>
+                <button className="icon-button" type="button" title="下へ移動" aria-label={`${item.name}を下へ移動`} onClick={() => void move(item, 1)} disabled={movingId !== null || index === items.length - 1}><ArrowDown size={16} /></button>
+              </div>
               <button className="icon-button" type="button" title="編集" aria-label={`${item.name}を編集`} onClick={() => beginEdit(item)}><Pencil size={18} /></button>
               <ToggleSwitch checked={item.active} label={`${item.name}を${item.active ? '無効' : '有効'}にする`} onChange={() => void toggle(item)} />
               <button className="icon-button delete-icon" type="button" title="削除" aria-label={`${item.name}を削除`} disabled={deletingId !== null} onClick={() => void remove(item)}><Trash2 size={18} /></button>
