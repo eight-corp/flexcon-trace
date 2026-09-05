@@ -114,9 +114,11 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
   const [notice, setNotice] = useState<{ type: 'success' | 'error' | 'warning'; text: string } | null>(null)
   const [busy, setBusy] = useState(false)
   const lastRead = useRef({ value: '', time: 0 })
-  const shipmentBrands = [...new Set(lots
-    .map((lot) => inspectionLotDetails[lot]?.brand.trim())
-    .filter((brand): brand is string => Boolean(brand)))]
+  const shipmentBrandCounts = Object.entries(lots.reduce<Record<string, number>>((counts, lot) => {
+    const brand = inspectionLotDetails[lot]?.brand.trim() || '銘柄未登録'
+    counts[brand] = (counts[brand] ?? 0) + 1
+    return counts
+  }, {}))
 
   useEffect(() => {
     void Promise.all([
@@ -338,7 +340,7 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
 
             <div className="shipment-registration-summary" aria-label="出荷内容">
               <div><span>出荷本数</span><strong>{lots.length}本</strong></div>
-              <div><span>銘柄</span><strong>{shipmentBrands.length > 0 ? shipmentBrands.join('、') : '銘柄未登録'}</strong></div>
+              <div><span>銘柄</span><strong>{shipmentBrandCounts.map(([brand, count]) => `${brand} ${count}本`).join('、')}</strong></div>
             </div>
 
             {notice?.type === 'error' && <div className="notice error">{notice.text}</div>}
