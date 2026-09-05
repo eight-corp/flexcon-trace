@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ArrowDown, ArrowUp, Award, Building2, Check, ChevronDown, ListChecks, MapPin, Pencil, Plus, Scale, Tags, Trash2, Truck, UserCheck, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, Award, Building2, Check, ChevronDown, ListChecks, MapPin, Pencil, Plus, Save, Scale, Tags, Trash2, Truck, UserCheck, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import type { InspectionOption, InspectionWeight } from '../types'
 import { DestinationManager } from './DestinationManager'
@@ -24,13 +24,12 @@ type SectionProps = {
 function OptionSection({ workerId, optionType, title, items, supportsDescription = false, onChanged, onError }: SectionProps) {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [name, setName] = useState('')
-  const [description, setDescription] = useState('')
+  const [descriptionDrafts, setDescriptionDrafts] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
 
   const reset = () => {
     setEditingId(null)
     setName('')
-    setDescription('')
   }
 
   const submit = async (event: React.FormEvent) => {
@@ -42,7 +41,9 @@ function OptionSection({ workerId, optionType, title, items, supportsDescription
       p_option_id: editingId,
       p_option_type: optionType,
       p_name: name.trim(),
-      p_description: supportsDescription ? description.trim() || null : null,
+      p_description: supportsDescription && editingId
+        ? (descriptionDrafts[editingId] ?? items.find((item) => item.id === editingId)?.description ?? '').trim() || null
+        : null,
     })
     setBusy(false)
     if (error) {
@@ -57,7 +58,21 @@ function OptionSection({ workerId, optionType, title, items, supportsDescription
   const beginEdit = (item: InspectionOption) => {
     setEditingId(item.id)
     setName(item.name)
-    setDescription(item.description ?? '')
+  }
+
+  const saveDescription = async (item: InspectionOption) => {
+    if (busy || !supportsDescription) return
+    setBusy(true)
+    const { error } = await supabase.rpc('flexcon_save_inspection_option', {
+      p_worker_id: workerId,
+      p_option_id: item.id,
+      p_option_type: optionType,
+      p_name: item.name,
+      p_description: (descriptionDrafts[item.id] ?? item.description ?? '').trim() || null,
+    })
+    setBusy(false)
+    if (error) onError(error.message)
+    else onChanged(`${item.name}の説明文を保存しました。`)
   }
 
   const remove = async (item: InspectionOption) => {
@@ -115,7 +130,7 @@ function OptionSection({ workerId, optionType, title, items, supportsDescription
         <span>{items.filter((item) => item.active).length}件使用中<ChevronDown className="master-accordion-chevron" size={20} /></span>
       </summary>
       <div className="master-accordion-content">
-        <form className={`inspection-option-form ${supportsDescription ? 'with-description' : ''}`} onSubmit={(event) => void submit(event)}>
+        <form className="inspection-option-form" onSubmit={(event) => void submit(event)}>
           <input value={name} onChange={(event) => setName(event.target.value)} required placeholder={`${title}名`} aria-label={`${title}名`} />
           <button className="primary-button" type="submit" disabled={busy}>
             {editingId ? <><Check size={18} />保存</> : <><Plus size={18} />追加</>}
@@ -123,14 +138,38 @@ function OptionSection({ workerId, optionType, title, items, supportsDescription
           {editingId && (
             <button className="icon-button" type="button" title="編集を取り消す" aria-label="編集を取り消す" onClick={reset} disabled={busy}><X size={18} /></button>
           )}
-          {supportsDescription && <label className="inspection-option-description-field"><span>説明文</span><textarea rows={2} maxLength={1000} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="任意" aria-label={`${title}の説明文`} /></label>}
         </form>
 
         <div className="inspection-option-list">
           {items.map((item, index) => (
-            <div className={`inspection-option-row ${item.active ? '' : 'inactive-item'}`} key={item.id}>
+            <div className={`inspection-option-row ${supportsDescription ? 'with-description' : ''} ${item.active ? '' : 'inactive-item'}`} key={item.id}>
               <Icon size={19} color={item.active ? '#236640' : '#7a847c'} />
-              <div className="inspection-option-copy"><strong>{item.name}</strong>{supportsDescription && item.description && <p>{item.description}</p>}</div>
+              <div className="inspection-option-copy">
+                <strong>{item.name}</strong>
+                {supportsDescription && (
+                  <div className="inspection-option-inline-description">
+                    <textarea
+                      rows={2}
+                      maxLength={1000}
+                      value={descriptionDrafts[item.id] ?? item.description ?? ''}
+                      onChange={(event) => setDescriptionDrafts((current) => ({ ...current, [item.id]: event.target.value }))}
+                      placeholder="説明文（任意）"
+                      aria-label={`${item.name}の説明文`}
+                      disabled={busy}
+                    />
+                    <button
+                      className="icon-button"
+                      type="button"
+                      title="説明文を保存"
+                      aria-label={`${item.name}の説明文を保存`}
+                      onClick={() => void saveDescription(item)}
+                      disabled={busy || (descriptionDrafts[item.id] ?? item.description ?? '').trim() === (item.description ?? '')}
+                    >
+                      <Save size={17} />
+                    </button>
+                  </div>
+                )}
+              </div>
               <div className="inspection-option-order-buttons">
                 <button className="icon-button" type="button" title="上へ移動" aria-label={`${item.name}を上へ移動`} onClick={() => void move(item, -1)} disabled={busy || index === 0}><ArrowUp size={16} /></button>
                 <button className="icon-button" type="button" title="下へ移動" aria-label={`${item.name}を下へ移動`} onClick={() => void move(item, 1)} disabled={busy || index === items.length - 1}><ArrowDown size={16} /></button>

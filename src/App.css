@@ -273,9 +273,6 @@
 .inspection-option-section { min-width: 0; }
 .inspection-option-form { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; margin-bottom: 12px; }
 .inspection-option-form input { min-width: 0; }
-.inspection-option-description-field { grid-column: 1 / -1; display: grid; grid-template-columns: 72px minmax(0, 1fr); align-items: start; gap: 9px; margin: 0; }
-.inspection-option-description-field > span { padding-top: 9px; color: #46524a; font-size: 13px; font-weight: 700; }
-.inspection-option-description-field textarea { width: 100%; min-width: 0; resize: vertical; }
 .inspection-option-list { display: grid; gap: 7px; max-height: calc(100vh - 270px); overflow-y: auto; }
 .inspection-option-row { min-height: 48px; display: grid; grid-template-columns: auto minmax(0, 1fr) 68px 38px 48px 38px; align-items: center; gap: 9px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
 @media (max-width: 600px) {
@@ -285,7 +282,8 @@
 }
 .inspection-option-copy { min-width: 0; }
 .inspection-option-copy strong { display: block; min-width: 0; overflow-wrap: anywhere; }
-.inspection-option-copy p { margin: 3px 0 0; color: var(--muted); font-size: 12px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
+.inspection-option-inline-description { display: grid; grid-template-columns: minmax(0, 1fr) 36px; align-items: center; gap: 6px; margin-top: 6px; }
+.inspection-option-inline-description textarea { width: 100%; min-width: 0; min-height: 58px; resize: vertical; }
 .inspection-option-row .icon-button { width: 36px; height: 36px; }
 .inspection-option-order-buttons { display: flex; align-items: center; }
 .inspection-option-order-buttons .icon-button { width: 32px; height: 32px; }
