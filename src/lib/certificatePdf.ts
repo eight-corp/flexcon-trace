@@ -30,7 +30,6 @@ const DESIGN_HEIGHT = 420.72
 const PAGE_WIDTH = 210 * 72 / 25.4
 const PAGE_HEIGHT = 148 * 72 / 25.4
 const CANVAS_SCALE = 4
-const TEXT_VERTICAL_OFFSET = 1.5
 const FONT_FAMILY = '"Yu Mincho", "Yu Gothic", "Noto Serif JP", "Noto Sans JP", serif'
 
 function setFont(context: CanvasRenderingContext2D, size: number, weight = 700) {
@@ -57,7 +56,7 @@ function drawFittedText(
   }
   context.textAlign = align
   context.textBaseline = 'top'
-  context.fillText(value, x * CANVAS_SCALE, (y + TEXT_VERTICAL_OFFSET) * CANVAS_SCALE)
+  context.fillText(value, x * CANVAS_SCALE, y * CANVAS_SCALE)
 }
 
 function drawCenteredText(
@@ -70,6 +69,33 @@ function drawCenteredText(
   minimumSize = 6,
 ) {
   drawFittedText(context, text, x + width / 2, y, width, size, 'center', minimumSize)
+}
+
+function drawCenteredTextInBox(
+  context: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  size: number,
+  minimumSize = 6,
+) {
+  const value = text.trim()
+  if (!value) return
+  let fittedSize = size
+  setFont(context, fittedSize)
+  while (fittedSize > minimumSize && context.measureText(value).width > width * CANVAS_SCALE) {
+    fittedSize -= 0.25
+    setFont(context, fittedSize)
+  }
+  context.textAlign = 'center'
+  context.textBaseline = 'middle'
+  context.fillText(
+    value,
+    (x + width / 2) * CANVAS_SCALE,
+    (y + height / 2) * CANVAS_SCALE,
+  )
 }
 
 function japaneseDate(value: string | null) {
@@ -116,23 +142,25 @@ async function drawCertificateOverlay(
 ) {
   const { canvas, context } = createOverlayCanvas()
 
-  drawFittedText(context, authorization.authorizationNo, 129, 39, 55, 9)
-  drawFittedText(context, String(flexcon.flexconNo), 480, 39, 45, 9)
-  drawFittedText(context, authorization.fullName, 307, 78, 205, 9.5)
-  drawFittedText(context, authorization.address, 307, 94, 205, 9.5, 'left', 6.5)
+  drawFittedText(context, authorization.authorizationNo, 129, 40.5, 55, 9)
+  drawFittedText(context, String(flexcon.flexconNo), 480, 40.5, 45, 9)
+  drawFittedText(context, authorization.fullName, 307, 77, 205, 9.5)
+  drawFittedText(context, authorization.address, 307, 92.5, 205, 9.5, 'left', 6.5)
   drawCenteredText(context, japaneseDate(flexcon.inspectionDate), 188, 138, 116, 9.5)
 
-  drawCenteredText(context, cropType(flexcon.brand), 83, 238, 77, 11.5, 8)
-  drawCenteredText(context, String(flexcon.fiscalYear), 160, 232, 28, 18, 12)
+  const tableDataTop = 198.5
+  const tableDataHeight = 92.5
+  drawCenteredTextInBox(context, cropType(flexcon.brand), 83, tableDataTop, 77, tableDataHeight, 11.5, 8)
+  drawCenteredTextInBox(context, String(flexcon.fiscalYear), 160, tableDataTop, 28, tableDataHeight, 18, 12)
   if (!isFeedRice(flexcon.brand)) {
-    drawCenteredText(context, prefectureLabel(authorization.prefecture), 188, 205, 78, 9)
-    drawCenteredText(context, displayedBrand(authorization, flexcon), 188, 253, 78, 12, 7)
+    drawCenteredTextInBox(context, prefectureLabel(authorization.prefecture), 188, tableDataTop, 78, tableDataHeight / 2, 9)
+    drawCenteredTextInBox(context, displayedBrand(authorization, flexcon), 188, tableDataTop + tableDataHeight / 2, 78, tableDataHeight / 2, 12, 7)
   }
-  drawCenteredText(context, flexcon.quantityKg.toLocaleString('ja-JP'), 395, 226, 65, 16, 10)
+  drawCenteredTextInBox(context, flexcon.quantityKg.toLocaleString('ja-JP'), 395, tableDataTop, 65, tableDataHeight, 16, 10)
   const remarks = isFeedRice(flexcon.brand)
     ? authorization.feedRiceVariety
     : flexcon.reason
-  drawCenteredText(context, remarks, 460, 236, 52, 9, 6)
+  drawCenteredTextInBox(context, remarks, 460, tableDataTop, 52, tableDataHeight, 9, 6)
   drawCenteredText(context, japaneseDate(flexcon.inspectionDate), 266, 310, 103, 9.5)
 
   const qrCanvas = document.createElement('canvas')
