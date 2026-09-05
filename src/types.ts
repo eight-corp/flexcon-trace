@@ -152,6 +152,7 @@ export type InspectionOption = {
   id: string
   option_type: 'location' | 'inspector' | 'brand' | 'brand_aomori' | 'brand_iwate' | 'grade' | 'grade_reason' | 'shipment_product'
   name: string
+  description: string | null
   active: boolean
   sort_order: number
   created_at: string

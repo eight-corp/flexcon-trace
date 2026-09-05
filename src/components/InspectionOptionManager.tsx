@@ -16,18 +16,21 @@ type SectionProps = {
   optionType: OptionType
   title: string
   items: InspectionOption[]
+  supportsDescription?: boolean
   onChanged: (message: string) => void
   onError: (message: string) => void
 }
 
-function OptionSection({ workerId, optionType, title, items, onChanged, onError }: SectionProps) {
+function OptionSection({ workerId, optionType, title, items, supportsDescription = false, onChanged, onError }: SectionProps) {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [name, setName] = useState('')
+  const [description, setDescription] = useState('')
   const [busy, setBusy] = useState(false)
 
   const reset = () => {
     setEditingId(null)
     setName('')
+    setDescription('')
   }
 
   const submit = async (event: React.FormEvent) => {
@@ -39,6 +42,7 @@ function OptionSection({ workerId, optionType, title, items, onChanged, onError 
       p_option_id: editingId,
       p_option_type: optionType,
       p_name: name.trim(),
+      p_description: supportsDescription ? description.trim() || null : null,
     })
     setBusy(false)
     if (error) {
@@ -53,6 +57,7 @@ function OptionSection({ workerId, optionType, title, items, onChanged, onError 
   const beginEdit = (item: InspectionOption) => {
     setEditingId(item.id)
     setName(item.name)
+    setDescription(item.description ?? '')
   }
 
   const remove = async (item: InspectionOption) => {
@@ -110,21 +115,22 @@ function OptionSection({ workerId, optionType, title, items, onChanged, onError 
         <span>{items.filter((item) => item.active).length}件使用中<ChevronDown className="master-accordion-chevron" size={20} /></span>
       </summary>
       <div className="master-accordion-content">
-        <form className="inspection-option-form" onSubmit={(event) => void submit(event)}>
-          <input value={name} onChange={(event) => setName(event.target.value)} required aria-label={`${title}名`} />
+        <form className={`inspection-option-form ${supportsDescription ? 'with-description' : ''}`} onSubmit={(event) => void submit(event)}>
+          <input value={name} onChange={(event) => setName(event.target.value)} required placeholder={`${title}名`} aria-label={`${title}名`} />
           <button className="primary-button" type="submit" disabled={busy}>
             {editingId ? <><Check size={18} />保存</> : <><Plus size={18} />追加</>}
           </button>
           {editingId && (
             <button className="icon-button" type="button" title="編集を取り消す" aria-label="編集を取り消す" onClick={reset} disabled={busy}><X size={18} /></button>
           )}
+          {supportsDescription && <label className="inspection-option-description-field"><span>説明文</span><textarea rows={2} maxLength={1000} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="任意" aria-label={`${title}の説明文`} /></label>}
         </form>
 
         <div className="inspection-option-list">
           {items.map((item, index) => (
             <div className={`inspection-option-row ${item.active ? '' : 'inactive-item'}`} key={item.id}>
               <Icon size={19} color={item.active ? '#236640' : '#7a847c'} />
-              <strong>{item.name}</strong>
+              <div className="inspection-option-copy"><strong>{item.name}</strong>{supportsDescription && item.description && <p>{item.description}</p>}</div>
               <div className="inspection-option-order-buttons">
                 <button className="icon-button" type="button" title="上へ移動" aria-label={`${item.name}を上へ移動`} onClick={() => void move(item, -1)} disabled={busy || index === 0}><ArrowUp size={16} /></button>
                 <button className="icon-button" type="button" title="下へ移動" aria-label={`${item.name}を下へ移動`} onClick={() => void move(item, 1)} disabled={busy || index === items.length - 1}><ArrowDown size={16} /></button>
@@ -296,6 +302,7 @@ export function InspectionOptionManager({ workerId }: Props) {
           workerId={workerId}
           optionType="grade"
           title="等級"
+          supportsDescription
           items={items.filter((item) => item.option_type === 'grade')}
           onChanged={changed}
           onError={failed}
@@ -304,6 +311,7 @@ export function InspectionOptionManager({ workerId }: Props) {
           workerId={workerId}
           optionType="grade_reason"
           title="等級の理由"
+          supportsDescription
           items={items.filter((item) => item.option_type === 'grade_reason')}
           onChanged={changed}
           onError={failed}
