@@ -13,7 +13,7 @@ export default defineConfig(() => {
       VitePWA({
         registerType: 'autoUpdate',
         manifest: {
-          name: '米穀出荷管理',
+          name: '(株)エイト 米穀出荷管理',
           short_name: '米穀出荷',
           description: '米穀のQR出荷管理',
           lang: 'ja',
