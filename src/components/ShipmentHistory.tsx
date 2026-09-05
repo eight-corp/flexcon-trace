@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ArrowDown, ArrowUp, Building2, Download, Filter, LayoutGrid, Pencil, Save, Search, Table2, Trash2, Truck, UserRound, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { formatPrefectureName } from '../lib/prefecture'
 import type { Destination, InspectionOption, Shipment, TransportProfile } from '../types'
 import { ManualShipmentItemsEditor, type ManualShipmentItemDraft } from './ManualShipmentItemsEditor'
 
@@ -60,14 +61,14 @@ function shipmentProductGroups(shipment: Shipment) {
   if (shipment.shipment_kind !== 'qr_flexcon') {
     if (shipment.flexcon_manual_shipment_items.length > 0) {
       return [...shipment.flexcon_manual_shipment_items].sort((a, b) => a.sort_order - b.sort_order).map((item) => ({
-        origin: item.origin_prefecture?.trim() || '県名未登録',
+        origin: formatPrefectureName(item.origin_prefecture) || '県名未登録',
         name: item.product_name,
         count: item.quantity_count,
         unit: shipment.shipment_kind === 'paper_bag' ? '袋' : '本',
       }))
     }
     return [{
-      origin: shipment.origin_prefecture?.trim() || '県名未登録',
+      origin: formatPrefectureName(shipment.origin_prefecture) || '県名未登録',
       name: shipment.product_name?.trim() || '品名未登録',
       count: shipment.quantity_count ?? 0,
       unit: shipment.shipment_kind === 'paper_bag' ? '袋' : '本',
@@ -76,7 +77,7 @@ function shipmentProductGroups(shipment: Shipment) {
 
   const groups = new Map<string, { origin: string; name: string; count: number; unit: string }>()
   shipment.flexcon_shipment_items.forEach((item) => {
-    const origin = item.origin_prefecture?.trim() || shipment.origin_prefecture?.trim() || '県名未登録'
+    const origin = formatPrefectureName(item.origin_prefecture ?? shipment.origin_prefecture) || '県名未登録'
     const name = item.product_name?.trim() || shipment.product_name?.trim() || '品名未登録'
     const key = `${origin}\u001f${name}`
     const current = groups.get(key)
@@ -290,13 +291,13 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
       shipment.flexcon_manual_shipment_items.length > 0
         ? [...shipment.flexcon_manual_shipment_items].sort((a, b) => a.sort_order - b.sort_order).map((item) => ({
           key: item.id,
-          originPrefecture: item.origin_prefecture ?? '',
+          originPrefecture: formatPrefectureName(item.origin_prefecture),
           productName: item.product_name,
           quantityCount: String(item.quantity_count),
         }))
         : [{
           key: shipment.id,
-          originPrefecture: shipment.origin_prefecture ?? '',
+          originPrefecture: formatPrefectureName(shipment.origin_prefecture),
           productName: shipment.product_name ?? '',
           quantityCount: String(shipment.quantity_count ?? 1),
         }]
@@ -383,20 +384,20 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
       const details = shipment.shipment_kind === 'qr_flexcon'
         ? shipment.flexcon_shipment_items.map((item) => ({
           lotNumber: item.lot_number,
-          originPrefecture: item.origin_prefecture ?? shipment.origin_prefecture ?? '',
+          originPrefecture: formatPrefectureName(item.origin_prefecture ?? shipment.origin_prefecture),
           productName: item.product_name ?? shipment.product_name ?? '品名未登録',
           quantityCount: 1,
         }))
         : shipment.flexcon_manual_shipment_items.length > 0
           ? [...shipment.flexcon_manual_shipment_items].sort((a, b) => a.sort_order - b.sort_order).map((item) => ({
             lotNumber: '',
-            originPrefecture: item.origin_prefecture ?? '',
+            originPrefecture: formatPrefectureName(item.origin_prefecture),
             productName: item.product_name,
             quantityCount: item.quantity_count,
           }))
           : [{
             lotNumber: '',
-            originPrefecture: shipment.origin_prefecture ?? '',
+            originPrefecture: formatPrefectureName(shipment.origin_prefecture),
             productName: shipment.product_name ?? '品名未登録',
             quantityCount: shipment.quantity_count ?? 0,
           }]

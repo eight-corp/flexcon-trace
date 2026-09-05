@@ -1,6 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { CheckCircle2, Package, Plus, Send, Trash2, UserRound, Wheat, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { formatPrefectureName } from '../lib/prefecture'
 import type { Destination, InspectionOption, TransportProfile } from '../types'
 import { ManualShipmentItemsEditor, type ManualShipmentItemDraft } from './ManualShipmentItemsEditor'
 
@@ -159,7 +160,7 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
         for (const flexcon of flexconResult.data ?? []) {
           const authorization = authorizationById[flexcon.authorization_id]
           if (!authorization) continue
-          const origin = [authorization.prefecture, authorization.municipality]
+          const origin = [formatPrefectureName(authorization.prefecture), authorization.municipality]
             .map((value) => String(value ?? '').trim())
             .filter(Boolean)
             .join(' ')
