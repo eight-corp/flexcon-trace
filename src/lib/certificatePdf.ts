@@ -128,7 +128,10 @@ async function drawCertificateOverlay(
     drawCenteredText(context, displayedBrand(authorization, flexcon), 188, 253, 78, 12, 7)
   }
   drawCenteredText(context, flexcon.quantityKg.toLocaleString('ja-JP'), 395, 226, 65, 16, 10)
-  drawCenteredText(context, flexcon.reason, 460, 236, 52, 9, 6)
+  const remarks = isFeedRice(flexcon.brand)
+    ? authorization.feedRiceVariety
+    : flexcon.reason
+  drawCenteredText(context, remarks, 460, 236, 52, 9, 6)
   drawCenteredText(context, japaneseDate(flexcon.inspectionDate), 266, 310, 103, 9.5)
 
   const qrCanvas = document.createElement('canvas')
