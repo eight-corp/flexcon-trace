@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ArrowDown, ArrowUp, Award, Building2, Check, ChevronDown, ListChecks, MapPin, Pencil, Plus, Scale, Tags, Truck, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, Award, Building2, Check, ChevronDown, ListChecks, MapPin, Pencil, Plus, Scale, Tags, Trash2, Truck, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import type { InspectionOption, InspectionWeight } from '../types'
 import { DestinationManager } from './DestinationManager'
@@ -53,6 +53,26 @@ function OptionSection({ workerId, optionType, title, items, onChanged, onError 
   const beginEdit = (item: InspectionOption) => {
     setEditingId(item.id)
     setName(item.name)
+  }
+
+  const remove = async (item: InspectionOption) => {
+    if (busy || !window.confirm(`「${item.name}」を削除しますか？登録済みの検査記録は変更されません。`)) return
+    setBusy(true)
+    try {
+      const { error } = await supabase.rpc('flexcon_delete_inspection_option', {
+        p_worker_id: workerId,
+        p_option_id: item.id,
+      })
+      if (error) onError(error.message)
+      else {
+        if (editingId === item.id) reset()
+        onChanged('マスタ項目を削除しました。')
+      }
+    } catch {
+      onError('削除結果を確認できません。通信状態を確認して一覧を再読み込みしてください。')
+    } finally {
+      setBusy(false)
+    }
   }
 
   const toggle = async (item: InspectionOption) => {
@@ -111,6 +131,7 @@ function OptionSection({ workerId, optionType, title, items, onChanged, onError 
               </div>
               <button className="icon-button" type="button" title="編集" aria-label={`${item.name}を編集`} onClick={() => beginEdit(item)} disabled={busy}><Pencil size={17} /></button>
               <ToggleSwitch checked={item.active} label={`${item.name}を${item.active ? '無効' : '有効'}にする`} onChange={() => void toggle(item)} />
+              <button className="icon-button delete-icon" type="button" title="削除" aria-label={`${item.name}を削除`} disabled={busy} onClick={() => void remove(item)}><Trash2 size={17} /></button>
             </div>
           ))}
           {items.length === 0 && <div className="empty-state">登録されていません</div>}
@@ -161,7 +182,7 @@ function InspectionWeightSection({
   return (
     <details className="master-accordion inspection-option-section inspection-weight-section">
       <summary className="master-accordion-summary">
-        <span><Scale size={20} />量目</span>
+        <span><Scale size={20} />量目初期値</span>
         <span><ChevronDown className="master-accordion-chevron" size={20} /></span>
       </summary>
       <div className="master-accordion-content">
@@ -180,6 +201,8 @@ function InspectionWeightSection({
 }
 
 export function InspectionOptionManager({ workerId }: Props) {
+  const [destinationCount, setDestinationCount] = useState(0)
+  const [transportCount, setTransportCount] = useState(0)
   const [items, setItems] = useState<InspectionOption[]>([])
   const [weights, setWeights] = useState<WeightValues>({ branded_rice: 1020, feed_rice: 1000 })
   const [notice, setNotice] = useState<Notice>(null)
@@ -226,16 +249,16 @@ export function InspectionOptionManager({ workerId }: Props) {
         <details className="master-accordion">
           <summary className="master-accordion-summary">
             <span><Building2 size={20} />納品先</span>
-            <span><ChevronDown className="master-accordion-chevron" size={20} /></span>
+            <span>{destinationCount}件使用中<ChevronDown className="master-accordion-chevron" size={20} /></span>
           </summary>
-          <div className="master-accordion-content"><DestinationManager workerId={workerId} embedded /></div>
+          <div className="master-accordion-content"><DestinationManager workerId={workerId} embedded onCountChange={setDestinationCount} /></div>
         </details>
         <details className="master-accordion">
           <summary className="master-accordion-summary">
             <span><Truck size={20} />運送会社</span>
-            <span><ChevronDown className="master-accordion-chevron" size={20} /></span>
+            <span>{transportCount}件使用中<ChevronDown className="master-accordion-chevron" size={20} /></span>
           </summary>
-          <div className="master-accordion-content"><TransportManager workerId={workerId} embedded /></div>
+          <div className="master-accordion-content"><TransportManager workerId={workerId} embedded onCountChange={setTransportCount} /></div>
         </details>
         <OptionSection
           workerId={workerId}
@@ -285,7 +308,7 @@ export function InspectionOptionManager({ workerId }: Props) {
           onError={failed}
         />
       </div>
-      {notice && <div className={`notice operation-log ${notice.type}`} role="status" aria-live="polite">{notice.text}</div>}
+      {notice?.type === 'error' && <div className="notice error" role="alert">{notice.text}</div>}
     </div>
   )
 }
