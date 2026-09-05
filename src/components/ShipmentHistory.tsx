@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { ArrowDown, ArrowUp, Building2, Download, Filter, LayoutGrid, Pencil, Save, Search, Table2, Trash2, Truck, UserRound, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import type { Destination, InspectionOption, Shipment, TransportProfile } from '../types'
+import { ManualShipmentItemsEditor, type ManualShipmentItemDraft } from './ManualShipmentItemsEditor'
 
 type Props = {
   refreshKey: number
@@ -50,6 +51,12 @@ function toLocalDateTime(value: string) {
 function shipmentProductSummary(shipment: Shipment) {
   if (shipment.shipment_kind !== 'qr_flexcon') {
     const unit = shipment.shipment_kind === 'paper_bag' ? '袋' : '本'
+    if (shipment.flexcon_manual_shipment_items.length > 0) {
+      return [...shipment.flexcon_manual_shipment_items]
+        .sort((a, b) => a.sort_order - b.sort_order)
+        .map((item) => `${item.product_name} ${item.quantity_count}${unit}`)
+        .join('、')
+    }
     return `${shipment.product_name ?? '品名未登録'} ${shipment.quantity_count ?? 0}${unit}`
   }
 
@@ -63,6 +70,13 @@ function shipmentProductSummary(shipment: Shipment) {
 
 function shipmentProductGroups(shipment: Shipment) {
   if (shipment.shipment_kind !== 'qr_flexcon') {
+    if (shipment.flexcon_manual_shipment_items.length > 0) {
+      return [...shipment.flexcon_manual_shipment_items].sort((a, b) => a.sort_order - b.sort_order).map((item) => ({
+        name: item.product_name,
+        count: item.quantity_count,
+        unit: shipment.shipment_kind === 'paper_bag' ? '袋' : '本',
+      }))
+    }
     return [{
       name: shipment.product_name?.trim() || '品名未登録',
       count: shipment.quantity_count ?? 0,
@@ -162,16 +176,14 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
   const [vehicleNo, setVehicleNo] = useState('')
   const [note, setNote] = useState('')
   const [purchasePrice, setPurchasePrice] = useState('')
-  const [productName, setProductName] = useState('')
-  const [quantityCount, setQuantityCount] = useState('')
-  const [originPrefecture, setOriginPrefecture] = useState('')
+  const [manualItems, setManualItems] = useState<ManualShipmentItemDraft[]>([])
   const [busy, setBusy] = useState(false)
   const [viewMode, setViewMode] = useState<ViewMode>('cards')
   const [sort, setSort] = useState<{ key: TableColumn; direction: SortDirection } | null>(null)
   const [columnFilters, setColumnFilters] = useState<Partial<Record<TableColumn, string[]>>>({})
 
   useEffect(() => {
-    void supabase.from('flexcon_shipments').select('id, destination_id, transport_profile_id, shipped_at, carrier_name, driver_name, vehicle_no, note, shipment_kind, origin_prefecture, product_name, quantity_count, purchase_price_per_bale, flexcon_destinations(name), flexcon_shipment_items(lot_number, product_name), workers(worker_name)').order('shipped_at', { ascending: false }).limit(200)
+    void supabase.from('flexcon_shipments').select('id, destination_id, transport_profile_id, shipped_at, carrier_name, driver_name, vehicle_no, note, shipment_kind, origin_prefecture, product_name, quantity_count, purchase_price_per_bale, flexcon_destinations(name), flexcon_shipment_items(lot_number, product_name), flexcon_manual_shipment_items(id, origin_prefecture, product_name, quantity_count, sort_order), workers(worker_name)').order('shipped_at', { ascending: false }).limit(200)
       .then(({ data, error }) => {
         if (error) setNotice({ type: 'error', text: error.message })
         else setShipments((data ?? []) as unknown as Shipment[])
@@ -209,7 +221,7 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
 
   const tableRows = useMemo(() => shipments.flatMap((shipment, shipmentIndex) =>
     shipmentProductGroups(shipment).map((group, groupIndex) => ({
-      id: `${shipment.id}-${group.name}`,
+      id: `${shipment.id}-${groupIndex}-${group.name}`,
       originalOrder: shipmentIndex * 100 + groupIndex,
       shippedAt: new Date(shipment.shipped_at).toLocaleString('ja-JP'),
       shippedAtValue: new Date(shipment.shipped_at).getTime(),
@@ -280,9 +292,21 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
     setVehicleNo(shipment.vehicle_no ?? '')
     setNote(shipment.note ?? '')
     setPurchasePrice(shipment.purchase_price_per_bale == null ? '' : String(shipment.purchase_price_per_bale))
-    setProductName(shipment.product_name ?? '')
-    setQuantityCount(String(shipment.quantity_count ?? shipment.flexcon_shipment_items.length))
-    setOriginPrefecture(shipment.origin_prefecture ?? '')
+    setManualItems(shipment.shipment_kind === 'qr_flexcon' ? [] : (
+      shipment.flexcon_manual_shipment_items.length > 0
+        ? [...shipment.flexcon_manual_shipment_items].sort((a, b) => a.sort_order - b.sort_order).map((item) => ({
+          key: item.id,
+          originPrefecture: item.origin_prefecture ?? '',
+          productName: item.product_name,
+          quantityCount: String(item.quantity_count),
+        }))
+        : [{
+          key: shipment.id,
+          originPrefecture: shipment.origin_prefecture ?? '',
+          productName: shipment.product_name ?? '',
+          quantityCount: String(shipment.quantity_count ?? 1),
+        }]
+    ))
     setNotice(null)
   }
 
@@ -290,7 +314,18 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
     event.preventDefault()
     if (!editing || !isAdmin) return
     setBusy(true)
-    const { error } = await supabase.rpc('flexcon_update_shipment', {
+    if (editing.shipment_kind !== 'qr_flexcon' && (
+      manualItems.length === 0
+      || manualItems.some((item) => !item.productName
+        || (editing.shipment_kind === 'paper_bag' && !item.originPrefecture)
+        || !Number.isInteger(Number(item.quantityCount))
+        || Number(item.quantityCount) < 1)
+    )) {
+      setNotice({ type: 'error', text: '明細の種類と本数を確認してください。' })
+      setBusy(false)
+      return
+    }
+    const commonValues = {
       p_worker_id: workerId,
       p_shipment_id: editing.id,
       p_destination_id: destinationId,
@@ -298,12 +333,24 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
       p_shipped_at: new Date(shippedAt).toISOString(),
       p_driver_name: driverName.trim(),
       p_vehicle_no: vehicleNo.trim(),
-      p_origin_prefecture: originPrefecture || null,
-      p_product_name: productName || null,
-      p_quantity_count: Number(quantityCount),
       p_purchase_price_per_bale: purchasePrice.trim() === '' ? null : Number(purchasePrice),
       p_note: note.trim() || null,
-    })
+    }
+    const { error } = editing.shipment_kind === 'qr_flexcon'
+      ? await supabase.rpc('flexcon_update_shipment', {
+        ...commonValues,
+        p_origin_prefecture: null,
+        p_product_name: null,
+        p_quantity_count: editing.quantity_count ?? editing.flexcon_shipment_items.length,
+      })
+      : await supabase.rpc('flexcon_update_manual_shipment', {
+        ...commonValues,
+        p_items: manualItems.map((item) => ({
+          origin_prefecture: editing.shipment_kind === 'paper_bag' ? item.originPrefecture : null,
+          product_name: item.productName,
+          quantity_count: Number(item.quantityCount),
+        })),
+      })
     if (error) {
       setNotice({ type: 'error', text: error.message })
     } else {
@@ -339,9 +386,26 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
   const exportCsv = () => {
     const rows = [['出荷日時', '納品先', '担当者', '運送会社名', 'ドライバー名', '車両番号', '出荷区分', '県名', '品名', '種類別数量', 'QRコード', '数量', '単位', '仕入値（1俵当たり）', '備考']]
     filtered.forEach((shipment) => {
-      const details: Array<{ lot_number: string; product_name: string | null } | null> = shipment.flexcon_shipment_items.length > 0
-        ? shipment.flexcon_shipment_items
-        : [null]
+      const details = shipment.shipment_kind === 'qr_flexcon'
+        ? shipment.flexcon_shipment_items.map((item) => ({
+          lotNumber: item.lot_number,
+          originPrefecture: shipment.origin_prefecture ?? '',
+          productName: item.product_name ?? shipment.product_name ?? '品名未登録',
+          quantityCount: 1,
+        }))
+        : shipment.flexcon_manual_shipment_items.length > 0
+          ? [...shipment.flexcon_manual_shipment_items].sort((a, b) => a.sort_order - b.sort_order).map((item) => ({
+            lotNumber: '',
+            originPrefecture: item.origin_prefecture ?? '',
+            productName: item.product_name,
+            quantityCount: item.quantity_count,
+          }))
+          : [{
+            lotNumber: '',
+            originPrefecture: shipment.origin_prefecture ?? '',
+            productName: shipment.product_name ?? '品名未登録',
+            quantityCount: shipment.quantity_count ?? 0,
+          }]
       details.forEach((item) => rows.push([
         new Date(shipment.shipped_at).toLocaleString('ja-JP'),
         shipment.flexcon_destinations?.name ?? '',
@@ -350,11 +414,11 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
         shipment.driver_name ?? '',
         shipment.vehicle_no ?? '',
         shipment.shipment_kind === 'paper_bag' ? '紙袋' : shipment.shipment_kind === 'other_rice' ? '銘柄米以外' : 'QRフレコン',
-        shipment.origin_prefecture ?? '',
-        item?.product_name ?? shipment.product_name ?? '品名未登録',
+        item.originPrefecture,
+        item.productName,
         shipmentProductSummary(shipment),
-        item?.lot_number ?? '',
-        String(shipment.quantity_count ?? shipment.flexcon_shipment_items.length),
+        item.lotNumber,
+        String(item.quantityCount),
         shipment.shipment_kind === 'paper_bag' ? '袋' : '本',
         shipment.purchase_price_per_bale == null ? '' : String(shipment.purchase_price_per_bale),
         shipment.note ?? '',
@@ -369,9 +433,6 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
     anchor.click()
     URL.revokeObjectURL(url)
   }
-
-  const paperBagBrands = shipmentProducts.filter((item) =>
-    item.option_type === (originPrefecture === '青森県' ? 'brand_aomori' : originPrefecture === '岩手県' ? 'brand_iwate' : 'brand'))
 
   return (
     <div>
@@ -466,35 +527,7 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
             {notice?.type === 'error' && <div className="notice error">{notice.text}</div>}
 
             <form className="form-grid" onSubmit={(event) => void saveEdit(event)}>
-              {editing.shipment_kind === 'paper_bag' && (
-                <div className="form-grid two">
-                  <label>県名
-                    <select value={originPrefecture} onChange={(e) => { setOriginPrefecture(e.target.value); setProductName('') }} required>
-                      <option value="">選択してください</option>
-                      <option value="青森県">青森県</option>
-                      <option value="岩手県">岩手県</option>
-                    </select>
-                  </label>
-                  <label>銘柄
-                    <select value={productName} onChange={(e) => setProductName(e.target.value)} required disabled={!originPrefecture}>
-                      <option value="">{originPrefecture ? '選択してください' : '先に県名を選択'}</option>
-                      {paperBagBrands.map((item) => <option key={item.id} value={item.name} disabled={!item.active}>{item.name}{item.active ? '' : '（無効）'}</option>)}
-                    </select>
-                  </label>
-                  <label>紙袋数<input type="number" min="1" step="1" value={quantityCount} onChange={(e) => setQuantityCount(e.target.value)} required /></label>
-                </div>
-              )}
-              {editing.shipment_kind === 'other_rice' && (
-                <div className="form-grid two">
-                  <label>種類
-                    <select value={productName} onChange={(e) => setProductName(e.target.value)} required>
-                      <option value="">選択してください</option>
-                      {shipmentProducts.filter((item) => item.option_type === 'shipment_product').map((item) => <option key={item.id} value={item.name} disabled={!item.active}>{item.name}{item.active ? '' : '（無効）'}</option>)}
-                    </select>
-                  </label>
-                  <label>フレコン本数<input type="number" min="1" step="1" value={quantityCount} onChange={(e) => setQuantityCount(e.target.value)} required /></label>
-                </div>
-              )}
+              {editing.shipment_kind !== 'qr_flexcon' && <ManualShipmentItemsEditor key={editing.id} kind={editing.shipment_kind} items={manualItems} onChange={setManualItems} shipmentProducts={shipmentProducts} disabled={busy} />}
               <div className="form-grid two">
                 <label>出荷日時<input type="datetime-local" value={shippedAt} onChange={(e) => setShippedAt(e.target.value)} required /></label>
                 <label>納品先

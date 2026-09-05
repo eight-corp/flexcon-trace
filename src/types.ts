@@ -44,6 +44,13 @@ export type Shipment = {
   purchase_price_per_bale: number | null
   flexcon_destinations: { name: string } | null
   flexcon_shipment_items: { lot_number: string; product_name: string | null }[]
+  flexcon_manual_shipment_items: {
+    id: string
+    origin_prefecture: string | null
+    product_name: string
+    quantity_count: number
+    sort_order: number
+  }[]
   workers: { worker_name: string } | null
 }
 

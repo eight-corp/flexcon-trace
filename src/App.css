@@ -106,6 +106,21 @@
 .shipment-registration-form .worker-summary { grid-template-columns: 132px minmax(0, 1fr); }
 .shipment-registration-form .worker-summary strong { justify-self: start; }
 .worker-summary-label { display: flex; align-items: center; gap: 7px; color: var(--green-dark) !important; }
+.manual-items-editor { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 6px; background: #f7f9f7; }
+.manual-item-add { display: grid; grid-template-columns: minmax(0, 1fr) 112px auto; align-items: end; gap: 8px; }
+.manual-item-add.paper { grid-template-columns: 104px minmax(0, 1fr) 112px auto; }
+.manual-item-add label { min-width: 0; margin: 0; font-size: 12px; }
+.manual-item-add select, .manual-item-add input { width: 100%; min-width: 0; }
+.manual-item-add .secondary-button { min-height: 42px; padding-inline: 12px; }
+.manual-item-error { color: var(--red); font-size: 13px; font-weight: 700; }
+.manual-item-list { display: grid; gap: 7px; }
+.manual-item-row { min-height: 44px; display: grid; grid-template-columns: minmax(0, 1fr) 118px 42px; align-items: center; gap: 8px; padding: 6px; border: 1px solid #d6ddd8; border-radius: 5px; background: #fff; }
+.manual-item-row.paper { grid-template-columns: 104px minmax(0, 1fr) 118px 42px; }
+.manual-item-row select, .manual-item-row input { width: 100%; min-width: 0; height: 36px; padding: 5px 7px; }
+.manual-item-quantity { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 5px; }
+.manual-item-quantity span { color: var(--muted); font-size: 13px; }
+.manual-item-row .icon-button { width: 38px; height: 38px; }
+.manual-item-empty { padding: 14px 8px; color: var(--muted); font-size: 13px; text-align: center; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
 .shipment-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; }
 .shipment-head strong { display: block; }
@@ -373,6 +388,11 @@
   .shipment-registration-summary { grid-template-columns: 1fr; gap: 9px; min-height: 0; }
   .shipment-form-row, .shipment-registration-form .worker-summary { grid-template-columns: 96px minmax(0, 1fr); gap: 8px; }
   .shipment-form-row > span:first-child { font-size: 13px; }
+  .manual-item-add, .manual-item-add.paper { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .manual-item-add .secondary-button { align-self: end; }
+  .manual-item-row.paper { grid-template-columns: 86px minmax(112px, 1fr) 90px 38px; gap: 5px; }
+  .manual-item-row { grid-template-columns: minmax(112px, 1fr) 90px 38px; gap: 5px; }
+  .manual-items-editor { padding: 9px; overflow-x: auto; }
   .authorization-heading { align-items: stretch; flex-direction: column; }
   .authorization-heading-actions { justify-content: stretch; }
   .authorization-heading-actions > button { flex: 1; }
