@@ -98,7 +98,7 @@ function App() {
 
       <nav className="bottom-nav" aria-label="メインメニュー">
         <button className={tab === 'scan' ? 'active' : ''} onClick={() => setTab('scan')}>
-          <ScanLine size={22} /><span>QR読取</span>
+          <ScanLine size={22} /><span>出荷作業</span>
         </button>
         <button className={tab === 'history' ? 'active' : ''} onClick={() => setTab('history')}>
           <History size={22} /><span>出荷履歴</span>

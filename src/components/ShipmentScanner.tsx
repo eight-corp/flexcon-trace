@@ -114,6 +114,9 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
   const [notice, setNotice] = useState<{ type: 'success' | 'error' | 'warning'; text: string } | null>(null)
   const [busy, setBusy] = useState(false)
   const lastRead = useRef({ value: '', time: 0 })
+  const shipmentBrands = [...new Set(lots
+    .map((lot) => inspectionLotDetails[lot]?.brand.trim())
+    .filter((brand): brand is string => Boolean(brand)))]
 
   useEffect(() => {
     void Promise.all([
@@ -273,7 +276,7 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
 
   return (
     <div>
-      <div className="page-heading"><h1>出荷QR連続読取</h1><p>予定本数を読み取ったら「出荷情報を入力」をタップします。</p></div>
+      <div className="page-heading"><h1>出荷作業</h1><p>予定本数を読み取ったら「出荷情報を入力」をタップします。</p></div>
 
       {notice && <div className={`notice ${notice.type}`}>{notice.text}</div>}
 
@@ -329,8 +332,13 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
         <div className="modal-backdrop" role="presentation">
           <section className="registration-modal" role="dialog" aria-modal="true" aria-labelledby="registration-title">
             <div className="modal-header">
-              <div><h2 id="registration-title">出荷情報を登録</h2><p>{lots.length}本のQRコードを読み取り済み</p></div>
+              <div><h2 id="registration-title">出荷情報を登録</h2></div>
               <button className="icon-button" type="button" title="閉じる" aria-label="登録画面を閉じる" onClick={() => setRegistrationOpen(false)} disabled={busy}><X size={21} /></button>
+            </div>
+
+            <div className="shipment-registration-summary" aria-label="出荷内容">
+              <div><span>出荷本数</span><strong>{lots.length}本</strong></div>
+              <div><span>銘柄</span><strong>{shipmentBrands.length > 0 ? shipmentBrands.join('、') : '銘柄未登録'}</strong></div>
             </div>
 
             {notice?.type === 'error' && <div className="notice error">{notice.text}</div>}
