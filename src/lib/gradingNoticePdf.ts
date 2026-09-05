@@ -24,7 +24,9 @@ type GradingNoticePage = Omit<GradingNoticeRecord, 'quantity' | 'moisture'> & {
 const PAGE_WIDTH = 841.68
 const PAGE_HEIGHT = 595.2
 const CANVAS_SCALE = 2
-const FONT_FAMILY = '"Yu Mincho", "Yu Gothic", "Noto Serif JP", "Noto Sans JP", serif'
+const FONT_SCALE = 1.1
+const TEXT_VERTICAL_OFFSET = 1.25
+const FONT_FAMILY = '"Yu Gothic", "Meiryo", "Noto Sans JP", sans-serif'
 
 function normalized(value: string) {
   return value.trim()
@@ -97,8 +99,8 @@ export function aggregateGradingNoticeRecords(records: GradingNoticeRecord[]): G
   ))
 }
 
-function setFont(context: CanvasRenderingContext2D, size: number, weight = 500) {
-  context.font = `${weight} ${size}px ${FONT_FAMILY}`
+function setFont(context: CanvasRenderingContext2D, size: number, weight = 600) {
+  context.font = `${weight} ${size * FONT_SCALE}px ${FONT_FAMILY}`
 }
 
 function fittedFontSize(context: CanvasRenderingContext2D, text: string, width: number, size: number, minimumSize = 7) {
@@ -121,7 +123,7 @@ function drawTextInBox(
   size: number,
   align: CanvasTextAlign = 'center',
   minimumSize = 7,
-  weight = 500,
+  weight = 600,
 ) {
   const value = text.trim()
   if (!value) return
@@ -130,7 +132,7 @@ function drawTextInBox(
   context.textAlign = align
   context.textBaseline = 'middle'
   const textX = align === 'left' ? x + 5 : align === 'right' ? x + width - 5 : x + width / 2
-  context.fillText(value, textX, y + height / 2)
+  context.fillText(value, textX, y + height / 2 + TEXT_VERTICAL_OFFSET)
 }
 
 function japaneseDate(value: string) {
