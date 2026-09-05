@@ -62,6 +62,13 @@ function emptyAddGroupForm(): AddGroupForm {
 function isHighMoisture(value: string | number | null | undefined) {
   return value !== null && value !== undefined && value !== '' && Number(value) > 16
 }
+function isFeedRiceBrand(brand: string) {
+  return brand.trim() === '飼料用玄米'
+}
+function isGradeAllowedForBrand(brand: string, grade: string) {
+  if (!grade) return true
+  return isFeedRiceBrand(brand) ? grade === '合格' : grade !== '合格'
+}
 function isInspectionResultComplete(item: FlexconInspection | PaperBagInspection) {
   const reasonOptional = item.grade === '1等' || item.grade === '合格'
   const quantity = 'quantity_kg' in item ? item.quantity_kg : item.bag_count
@@ -73,6 +80,7 @@ function isInspectionResultComplete(item: FlexconInspection | PaperBagInspection
     && quantity > 0
     && item.moisture !== null
     && Boolean(item.grade?.trim())
+    && isGradeAllowedForBrand(item.brand ?? '', item.grade ?? '')
     && (reasonOptional || Boolean(item.reason?.trim()))
 }
 function displayDate(value: string | null | undefined) { return value ? value.replaceAll('-', '/') : '' }
@@ -222,6 +230,10 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
   ) => {
     if (!selectedAuthorization || busy) return
     const draft = { ...detailDraft(item), ...values }
+    if (!isGradeAllowedForBrand(draft.brand, draft.grade)) {
+      draft.grade = ''
+      draft.reason = ''
+    }
     if (draft.grade === '1等' || draft.grade === '合格') draft.reason = ''
     const fiscalYear = Number(draft.fiscal_year)
     const quantity = Number(draft.quantity)
@@ -298,10 +310,13 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
   const renderInlineResultFields = (detailKind: 'flexcon' | 'paper', item: FlexconInspection | PaperBagInspection) => {
     const draft = detailDraft(item)
     const reasonForbidden = draft.grade === '1等' || draft.grade === '合格'
+    const availableGradeOptions = gradeOptions.filter((option) => (
+      isFeedRiceBrand(draft.brand) ? option.name === '合格' : option.name !== '合格'
+    ))
     const save = (values: Partial<InlineDetailDraft> = {}) => void saveInlineDetail(detailKind, item, values)
     return <>
       <td className="inspection-inline-cell"><input className={isHighMoisture(draft.moisture) ? 'moisture-high' : ''} type="number" min="0" max="100" step="0.1" value={draft.moisture} aria-label="水分" disabled={busy} onChange={(event) => changeDetailDraft(item, { moisture: event.target.value })} onBlur={() => save()} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur() }} /></td>
-      <td className="inspection-inline-cell"><select value={draft.grade} aria-label="等級" disabled={busy} onChange={(event) => { const grade = event.target.value; const reason = grade === '1等' || grade === '合格' ? '' : draft.reason; changeDetailDraft(item, { grade, reason }); save({ grade, reason }) }}><option value="">未選択</option>{gradeOptions.map((option) => <option key={option.id} value={option.name}>{option.name}</option>)}</select></td>
+      <td className="inspection-inline-cell"><select value={draft.grade} aria-label="等級" disabled={busy} onChange={(event) => { const grade = event.target.value; const reason = grade === '1等' || grade === '合格' ? '' : draft.reason; changeDetailDraft(item, { grade, reason }); save({ grade, reason }) }}><option value="">未選択</option>{availableGradeOptions.map((option) => <option key={option.id} value={option.name}>{option.name}</option>)}</select></td>
       <td className="inspection-inline-cell inspection-inline-reason-cell"><select value={reasonForbidden ? '' : draft.reason} aria-label="理由" disabled={busy || reasonForbidden} title={reasonForbidden ? '1等と合格には理由を入力できません' : undefined} onChange={(event) => { const reason = event.target.value; changeDetailDraft(item, { reason }); save({ reason }) }}><option value="">未選択</option>{reasonOptions.map((option) => <option key={option.id} value={option.name}>{option.name}</option>)}</select></td>
     </>
   }
@@ -309,7 +324,7 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
     const draft = detailDraft(item)
     const save = (values: Partial<InlineDetailDraft> = {}) => void saveInlineDetail(detailKind, item, values)
     return <>
-      <td className="inspection-inline-cell inspection-brand-cell"><select value={draft.brand} aria-label="銘柄" disabled={busy} onChange={(event) => { const brand = event.target.value; changeDetailDraft(item, { brand }); save({ brand }) }}><option value="">未選択</option>{brandOptions.map((option) => <option key={option.id} value={option.name}>{option.name}</option>)}</select></td>
+      <td className="inspection-inline-cell inspection-brand-cell"><select value={draft.brand} aria-label="銘柄" disabled={busy} onChange={(event) => { const brand = event.target.value; const grade = isGradeAllowedForBrand(brand, draft.grade) ? draft.grade : ''; const reason = grade ? draft.reason : ''; changeDetailDraft(item, { brand, grade, reason }); save({ brand, grade, reason }) }}><option value="">未選択</option>{brandOptions.map((option) => <option key={option.id} value={option.name}>{option.name}</option>)}</select></td>
       <td className="inspection-inline-cell inspection-quantity-cell"><input type="number" min="1" step="1" value={draft.quantity} aria-label={detailKind === 'flexcon' ? '数量（kg）' : '数量（袋）'} disabled={busy} onChange={(event) => changeDetailDraft(item, { quantity: event.target.value })} onBlur={() => save()} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur() }} /></td>
     </>
   }
