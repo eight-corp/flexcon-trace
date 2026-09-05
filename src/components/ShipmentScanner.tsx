@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
-import { CheckCircle2, Package, Plus, Send, Trash2, UserRound, Wheat, X } from 'lucide-react'
+import { Package, Plus, Send, Trash2, UserRound, Wheat, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { formatPrefectureName } from '../lib/prefecture'
 import type { Destination, InspectionOption, TransportProfile } from '../types'
@@ -376,20 +376,18 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
           <ul className="scan-list">
             {lots.map((lot, index) => (
               <li key={lot}>
-                <span className="sequence">{index + 1}</span><CheckCircle2 size={18} color="#236640" />
-                <div className="lot-information">
-                  <span className={`lot-producer-name ${authorizationNames[authorizationNoFromLot(lot)] ? '' : 'unknown'}`} title="生産者">
-                    {authorizationNames[authorizationNoFromLot(lot)] ?? '委任状未登録'}
-                  </span>
-                  <span className={`lot-origin ${inspectionLotDetails[lot] ? '' : 'unknown'}`} title="産地">
-                    {inspectionLotDetails[lot]?.origin ?? '検査記録未登録'}
-                  </span>
-                  <span className={`lot-brand ${inspectionLotDetails[lot] ? '' : 'unknown'}`} title="銘柄">
-                    {inspectionLotDetails[lot]?.brand ?? '検査記録未登録'}
-                  </span>
-                </div>
-                <span className="lot-number">{lot}</span>
-                <button className="icon-button" type="button" title="削除" aria-label={`${lot}を削除`} onClick={() => setLots((current) => current.filter((item) => item !== lot))}><X size={18} /></button>
+                <span className="sequence">№{index + 1}</span>
+                <span className={`lot-producer-name ${authorizationNames[authorizationNoFromLot(lot)] ? '' : 'unknown'}`} title="名前">
+                  {authorizationNames[authorizationNoFromLot(lot)] ?? '委任状未登録'}
+                </span>
+                <span className={`lot-origin ${inspectionLotDetails[lot] ? '' : 'unknown'}`} title="産地">
+                  {inspectionLotDetails[lot]?.origin ?? '検査記録未登録'}
+                </span>
+                <span className={`lot-brand ${inspectionLotDetails[lot] ? '' : 'unknown'}`} title="銘柄">
+                  {inspectionLotDetails[lot]?.brand ?? '検査記録未登録'}
+                </span>
+                <span className="lot-number" title="ロットナンバー">{lot}</span>
+                <button className="icon-button scan-cancel-button" type="button" title="読み取りを取り消す" aria-label={`№${index + 1}、ロットナンバー${lot}の読み取りを取り消す`} onClick={() => setLots((current) => current.filter((item) => item !== lot))}><X size={18} /></button>
               </li>
             ))}
           </ul>
