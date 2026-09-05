@@ -120,6 +120,7 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
   const [manualShipmentKind, setManualShipmentKind] = useState<ManualShipmentKind | null>(null)
   const [manualCount, setManualCount] = useState('1')
   const [manualProduct, setManualProduct] = useState('')
+  const [manualPrefecture, setManualPrefecture] = useState('')
   const [manualLot, setManualLot] = useState('')
   const [notice, setNotice] = useState<{ type: 'success' | 'error' | 'warning'; text: string } | null>(null)
   const [busy, setBusy] = useState(false)
@@ -136,7 +137,7 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
       supabase.from('flexcon_transport_profiles').select('*').eq('active', true).order('company_name'),
       supabase.from('flexcon_authorizations').select('id, authorization_no, full_name, prefecture, municipality'),
       supabase.from('flexcon_inspection_flexcons').select('authorization_id, lot_number, brand'),
-      supabase.from('flexcon_inspection_options').select('*').eq('option_type', 'shipment_product').eq('active', true).order('sort_order').order('name'),
+      supabase.from('flexcon_inspection_options').select('*').in('option_type', ['shipment_product', 'brand_aomori', 'brand_iwate']).eq('active', true).order('sort_order').order('name'),
     ]).then(([destinationResult, transportResult, authorizationResult, flexconResult, productResult]) => {
       if (destinationResult.error) setNotice({ type: 'error', text: '納品先を取得できません。SupabaseのSQL設定を確認してください。' })
       else setDestinations((destinationResult.data ?? []) as Destination[])
@@ -264,6 +265,9 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
     if (manualShipmentKind === 'other_rice' && !manualProduct) {
       return setNotice({ type: 'error', text: '銘柄米以外の種類を選択してください。' })
     }
+    if (manualShipmentKind === 'paper_bag' && (!manualPrefecture || !manualProduct)) {
+      return setNotice({ type: 'error', text: '県名と銘柄を選択してください。' })
+    }
     if (!manualShipmentKind && lots.length === 0) {
       return setNotice({ type: 'error', text: 'ロット番号を1本以上読み取ってください。' })
     }
@@ -285,7 +289,8 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
       ? await supabase.rpc('flexcon_register_manual_shipment', {
         ...commonValues,
         p_shipment_kind: manualShipmentKind,
-        p_product_name: manualShipmentKind === 'paper_bag' ? '紙袋' : manualProduct,
+        p_origin_prefecture: manualShipmentKind === 'paper_bag' ? manualPrefecture : null,
+        p_product_name: manualProduct,
         p_quantity_count: quantity,
       })
       : await supabase.rpc('flexcon_register_shipment', {
@@ -308,6 +313,7 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
       setManualShipmentKind(null)
       setManualCount('1')
       setManualProduct('')
+      setManualPrefecture('')
       onRegistered()
     }
     setBusy(false)
@@ -326,13 +332,14 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
   }
 
   const openManualRegistration = (kind: ManualShipmentKind) => {
-    if (kind === 'other_rice' && shipmentProducts.length === 0) {
+    if (kind === 'other_rice' && shipmentProducts.filter((item) => item.option_type === 'shipment_product').length === 0) {
       setNotice({ type: 'error', text: '銘柄米以外の種類が登録されていません。追加SQLを実行してマスタを確認してください。' })
       return
     }
     setManualShipmentKind(kind)
     setManualCount('1')
     setManualProduct('')
+    setManualPrefecture('')
     setScannerActive(false)
     setRegistrationOpen(true)
   }
@@ -340,10 +347,12 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
   const registrationCount = manualShipmentKind ? Number(manualCount) || 0 : lots.length
   const registrationUnit = manualShipmentKind === 'paper_bag' ? '袋' : '本'
   const registrationProduct = manualShipmentKind === 'paper_bag'
-    ? '紙袋'
+    ? manualProduct || '銘柄未選択'
     : manualShipmentKind === 'other_rice'
-      ? shipmentProducts.find((item) => item.name === manualProduct)?.name || '種類未選択'
+      ? shipmentProducts.find((item) => item.option_type === 'shipment_product' && item.name === manualProduct)?.name || '種類未選択'
       : shipmentBrandCounts.map(([brand, count]) => `${brand} ${count}本`).join('、')
+  const paperBagBrands = shipmentProducts.filter((item) =>
+    item.option_type === (manualPrefecture === '青森県' ? 'brand_aomori' : manualPrefecture === '岩手県' ? 'brand_iwate' : 'brand'))
 
   return (
     <div>
@@ -421,14 +430,29 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
 
             <form className="shipment-registration-form" onSubmit={(event) => void registerShipment(event)}>
               {manualShipmentKind === 'paper_bag' && (
-                <label className="shipment-form-row"><span>紙袋数</span><input type="number" min="1" step="1" value={manualCount} onChange={(e) => setManualCount(e.target.value)} required /></label>
+                <>
+                  <label className="shipment-form-row"><span>県名</span>
+                    <select value={manualPrefecture} onChange={(e) => { setManualPrefecture(e.target.value); setManualProduct('') }} required>
+                      <option value="">選択してください</option>
+                      <option value="青森県">青森県</option>
+                      <option value="岩手県">岩手県</option>
+                    </select>
+                  </label>
+                  <label className="shipment-form-row"><span>銘柄</span>
+                    <select value={manualProduct} onChange={(e) => setManualProduct(e.target.value)} required disabled={!manualPrefecture}>
+                      <option value="">{manualPrefecture ? '選択してください' : '先に県名を選択'}</option>
+                      {paperBagBrands.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}
+                    </select>
+                  </label>
+                  <label className="shipment-form-row"><span>紙袋数</span><input type="number" min="1" step="1" value={manualCount} onChange={(e) => setManualCount(e.target.value)} required /></label>
+                </>
               )}
               {manualShipmentKind === 'other_rice' && (
                 <>
                   <label className="shipment-form-row"><span>種類</span>
                     <select value={manualProduct} onChange={(e) => setManualProduct(e.target.value)} required>
                       <option value="">選択してください</option>
-                      {shipmentProducts.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}
+                      {shipmentProducts.filter((item) => item.option_type === 'shipment_product').map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}
                     </select>
                   </label>
                   <label className="shipment-form-row"><span>フレコン本数</span><input type="number" min="1" step="1" value={manualCount} onChange={(e) => setManualCount(e.target.value)} required /></label>

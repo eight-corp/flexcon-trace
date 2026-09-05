@@ -38,11 +38,12 @@ export type Shipment = {
   vehicle_no: string | null
   note: string | null
   shipment_kind: 'qr_flexcon' | 'paper_bag' | 'other_rice'
+  origin_prefecture: string | null
   product_name: string | null
   quantity_count: number | null
   purchase_price_per_bale: number | null
   flexcon_destinations: { name: string } | null
-  flexcon_shipment_items: { lot_number: string }[]
+  flexcon_shipment_items: { lot_number: string; product_name: string | null }[]
   workers: { worker_name: string } | null
 }
 

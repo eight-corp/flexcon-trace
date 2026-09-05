@@ -109,6 +109,8 @@
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
 .shipment-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; }
 .shipment-head strong { display: block; }
+.shipment-title-line { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.shipment-title-line > span { color: var(--green-dark); font-weight: 700; }
 .shipment-head small { display: block; color: var(--muted); }
 .shipment-side { display: grid; justify-items: end; gap: 8px; }
 .shipment-admin-actions { display: flex; gap: 2px; }
