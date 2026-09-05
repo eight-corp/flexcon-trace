@@ -37,6 +37,10 @@ export type Shipment = {
   driver_name: string | null
   vehicle_no: string | null
   note: string | null
+  shipment_kind: 'qr_flexcon' | 'paper_bag' | 'other_rice'
+  product_name: string | null
+  quantity_count: number | null
+  purchase_price_per_bale: number | null
   flexcon_destinations: { name: string } | null
   flexcon_shipment_items: { lot_number: string }[]
   workers: { worker_name: string } | null
@@ -136,7 +140,7 @@ export type InspectionWeight = {
 
 export type InspectionOption = {
   id: string
-  option_type: 'location' | 'brand' | 'brand_aomori' | 'brand_iwate' | 'grade' | 'grade_reason'
+  option_type: 'location' | 'brand' | 'brand_aomori' | 'brand_iwate' | 'grade' | 'grade_reason' | 'shipment_product'
   name: string
   active: boolean
   sort_order: number

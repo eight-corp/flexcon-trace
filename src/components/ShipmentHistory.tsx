@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Building2, Download, Pencil, Save, Search, Trash2, Truck, UserRound, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import type { Destination, Shipment, TransportProfile } from '../types'
+import type { Destination, InspectionOption, Shipment, TransportProfile } from '../types'
 
 type Props = {
   refreshKey: number
@@ -21,6 +21,7 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
   const [shipments, setShipments] = useState<Shipment[]>([])
   const [destinations, setDestinations] = useState<Destination[]>([])
   const [transportProfiles, setTransportProfiles] = useState<TransportProfile[]>([])
+  const [shipmentProducts, setShipmentProducts] = useState<InspectionOption[]>([])
   const [search, setSearch] = useState('')
   const [notice, setNotice] = useState<Notice>(null)
   const [localVersion, setLocalVersion] = useState(0)
@@ -31,10 +32,13 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
   const [driverName, setDriverName] = useState('')
   const [vehicleNo, setVehicleNo] = useState('')
   const [note, setNote] = useState('')
+  const [purchasePrice, setPurchasePrice] = useState('')
+  const [productName, setProductName] = useState('')
+  const [quantityCount, setQuantityCount] = useState('')
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
-    void supabase.from('flexcon_shipments').select('id, destination_id, transport_profile_id, shipped_at, carrier_name, driver_name, vehicle_no, note, flexcon_destinations(name), flexcon_shipment_items(lot_number), workers(worker_name)').order('shipped_at', { ascending: false }).limit(200)
+    void supabase.from('flexcon_shipments').select('id, destination_id, transport_profile_id, shipped_at, carrier_name, driver_name, vehicle_no, note, shipment_kind, product_name, quantity_count, purchase_price_per_bale, flexcon_destinations(name), flexcon_shipment_items(lot_number), workers(worker_name)').order('shipped_at', { ascending: false }).limit(200)
       .then(({ data, error }) => {
         if (error) setNotice({ type: 'error', text: error.message })
         else setShipments((data ?? []) as unknown as Shipment[])
@@ -46,11 +50,13 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
     void Promise.all([
       supabase.from('flexcon_destinations').select('*').order('active', { ascending: false }).order('name'),
       supabase.from('flexcon_transport_profiles').select('*').order('active', { ascending: false }).order('company_name'),
-    ]).then(([destinationResult, transportResult]) => {
+      supabase.from('flexcon_inspection_options').select('*').eq('option_type', 'shipment_product').order('sort_order').order('name'),
+    ]).then(([destinationResult, transportResult, productResult]) => {
       if (destinationResult.error) setNotice({ type: 'error', text: destinationResult.error.message })
       else setDestinations((destinationResult.data ?? []) as Destination[])
       if (transportResult.error) setNotice({ type: 'error', text: transportResult.error.message })
       else setTransportProfiles((transportResult.data ?? []) as TransportProfile[])
+      if (!productResult.error) setShipmentProducts((productResult.data ?? []) as InspectionOption[])
     })
   }, [isAdmin])
 
@@ -62,6 +68,7 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
       || item.carrier_name?.toLowerCase().includes(term)
       || item.driver_name?.toLowerCase().includes(term)
       || item.vehicle_no?.toLowerCase().includes(term)
+      || item.product_name?.toLowerCase().includes(term)
       || item.workers?.worker_name.toLowerCase().includes(term)
       || item.flexcon_shipment_items.some((detail) => detail.lot_number.includes(term)))
   }, [search, shipments])
@@ -78,6 +85,9 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
     setDriverName(shipment.driver_name ?? '')
     setVehicleNo(shipment.vehicle_no ?? '')
     setNote(shipment.note ?? '')
+    setPurchasePrice(shipment.purchase_price_per_bale == null ? '' : String(shipment.purchase_price_per_bale))
+    setProductName(shipment.product_name ?? '')
+    setQuantityCount(String(shipment.quantity_count ?? shipment.flexcon_shipment_items.length))
     setNotice(null)
   }
 
@@ -93,6 +103,9 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
       p_shipped_at: new Date(shippedAt).toISOString(),
       p_driver_name: driverName.trim(),
       p_vehicle_no: vehicleNo.trim(),
+      p_product_name: productName || null,
+      p_quantity_count: Number(quantityCount),
+      p_purchase_price_per_bale: purchasePrice.trim() === '' ? null : Number(purchasePrice),
       p_note: note.trim() || null,
     })
     if (error) {
@@ -108,7 +121,10 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
   const deleteShipment = async (shipment: Shipment) => {
     if (!isAdmin) return
     const destination = shipment.flexcon_destinations?.name ?? '納品先不明'
-    const message = `${destination}への${shipment.flexcon_shipment_items.length}本の出荷履歴を削除しますか？\n対象のQRコードは未出荷状態へ戻ります。`
+    const count = shipment.quantity_count ?? shipment.flexcon_shipment_items.length
+    const unit = shipment.shipment_kind === 'paper_bag' ? '袋' : '本'
+    const qrMessage = shipment.shipment_kind === 'qr_flexcon' ? '\n対象のQRコードは未出荷状態へ戻ります。' : ''
+    const message = `${destination}への${count}${unit}の出荷履歴を削除しますか？${qrMessage}`
     if (!window.confirm(message)) return
     setBusy(true)
     const { error } = await supabase.rpc('flexcon_delete_shipment', {
@@ -118,25 +134,34 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
     if (error) {
       setNotice({ type: 'error', text: error.message })
     } else {
-      setNotice({ type: 'success', text: '出荷履歴を削除し、対象QRを未出荷へ戻しました。' })
+      setNotice({ type: 'success', text: shipment.shipment_kind === 'qr_flexcon' ? '出荷履歴を削除し、対象QRを未出荷へ戻しました。' : '出荷履歴を削除しました。' })
       setLocalVersion((value) => value + 1)
     }
     setBusy(false)
   }
 
   const exportCsv = () => {
-    const rows = [['出荷日時', '納品先', '担当者', '運送会社名', 'ドライバー名', '車両番号', 'QRコード', 'フレコン本数', '備考']]
-    filtered.forEach((shipment) => shipment.flexcon_shipment_items.forEach((item) => rows.push([
-      new Date(shipment.shipped_at).toLocaleString('ja-JP'),
-      shipment.flexcon_destinations?.name ?? '',
-      shipment.workers?.worker_name ?? '',
-      shipment.carrier_name ?? '',
-      shipment.driver_name ?? '',
-      shipment.vehicle_no ?? '',
-      item.lot_number,
-      String(shipment.flexcon_shipment_items.length),
-      shipment.note ?? '',
-    ])))
+    const rows = [['出荷日時', '納品先', '担当者', '運送会社名', 'ドライバー名', '車両番号', '出荷区分', '品名', 'QRコード', '数量', '単位', '仕入値（1俵当たり）', '備考']]
+    filtered.forEach((shipment) => {
+      const details: Array<{ lot_number: string } | null> = shipment.flexcon_shipment_items.length > 0
+        ? shipment.flexcon_shipment_items
+        : [null]
+      details.forEach((item) => rows.push([
+        new Date(shipment.shipped_at).toLocaleString('ja-JP'),
+        shipment.flexcon_destinations?.name ?? '',
+        shipment.workers?.worker_name ?? '',
+        shipment.carrier_name ?? '',
+        shipment.driver_name ?? '',
+        shipment.vehicle_no ?? '',
+        shipment.shipment_kind === 'paper_bag' ? '紙袋' : shipment.shipment_kind === 'other_rice' ? '銘柄米以外' : 'QRフレコン',
+        shipment.product_name ?? '',
+        item?.lot_number ?? '',
+        String(shipment.quantity_count ?? shipment.flexcon_shipment_items.length),
+        shipment.shipment_kind === 'paper_bag' ? '袋' : '本',
+        shipment.purchase_price_per_bale == null ? '' : String(shipment.purchase_price_per_bale),
+        shipment.note ?? '',
+      ]))
+    })
     const quote = (value: string) => `"${value.replaceAll('"', '""')}"`
     const csv = '\uFEFF' + rows.map((row) => row.map(quote).join(',')).join('\r\n')
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
@@ -165,9 +190,11 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
                 <small><UserRound size={13} className="inline-icon" />担当：{shipment.workers?.worker_name ?? '不明'}</small>
                 {shipment.carrier_name && <small><Building2 size={13} className="inline-icon" />{shipment.carrier_name} / {shipment.driver_name ?? 'ドライバー不明'}</small>}
                 {shipment.vehicle_no && <small><Truck size={13} className="inline-icon" />{shipment.vehicle_no}</small>}
+                {shipment.product_name && <small>品名：{shipment.product_name}</small>}
+                {shipment.purchase_price_per_bale != null && <small>仕入値：{shipment.purchase_price_per_bale.toLocaleString('ja-JP')}円／俵</small>}
               </div>
               <div className="shipment-side">
-                <span className="shipment-count">{shipment.flexcon_shipment_items.length}本</span>
+                <span className="shipment-count">{shipment.quantity_count ?? shipment.flexcon_shipment_items.length}{shipment.shipment_kind === 'paper_bag' ? '袋' : '本'}</span>
                 {isAdmin && (
                   <div className="shipment-admin-actions">
                     <button className="icon-button" type="button" title="出荷履歴を編集" aria-label="出荷履歴を編集" onClick={() => beginEdit(shipment)} disabled={busy}><Pencil size={18} /></button>
@@ -176,7 +203,7 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
                 )}
               </div>
             </div>
-            <div className="lot-tags">{shipment.flexcon_shipment_items.map((item) => <span className="lot-tag" key={item.lot_number}>{item.lot_number}</span>)}</div>
+            {shipment.flexcon_shipment_items.length > 0 && <div className="lot-tags">{shipment.flexcon_shipment_items.map((item) => <span className="lot-tag" key={item.lot_number}>{item.lot_number}</span>)}</div>}
             {shipment.note && <p className="shipment-note">{shipment.note}</p>}
           </article>
         ))}
@@ -187,13 +214,27 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
         <div className="modal-backdrop" role="presentation">
           <section className="registration-modal" role="dialog" aria-modal="true" aria-labelledby="history-edit-title">
             <div className="modal-header">
-              <div><h2 id="history-edit-title">出荷履歴を編集</h2><p>{editing.flexcon_shipment_items.length}本の出荷情報</p></div>
+              <div><h2 id="history-edit-title">出荷履歴を編集</h2><p>{editing.quantity_count ?? editing.flexcon_shipment_items.length}{editing.shipment_kind === 'paper_bag' ? '袋' : '本'}の出荷情報</p></div>
               <button className="icon-button" type="button" title="閉じる" aria-label="編集画面を閉じる" onClick={() => setEditing(null)} disabled={busy}><X size={21} /></button>
             </div>
 
             {notice?.type === 'error' && <div className="notice error">{notice.text}</div>}
 
             <form className="form-grid" onSubmit={(event) => void saveEdit(event)}>
+              {editing.shipment_kind === 'paper_bag' && (
+                <label>紙袋数<input type="number" min="1" step="1" value={quantityCount} onChange={(e) => setQuantityCount(e.target.value)} required /></label>
+              )}
+              {editing.shipment_kind === 'other_rice' && (
+                <div className="form-grid two">
+                  <label>種類
+                    <select value={productName} onChange={(e) => setProductName(e.target.value)} required>
+                      <option value="">選択してください</option>
+                      {shipmentProducts.map((item) => <option key={item.id} value={item.name} disabled={!item.active}>{item.name}{item.active ? '' : '（無効）'}</option>)}
+                    </select>
+                  </label>
+                  <label>フレコン本数<input type="number" min="1" step="1" value={quantityCount} onChange={(e) => setQuantityCount(e.target.value)} required /></label>
+                </div>
+              )}
               <div className="form-grid two">
                 <label>出荷日時<input type="datetime-local" value={shippedAt} onChange={(e) => setShippedAt(e.target.value)} required /></label>
                 <label>納品先
@@ -216,6 +257,7 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
                   <label>車両番号<input value={vehicleNo} onChange={(e) => setVehicleNo(e.target.value)} required /></label>
                 </div>
               </fieldset>
+              <label>仕入値（任意・1俵当たり）<input type="number" min="0" step="0.01" inputMode="decimal" value={purchasePrice} onChange={(e) => setPurchasePrice(e.target.value)} /></label>
               <label>備考（任意）<textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} /></label>
               <div className="modal-actions">
                 <button className="secondary-button" type="button" onClick={() => setEditing(null)} disabled={busy}>取消</button>

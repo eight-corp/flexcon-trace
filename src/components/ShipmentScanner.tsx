@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
-import { CheckCircle2, Plus, Send, Trash2, UserRound, X } from 'lucide-react'
+import { CheckCircle2, Package, Plus, Send, Trash2, UserRound, Wheat, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import type { Destination, TransportProfile } from '../types'
+import type { Destination, InspectionOption, TransportProfile } from '../types'
 
 const QrScanner = lazy(() => import('./QrScanner').then((module) => ({ default: module.QrScanner })))
 const STORAGE_KEY_PREFIX = 'flexcon-pending-shipment'
@@ -21,7 +21,10 @@ type ShipmentDraft = {
   driverName: string
   vehicleNo: string
   note: string
+  purchasePrice: string
 }
+
+type ManualShipmentKind = 'paper_bag' | 'other_rice'
 
 type InspectionLotDetails = {
   origin: string
@@ -44,6 +47,7 @@ function loadShipmentDraft(storageKey: string): ShipmentDraft {
     driverName: '',
     vehicleNo: '',
     note: '',
+    purchasePrice: '',
   }
 
   try {
@@ -73,6 +77,7 @@ function loadShipmentDraft(storageKey: string): ShipmentDraft {
       driverName: typeof draft.driverName === 'string' ? draft.driverName : '',
       vehicleNo: typeof draft.vehicleNo === 'string' ? draft.vehicleNo : '',
       note: typeof draft.note === 'string' ? draft.note : '',
+      purchasePrice: typeof draft.purchasePrice === 'string' ? draft.purchasePrice : '',
     }
   } catch {
     return emptyDraft
@@ -98,6 +103,7 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
   const [initialDraft] = useState(() => loadShipmentDraft(storageKey))
   const [destinations, setDestinations] = useState<Destination[]>([])
   const [transportProfiles, setTransportProfiles] = useState<TransportProfile[]>([])
+  const [shipmentProducts, setShipmentProducts] = useState<InspectionOption[]>([])
   const [authorizationNames, setAuthorizationNames] = useState<Record<string, string>>({})
   const [inspectionLotDetails, setInspectionLotDetails] = useState<Record<string, InspectionLotDetails>>({})
   const [shippedAt, setShippedAt] = useState(initialDraft.shippedAt)
@@ -106,10 +112,14 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
   const [driverName, setDriverName] = useState(initialDraft.driverName)
   const [vehicleNo, setVehicleNo] = useState(initialDraft.vehicleNo)
   const [note, setNote] = useState(initialDraft.note)
+  const [purchasePrice, setPurchasePrice] = useState(initialDraft.purchasePrice)
   const [plannedCount, setPlannedCount] = useState(initialDraft.plannedCount)
   const [lots, setLots] = useState<string[]>(initialDraft.lots)
   const [scannerActive, setScannerActive] = useState(false)
   const [registrationOpen, setRegistrationOpen] = useState(false)
+  const [manualShipmentKind, setManualShipmentKind] = useState<ManualShipmentKind | null>(null)
+  const [manualCount, setManualCount] = useState('1')
+  const [manualProduct, setManualProduct] = useState('')
   const [manualLot, setManualLot] = useState('')
   const [notice, setNotice] = useState<{ type: 'success' | 'error' | 'warning'; text: string } | null>(null)
   const [busy, setBusy] = useState(false)
@@ -126,7 +136,8 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
       supabase.from('flexcon_transport_profiles').select('*').eq('active', true).order('company_name'),
       supabase.from('flexcon_authorizations').select('id, authorization_no, full_name, prefecture, municipality'),
       supabase.from('flexcon_inspection_flexcons').select('authorization_id, lot_number, brand'),
-    ]).then(([destinationResult, transportResult, authorizationResult, flexconResult]) => {
+      supabase.from('flexcon_inspection_options').select('*').eq('option_type', 'shipment_product').eq('active', true).order('sort_order').order('name'),
+    ]).then(([destinationResult, transportResult, authorizationResult, flexconResult, productResult]) => {
       if (destinationResult.error) setNotice({ type: 'error', text: '納品先を取得できません。SupabaseのSQL設定を確認してください。' })
       else setDestinations((destinationResult.data ?? []) as Destination[])
       if (transportResult.error) setNotice({ type: 'error', text: '運送会社を取得できません。追加SQLを実行してください。' })
@@ -167,6 +178,7 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
         }
         setInspectionLotDetails(details)
       }
+      if (!productResult.error) setShipmentProducts((productResult.data ?? []) as InspectionOption[])
     })
   }, [workerId])
 
@@ -180,9 +192,10 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
       driverName,
       vehicleNo,
       note,
+      purchasePrice,
     }
     localStorage.setItem(storageKey, JSON.stringify(draft))
-  }, [destinationId, driverName, lots, note, plannedCount, shippedAt, storageKey, transportProfileId, vehicleNo])
+  }, [destinationId, driverName, lots, note, plannedCount, purchasePrice, shippedAt, storageKey, transportProfileId, vehicleNo])
 
   const startScanner = useCallback(() => setScannerActive(true), [])
   const stopScanner = useCallback(() => setScannerActive(false), [])
@@ -239,32 +252,62 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
     if (!transportProfileId) return setNotice({ type: 'error', text: '運送会社を選択してください。' })
     if (!driverName.trim()) return setNotice({ type: 'error', text: 'ドライバー名を入力してください。' })
     if (!vehicleNo.trim()) return setNotice({ type: 'error', text: '車両番号を入力してください。' })
-    if (lots.length === 0) return setNotice({ type: 'error', text: 'ロット番号を1本以上読み取ってください。' })
+    const price = purchasePrice.trim() === '' ? null : Number(purchasePrice)
+    if (price !== null && (!Number.isFinite(price) || price < 0)) {
+      return setNotice({ type: 'error', text: '仕入値は0以上の数値で入力してください。' })
+    }
+
+    const quantity = Number(manualCount)
+    if (manualShipmentKind && (!Number.isInteger(quantity) || quantity < 1)) {
+      return setNotice({ type: 'error', text: manualShipmentKind === 'paper_bag' ? '紙袋数を1以上で入力してください。' : 'フレコン本数を1以上で入力してください。' })
+    }
+    if (manualShipmentKind === 'other_rice' && !manualProduct) {
+      return setNotice({ type: 'error', text: '銘柄米以外の種類を選択してください。' })
+    }
+    if (!manualShipmentKind && lots.length === 0) {
+      return setNotice({ type: 'error', text: 'ロット番号を1本以上読み取ってください。' })
+    }
 
     setBusy(true)
     setNotice(null)
-    const registeredCount = lots.length
-    const { error } = await supabase.rpc('flexcon_register_shipment', {
+    const registeredCount = manualShipmentKind ? quantity : lots.length
+    const commonValues = {
       p_worker_id: workerId,
       p_destination_id: destinationId,
       p_transport_profile_id: transportProfileId,
       p_shipped_at: new Date(shippedAt).toISOString(),
       p_driver_name: driverName.trim(),
       p_vehicle_no: vehicleNo.trim(),
-      p_lot_numbers: lots,
+      p_purchase_price_per_bale: price,
       p_note: note.trim() || null,
-    })
+    }
+    const { error } = manualShipmentKind
+      ? await supabase.rpc('flexcon_register_manual_shipment', {
+        ...commonValues,
+        p_shipment_kind: manualShipmentKind,
+        p_product_name: manualShipmentKind === 'paper_bag' ? '紙袋' : manualProduct,
+        p_quantity_count: quantity,
+      })
+      : await supabase.rpc('flexcon_register_shipment', {
+        ...commonValues,
+        p_lot_numbers: lots,
+      })
 
     if (error) {
       setNotice({ type: 'error', text: error.message })
     } else {
-      setLots([])
+      if (!manualShipmentKind) setLots([])
       setDriverName('')
       setVehicleNo('')
       setNote('')
+      setPurchasePrice('')
       setShippedAt(currentLocalDateTime())
       setRegistrationOpen(false)
-      setNotice({ type: 'success', text: `${registeredCount}本の出荷を登録しました。` })
+      const unit = manualShipmentKind === 'paper_bag' ? '袋' : '本'
+      setNotice({ type: 'success', text: `${registeredCount}${unit}の出荷を登録しました。` })
+      setManualShipmentKind(null)
+      setManualCount('1')
+      setManualProduct('')
       onRegistered()
     }
     setBusy(false)
@@ -275,6 +318,32 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
     setLots([])
     setRegistrationOpen(false)
   }
+
+  const openQrRegistration = () => {
+    setManualShipmentKind(null)
+    setScannerActive(false)
+    setRegistrationOpen(true)
+  }
+
+  const openManualRegistration = (kind: ManualShipmentKind) => {
+    if (kind === 'other_rice' && shipmentProducts.length === 0) {
+      setNotice({ type: 'error', text: '銘柄米以外の種類が登録されていません。追加SQLを実行してマスタを確認してください。' })
+      return
+    }
+    setManualShipmentKind(kind)
+    setManualCount('1')
+    setManualProduct('')
+    setScannerActive(false)
+    setRegistrationOpen(true)
+  }
+
+  const registrationCount = manualShipmentKind ? Number(manualCount) || 0 : lots.length
+  const registrationUnit = manualShipmentKind === 'paper_bag' ? '袋' : '本'
+  const registrationProduct = manualShipmentKind === 'paper_bag'
+    ? '紙袋'
+    : manualShipmentKind === 'other_rice'
+      ? shipmentProducts.find((item) => item.name === manualProduct)?.name || '種類未選択'
+      : shipmentBrandCounts.map(([brand, count]) => `${brand} ${count}本`).join('、')
 
   return (
     <div>
@@ -326,9 +395,14 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
 
         <div className="button-row scan-actions">
           <button className="secondary-button" type="button" disabled={lots.length === 0} onClick={clearLots}><Trash2 size={18} />一覧を消去</button>
-          <button className="primary-button" type="button" disabled={lots.length !== plannedCount} onClick={() => { setScannerActive(false); setRegistrationOpen(true) }}><Send size={18} />出荷情報を入力</button>
+          <button className="primary-button" type="button" disabled={lots.length !== plannedCount} onClick={openQrRegistration}><Send size={18} />出荷情報を入力</button>
         </div>
       </section>
+
+      <div className="manual-shipment-actions">
+        <button className="secondary-button" type="button" onClick={() => openManualRegistration('paper_bag')}><Package size={18} />紙袋出荷</button>
+        <button className="secondary-button" type="button" onClick={() => openManualRegistration('other_rice')}><Wheat size={18} />銘柄米以外の出荷</button>
+      </div>
 
       {registrationOpen && (
         <div className="modal-backdrop" role="presentation">
@@ -339,13 +413,27 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
             </div>
 
             <div className="shipment-registration-summary" aria-label="出荷内容">
-              <div><span>出荷本数</span><strong>{lots.length}本</strong></div>
-              <div><span>銘柄</span><strong>{shipmentBrandCounts.map(([brand, count]) => `${brand} ${count}本`).join('、')}</strong></div>
+              <div><span>{manualShipmentKind === 'paper_bag' ? '紙袋数' : '出荷本数'}</span><strong>{registrationCount}{registrationUnit}</strong></div>
+              <div><span>{manualShipmentKind ? '種類' : '銘柄'}</span><strong>{registrationProduct}</strong></div>
             </div>
 
             {notice?.type === 'error' && <div className="notice error">{notice.text}</div>}
 
             <form className="shipment-registration-form" onSubmit={(event) => void registerShipment(event)}>
+              {manualShipmentKind === 'paper_bag' && (
+                <label className="shipment-form-row"><span>紙袋数</span><input type="number" min="1" step="1" value={manualCount} onChange={(e) => setManualCount(e.target.value)} required /></label>
+              )}
+              {manualShipmentKind === 'other_rice' && (
+                <>
+                  <label className="shipment-form-row"><span>種類</span>
+                    <select value={manualProduct} onChange={(e) => setManualProduct(e.target.value)} required>
+                      <option value="">選択してください</option>
+                      {shipmentProducts.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}
+                    </select>
+                  </label>
+                  <label className="shipment-form-row"><span>フレコン本数</span><input type="number" min="1" step="1" value={manualCount} onChange={(e) => setManualCount(e.target.value)} required /></label>
+                </>
+              )}
               <div className="shipment-form-row worker-summary">
                 <span className="worker-summary-label"><UserRound size={18} />担当者</span>
                 <strong>{workerName}</strong>
@@ -365,10 +453,11 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
               </label>
               <label className="shipment-form-row"><span>ドライバー名</span><input value={driverName} onChange={(e) => setDriverName(e.target.value)} required /></label>
               <label className="shipment-form-row"><span>車両番号</span><input value={vehicleNo} onChange={(e) => setVehicleNo(e.target.value)} required placeholder="例：岩手 100 あ 12-34" /></label>
+              <label className="shipment-form-row"><span>仕入値（任意・1俵当たり）</span><input type="number" min="0" step="0.01" inputMode="decimal" value={purchasePrice} onChange={(e) => setPurchasePrice(e.target.value)} /></label>
               <label className="shipment-form-row"><span>備考（任意）</span><textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="申し送りなど" /></label>
               <div className="modal-actions">
                 <button className="secondary-button" type="button" onClick={() => setRegistrationOpen(false)} disabled={busy}>戻る</button>
-                <button className="primary-button" type="submit" disabled={busy}><Send size={18} />{busy ? '登録中...' : `${lots.length}本を登録`}</button>
+                <button className="primary-button" type="submit" disabled={busy}><Send size={18} />{busy ? '登録中...' : `${registrationCount}${registrationUnit}を登録`}</button>
               </div>
             </form>
           </section>

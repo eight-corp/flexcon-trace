@@ -300,6 +300,14 @@ export function InspectionOptionManager({ workerId }: Props) {
           onChanged={changed}
           onError={failed}
         />
+        <OptionSection
+          workerId={workerId}
+          optionType="shipment_product"
+          title="銘柄米以外の種類"
+          items={items.filter((item) => item.option_type === 'shipment_product')}
+          onChanged={changed}
+          onError={failed}
+        />
         <InspectionWeightSection
           key={`${weights.branded_rice}-${weights.feed_rice}`}
           workerId={workerId}
