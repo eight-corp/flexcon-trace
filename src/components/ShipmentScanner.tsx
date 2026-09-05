@@ -135,7 +135,7 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
     void Promise.all([
       supabase.from('flexcon_destinations').select('*').eq('active', true).order('name'),
       supabase.from('flexcon_transport_profiles').select('*').eq('active', true).order('company_name'),
-      supabase.from('flexcon_authorizations').select('id, authorization_no, full_name, prefecture, municipality'),
+      supabase.from('flexcon_authorizations').select('id, authorization_no, full_name, prefecture'),
       supabase.from('flexcon_inspection_flexcons').select('authorization_id, lot_number, brand'),
       supabase.from('flexcon_inspection_options').select('*').in('option_type', ['shipment_product', 'brand_aomori', 'brand_iwate']).eq('active', true).order('sort_order').order('name'),
     ]).then(([destinationResult, transportResult, authorizationResult, flexconResult, productResult]) => {
@@ -160,10 +160,7 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
         for (const flexcon of flexconResult.data ?? []) {
           const authorization = authorizationById[flexcon.authorization_id]
           if (!authorization) continue
-          const origin = [formatPrefectureName(authorization.prefecture), authorization.municipality]
-            .map((value) => String(value ?? '').trim())
-            .filter(Boolean)
-            .join(' ')
+          const origin = formatPrefectureName(authorization.prefecture)
           const detail = {
             origin: origin || '産地未登録',
             brand: String(flexcon.brand ?? '').trim() || '銘柄未登録',
