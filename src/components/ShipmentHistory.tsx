@@ -35,7 +35,7 @@ type ShipmentTableRow = {
 const TABLE_COLUMNS: Array<{ key: TableColumn; label: string }> = [
   { key: 'shippedAt', label: '出荷日時' },
   { key: 'destination', label: '納品先' },
-  { key: 'origin', label: '県名' },
+  { key: 'origin', label: '産地' },
   { key: 'productName', label: '品名' },
   { key: 'quantity', label: '本数' },
   { key: 'carrier', label: '運送会社' },
@@ -61,14 +61,14 @@ function shipmentProductGroups(shipment: Shipment) {
   if (shipment.shipment_kind !== 'qr_flexcon') {
     if (shipment.flexcon_manual_shipment_items.length > 0) {
       return [...shipment.flexcon_manual_shipment_items].sort((a, b) => a.sort_order - b.sort_order).map((item) => ({
-        origin: formatPrefectureName(item.origin_prefecture) || '県名未登録',
+        origin: formatPrefectureName(item.origin_prefecture) || '産地未登録',
         name: item.product_name,
         count: item.quantity_count,
         unit: shipment.shipment_kind === 'paper_bag' ? '袋' : '本',
       }))
     }
     return [{
-      origin: formatPrefectureName(shipment.origin_prefecture) || '県名未登録',
+      origin: formatPrefectureName(shipment.origin_prefecture) || '産地未登録',
       name: shipment.product_name?.trim() || '品名未登録',
       count: shipment.quantity_count ?? 0,
       unit: shipment.shipment_kind === 'paper_bag' ? '袋' : '本',
@@ -77,7 +77,7 @@ function shipmentProductGroups(shipment: Shipment) {
 
   const groups = new Map<string, { origin: string; name: string; count: number; unit: string }>()
   shipment.flexcon_shipment_items.forEach((item) => {
-    const origin = formatPrefectureName(item.origin_prefecture ?? shipment.origin_prefecture) || '県名未登録'
+    const origin = formatPrefectureName(item.origin_prefecture ?? shipment.origin_prefecture) || '産地未登録'
     const name = item.product_name?.trim() || shipment.product_name?.trim() || '品名未登録'
     const key = `${origin}\u001f${name}`
     const current = groups.get(key)
@@ -379,7 +379,7 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
   }
 
   const exportCsv = () => {
-    const rows = [['出荷日時', '納品先', '担当者', '運送会社名', 'ドライバー名', '車両番号', '出荷区分', '県名', '品名', '種類別数量', 'QRコード', '数量', '単位', '仕入値（1俵当たり）', '備考']]
+    const rows = [['出荷日時', '納品先', '担当者', '運送会社名', 'ドライバー名', '車両番号', '出荷区分', '産地', '品名', '種類別数量', 'QRコード', '数量', '単位', '仕入値（1俵当たり）', '備考']]
     filtered.forEach((shipment) => {
       const details = shipment.shipment_kind === 'qr_flexcon'
         ? shipment.flexcon_shipment_items.map((item) => ({

@@ -82,7 +82,7 @@ const REQUIRED_IMPORT_HEADERS = [
   [2, '種子購入伝票'],
   [3, '営農計画書'],
   [5, '住所'],
-  [6, '県名'],
+  [6, '産地'],
   [7, '市町村'],
   [8, '電話番号'],
   [9, '農作物の種類'],
@@ -427,9 +427,11 @@ export function AuthorizationManager({ workerId, onOpenInspections }: Props) {
       const { readSheet } = await import('read-excel-file/browser')
       const rows = await readSheet(file, '委任状一覧')
       const headers = rows[0] ?? []
-      const missingHeader = REQUIRED_IMPORT_HEADERS.find(([index, expected]) => (
-        !normalizedHeader(headers[index]).includes(normalizedHeader(expected))
-      ))
+      const missingHeader = REQUIRED_IMPORT_HEADERS.find(([index, expected]) => {
+        const actual = normalizedHeader(headers[index])
+        const acceptedHeaders = expected === '産地' ? ['産地', '県名'] : [expected]
+        return !acceptedHeaders.some((accepted) => actual.includes(normalizedHeader(accepted)))
+      })
       if (missingHeader) {
         throw new Error(`「委任状一覧」シートの${missingHeader[1]}列を確認できません。指定の検査記録ファイルを選択してください。`)
       }
@@ -593,7 +595,7 @@ export function AuthorizationManager({ workerId, onOpenInspections }: Props) {
               <th>種子購入伝票</th>
               <th>営農計画書</th>
               <th>住所</th>
-              <th>県名</th>
+              <th>産地</th>
               <th>市町村</th>
               <th>電話番号</th>
               <th>農作物の種類</th>
@@ -694,7 +696,7 @@ export function AuthorizationManager({ workerId, onOpenInspections }: Props) {
 
               <label>住所<input value={form.address} onChange={(event) => setText('address', event.target.value)} onBlur={applyAddressPartsToForm} /></label>
               <div className="form-grid two">
-                <label>県名<input value={form.prefecture} onChange={(event) => setText('prefecture', event.target.value)} /></label>
+                <label>産地<input value={form.prefecture} onChange={(event) => setText('prefecture', event.target.value)} /></label>
                 <label>市町村<input value={form.municipality} onChange={(event) => setText('municipality', event.target.value)} /></label>
                 <label>電話番号<input type="tel" value={form.phone} onChange={(event) => setText('phone', event.target.value)} /></label>
                 <label>農作物の種類<input value={form.crop_type} onChange={(event) => setText('crop_type', event.target.value)} /></label>
