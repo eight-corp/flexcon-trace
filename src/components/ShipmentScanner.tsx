@@ -262,7 +262,7 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
     }
     if (manualShipmentKind && manualItems.some((item) =>
       !item.productName
-      || (manualShipmentKind === 'paper_bag' && !item.originPrefecture)
+      || !item.originPrefecture
       || !Number.isInteger(Number(item.quantityCount))
       || Number(item.quantityCount) < 1)) {
       return setNotice({ type: 'error', text: '明細の種類と本数を確認してください。' })
@@ -291,7 +291,7 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
         ...commonValues,
         p_shipment_kind: manualShipmentKind,
         p_items: manualItems.map((item) => ({
-          origin_prefecture: manualShipmentKind === 'paper_bag' ? item.originPrefecture : null,
+          origin_prefecture: item.originPrefecture,
           product_name: item.productName,
           quantity_count: Number(item.quantityCount),
         })),

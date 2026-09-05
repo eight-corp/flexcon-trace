@@ -148,7 +148,7 @@
 .view-mode-switch button:last-child { border-right: 0; }
 .view-mode-switch button.active { background: var(--green); color: #fff; }
 .shipment-table-wrap { position: relative; width: 100%; max-height: calc(100vh - 190px); min-height: 260px; overflow: auto; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
-.shipment-table { width: 100%; min-width: 1320px; border-collapse: separate; border-spacing: 0; font-size: 13px; }
+.shipment-table { width: 100%; min-width: 1420px; border-collapse: separate; border-spacing: 0; font-size: 13px; }
 .shipment-table th, .shipment-table td { padding: 8px 10px; border-right: 1px solid #e2e6e3; border-bottom: 1px solid #e2e6e3; text-align: left; vertical-align: middle; white-space: nowrap; }
 .shipment-table th { position: sticky; top: 0; z-index: 4; padding: 0; background: #edf4ef; color: #274532; }
 .shipment-table tbody tr:nth-child(even) { background: #f8faf8; }
