@@ -62,7 +62,7 @@ function App() {
         </button>
       </header>
 
-      <main className={`app-main ${tab === 'authorizations' || tab === 'inspections' ? 'app-main-wide' : ''}`}>
+      <main className={`app-main ${tab === 'history' || tab === 'authorizations' || tab === 'inspections' ? 'app-main-wide' : ''}`}>
         {tab === 'scan' && (
           <ShipmentScanner
             key={worker.worker_id}
