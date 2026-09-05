@@ -127,7 +127,6 @@ async function drawCertificateOverlay(
     drawCenteredText(context, prefectureLabel(authorization.prefecture), 188, 205, 78, 9)
     drawCenteredText(context, displayedBrand(authorization, flexcon), 188, 253, 78, 12, 7)
   }
-  drawCenteredText(context, flexcon.grade, 306, 236, 89, 15, 8)
   drawCenteredText(context, flexcon.quantityKg.toLocaleString('ja-JP'), 395, 226, 65, 16, 10)
   drawCenteredText(context, flexcon.reason, 460, 236, 52, 9, 6)
   drawCenteredText(context, japaneseDate(flexcon.inspectionDate), 266, 310, 103, 9.5)
