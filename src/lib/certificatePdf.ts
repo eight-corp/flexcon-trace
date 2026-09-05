@@ -30,12 +30,11 @@ const DESIGN_HEIGHT = 420.72
 const PAGE_WIDTH = 210 * 72 / 25.4
 const PAGE_HEIGHT = 148 * 72 / 25.4
 const CANVAS_SCALE = 4
-const FONT_SCALE = 1.1
 const TEXT_VERTICAL_OFFSET = 1.5
-const FONT_FAMILY = '"Yu Gothic", "Meiryo", "Noto Sans JP", sans-serif'
+const FONT_FAMILY = '"Yu Mincho", "Yu Gothic", "Noto Serif JP", "Noto Sans JP", serif'
 
 function setFont(context: CanvasRenderingContext2D, size: number, weight = 700) {
-  context.font = `${weight} ${size * FONT_SCALE * CANVAS_SCALE}px ${FONT_FAMILY}`
+  context.font = `${weight} ${size * CANVAS_SCALE}px ${FONT_FAMILY}`
 }
 
 function drawFittedText(
