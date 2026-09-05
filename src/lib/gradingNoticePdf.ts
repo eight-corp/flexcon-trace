@@ -5,6 +5,7 @@ export type GradingNoticeRecord = {
   fullName: string
   prefecture: string
   municipality: string
+  feedRiceVariety: string
   inspectionDate: string
   inspectionLocation: string
   fiscalYear: number
@@ -59,6 +60,7 @@ export function aggregateGradingNoticeRecords(records: GradingNoticeRecord[]): G
       fullName: normalized(source.fullName),
       prefecture: normalized(source.prefecture),
       municipality: normalized(source.municipality),
+      feedRiceVariety: normalized(source.feedRiceVariety),
       inspectionLocation: normalized(source.inspectionLocation),
       brand: normalized(source.brand),
       grade: normalized(source.grade),
@@ -177,6 +179,9 @@ function drawGradingNoticeOverlay(page: GradingNoticePage) {
   drawTextInBox(context, quantityUnit, 315, 367.5, 27, 20, 14, 'right', 10)
   drawTextInBox(context, moisture, 346.8, 279.6, 108, 92, 23, 'center', 10)
   drawTextInBox(context, page.reason, 454.8, 279.6, 163.8, 111, 18, 'center', 8)
+  if (isFeedRice(page.brand)) {
+    drawTextInBox(context, page.feedRiceVariety, 672.5, 293.8, 126, 14.4, 8.5, 'left', 6)
+  }
 
   drawTextInBox(context, japaneseDate(page.inspectionDate), 97.8, 423.6, 162.6, 13.5, 10, 'left', 8)
   drawTextInBox(context, page.fullName, 97.8, 450.6, 162.6, 13.5, 10, 'right', 7)

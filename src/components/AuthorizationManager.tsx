@@ -590,8 +590,8 @@ export function AuthorizationManager({ workerId, onOpenInspections }: Props) {
             <tr>
               <th>№</th>
               <th>氏名</th>
-              <th>種子購入伝票フラグ</th>
-              <th>営農計画書フラグ</th>
+              <th>種子購入伝票</th>
+              <th>営農計画書</th>
               <th>住所</th>
               <th>県名</th>
               <th>市町村</th>
@@ -610,14 +610,14 @@ export function AuthorizationManager({ workerId, onOpenInspections }: Props) {
                 <td className="flag-cell">
                   <ToggleSwitch
                     checked={record.seed_purchase_slip}
-                    label={`${record.authorization_no} 種子購入伝票フラグ`}
+                    label={`${record.authorization_no} 種子購入伝票`}
                     onChange={() => void toggleInlineFlag(record, 'seed_purchase_slip')}
                   />
                 </td>
                 <td className="flag-cell">
                   <ToggleSwitch
                     checked={record.farming_plan}
-                    label={`${record.authorization_no} 営農計画書フラグ`}
+                    label={`${record.authorization_no} 営農計画書`}
                     onChange={() => void toggleInlineFlag(record, 'farming_plan')}
                   />
                 </td>
@@ -637,14 +637,14 @@ export function AuthorizationManager({ workerId, onOpenInspections }: Props) {
               <td className="flag-cell">
                 <ToggleSwitch
                   checked={rowForm.seed_purchase_slip}
-                  label="新規委任状 種子購入伝票フラグ"
+                  label="新規委任状 種子購入伝票"
                   onChange={() => setRowForm((current) => ({ ...current, seed_purchase_slip: !current.seed_purchase_slip }))}
                 />
               </td>
               <td className="flag-cell">
                 <ToggleSwitch
                   checked={rowForm.farming_plan}
-                  label="新規委任状 営農計画書フラグ"
+                  label="新規委任状 営農計画書"
                   onChange={() => setRowForm((current) => ({ ...current, farming_plan: !current.farming_plan }))}
                 />
               </td>
@@ -688,8 +688,8 @@ export function AuthorizationManager({ workerId, onOpenInspections }: Props) {
               </div>
 
               <div className="authorization-flags">
-                <div className="switch-field"><span>種子購入伝票フラグ</span><ToggleSwitch checked={form.seed_purchase_slip} label="種子購入伝票フラグ" onChange={() => setForm((current) => ({ ...current, seed_purchase_slip: !current.seed_purchase_slip }))} /></div>
-                <div className="switch-field"><span>営農計画書フラグ</span><ToggleSwitch checked={form.farming_plan} label="営農計画書フラグ" onChange={() => setForm((current) => ({ ...current, farming_plan: !current.farming_plan }))} /></div>
+                <div className="switch-field"><span>種子購入伝票</span><ToggleSwitch checked={form.seed_purchase_slip} label="種子購入伝票" onChange={() => setForm((current) => ({ ...current, seed_purchase_slip: !current.seed_purchase_slip }))} /></div>
+                <div className="switch-field"><span>営農計画書</span><ToggleSwitch checked={form.farming_plan} label="営農計画書" onChange={() => setForm((current) => ({ ...current, farming_plan: !current.farming_plan }))} /></div>
               </div>
 
               <label>住所<input value={form.address} onChange={(event) => setText('address', event.target.value)} onBlur={applyAddressPartsToForm} /></label>
