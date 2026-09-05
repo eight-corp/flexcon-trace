@@ -87,6 +87,10 @@ function cropType(brand: string) {
   return brand.includes('飼料用') ? '飼料用玄米' : '水稲うるち玄米'
 }
 
+function isFeedRice(brand: string) {
+  return brand.trim() === '飼料用玄米'
+}
+
 function displayedBrand(authorization: CertificateAuthorization, flexcon: CertificateFlexcon) {
   if (flexcon.brand === '飼料用玄米' && authorization.feedRiceVariety.trim()) {
     return authorization.feedRiceVariety.trim()
@@ -119,8 +123,10 @@ async function drawCertificateOverlay(
 
   drawCenteredText(context, cropType(flexcon.brand), 83, 238, 77, 11.5, 8)
   drawCenteredText(context, String(flexcon.fiscalYear), 160, 232, 28, 18, 12)
-  drawCenteredText(context, prefectureLabel(authorization.prefecture), 188, 205, 78, 9)
-  drawCenteredText(context, displayedBrand(authorization, flexcon), 188, 253, 78, 12, 7)
+  if (!isFeedRice(flexcon.brand)) {
+    drawCenteredText(context, prefectureLabel(authorization.prefecture), 188, 205, 78, 9)
+    drawCenteredText(context, displayedBrand(authorization, flexcon), 188, 253, 78, 12, 7)
+  }
   drawCenteredText(context, flexcon.grade, 306, 236, 89, 15, 8)
   drawCenteredText(context, flexcon.quantityKg.toLocaleString('ja-JP'), 395, 226, 65, 16, 10)
   drawCenteredText(context, flexcon.reason, 460, 236, 52, 9, 6)
@@ -157,11 +163,20 @@ function canvasToPng(canvas: HTMLCanvasElement) {
 export async function generateInspectionCertificatePdf({ authorization, flexcons }: CertificateData) {
   if (flexcons.length === 0) throw new Error('PDFに出力するフレコンがありません。')
 
-  const templateResponse = await fetch(`${import.meta.env.BASE_URL}certificate-template.pdf`)
-  if (!templateResponse.ok) throw new Error('検査証明書のひな型を読み込めませんでした。')
-  const templateBytes = await templateResponse.arrayBuffer()
+  const [standardTemplateResponse, feedTemplateResponse] = await Promise.all([
+    fetch(`${import.meta.env.BASE_URL}certificate-template.pdf`),
+    fetch(`${import.meta.env.BASE_URL}certificate-feed-template.pdf`),
+  ])
+  if (!standardTemplateResponse.ok || !feedTemplateResponse.ok) {
+    throw new Error('検査証明書のひな型を読み込めませんでした。')
+  }
+  const [standardTemplateBytes, feedTemplateBytes] = await Promise.all([
+    standardTemplateResponse.arrayBuffer(),
+    feedTemplateResponse.arrayBuffer(),
+  ])
   const pdf = await PDFDocument.create()
-  const [templatePage] = await pdf.embedPdf(templateBytes, [0])
+  const [standardTemplatePage] = await pdf.embedPdf(standardTemplateBytes, [0])
+  const [feedTemplatePage] = await pdf.embedPdf(feedTemplateBytes, [0])
   const viewerPreferences = pdf.catalog.getOrCreateViewerPreferences()
   viewerPreferences.setPrintScaling(PrintScaling.None)
   viewerPreferences.setPickTrayByPDFSize(true)
@@ -170,6 +185,7 @@ export async function generateInspectionCertificatePdf({ authorization, flexcons
     const overlayCanvas = await drawCertificateOverlay(authorization, flexcon)
     const overlay = await pdf.embedPng(await canvasToPng(overlayCanvas))
     const page = pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT])
+    const templatePage = isFeedRice(flexcon.brand) ? feedTemplatePage : standardTemplatePage
     page.drawPage(templatePage, { x: 0, y: 0, width: PAGE_WIDTH, height: PAGE_HEIGHT })
     page.drawImage(overlay, { x: 0, y: 0, width: PAGE_WIDTH, height: PAGE_HEIGHT })
   }
