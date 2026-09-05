@@ -296,9 +296,10 @@
 .inspection-summary-table tbody tr:hover, .inspection-summary-table tbody tr:focus { background: var(--green-soft); outline: none; }
 .inspection-summary-table th:last-child, .inspection-summary-table td:last-child { border-right: 0; }
 .producer-inspection-page { height: 100%; min-height: 0; overflow-y: auto; padding-right: 2px; }
-.producer-inspection-heading { display: grid; grid-template-columns: 42px minmax(0, 1fr); align-items: center; gap: 10px; margin-bottom: 16px; }
+.producer-inspection-heading { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; align-items: center; gap: 10px; margin-bottom: 16px; }
 .producer-inspection-heading h1 { margin: 0; }
 .producer-inspection-heading p { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
+.grading-notice-button { justify-self: end; }
 .inspection-group-add { display: grid; grid-template-columns: 82px minmax(135px, .8fr) minmax(135px, .8fr) minmax(145px, .9fr) minmax(170px, 1.2fr) 104px 104px auto; align-items: end; gap: 10px; border-color: #9dbca7; background: #f6fbf7; }
 .inspection-group-add label { min-width: 0; margin: 0; }
 .inspection-group-add input, .inspection-group-add select { width: 100%; min-width: 0; }
@@ -409,6 +410,7 @@
   .inspection-option-list { max-height: none; }
   .inspection-weight-form { grid-template-columns: 1fr; }
   .producer-inspection-heading { grid-template-columns: 42px minmax(0, 1fr); }
+  .grading-notice-button { grid-column: 1 / -1; width: 100%; justify-self: stretch; }
   .inspection-group-add { grid-template-columns: 1fr; }
   .inspection-detail-section .section-title { align-items: stretch; flex-direction: column; }
   .inspection-detail-section .section-title .button-row > * { flex: 1; }

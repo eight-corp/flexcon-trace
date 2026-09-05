@@ -468,10 +468,10 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
   }
 
   const createGradingNoticePdf = async () => {
-    if (gradingNoticeBusy) return
+    if (!selectedAuthorization || gradingNoticeBusy) return
     const authorizationById = new Map(authorizations.map((authorization) => [authorization.id, authorization]))
-    const completedFlexcons = flexcons.filter((item) => item.inspection_date && item.grade && item.brand)
-    const completedPaperBags = paperBags.filter((item) => item.inspection_date && item.grade && item.brand)
+    const completedFlexcons = flexcons.filter((item) => item.authorization_id === selectedAuthorization.id && item.inspection_date && item.grade && item.brand)
+    const completedPaperBags = paperBags.filter((item) => item.authorization_id === selectedAuthorization.id && item.inspection_date && item.grade && item.brand)
     if (completedFlexcons.length === 0 && completedPaperBags.length === 0) {
       setNotice({ type: 'error', text: '検査日・銘柄・等級が入力された検査記録がありません。' })
       return
@@ -528,7 +528,7 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
       } else {
         const anchor = document.createElement('a')
         anchor.href = url
-        anchor.download = `格付結果通知書_${today().replaceAll('-', '')}.pdf`
+        anchor.download = `格付結果通知書_${selectedAuthorization.authorization_no}_${today().replaceAll('-', '')}.pdf`
         anchor.click()
       }
       window.setTimeout(() => URL.revokeObjectURL(url), 300_000)
@@ -543,7 +543,7 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
 
   if (!selectedAuthorization) {
     return <div className="inspection-page">
-      <div className="page-heading inspection-heading"><div><h1>検査記録</h1><p>生産者ごとの検査数量を集計表示します。</p></div><button className="secondary-button" type="button" onClick={() => void createGradingNoticePdf()} disabled={gradingNoticeBusy}><FileText size={18} />{gradingNoticeBusy ? 'PDF作成中...' : '格付結果通知書'}</button></div>
+      <div className="page-heading inspection-heading"><div><h1>検査記録</h1><p>生産者ごとの検査数量を集計表示します。</p></div></div>
       <div className="search-row"><div className="search-input-wrap"><Search size={18} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="委任状№・氏名・産地・銘柄で検索" /></div></div>
       <div className="inspection-summary-wrap"><table className="inspection-summary-table">
         <thead><tr><th>委任状№</th><th>氏名</th><th>産地</th><th>最終仕入日</th><th>銘柄</th><th>フレコン</th><th>紙袋</th><th>総数量</th></tr></thead>
@@ -559,6 +559,7 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
     <div className="producer-inspection-heading">
       <button className="icon-button" type="button" title="集計へ戻る" aria-label="集計へ戻る" onClick={() => onSelectedAuthorizationChange(null)}><ArrowLeft size={21} /></button>
       <div><h1>{selectedAuthorization.full_name}</h1><p>委任状№ {selectedAuthorization.authorization_no}　{[selectedAuthorization.prefecture, selectedAuthorization.municipality].filter(Boolean).join(' ')}</p></div>
+      <button className="secondary-button grading-notice-button" type="button" onClick={() => void createGradingNoticePdf()} disabled={gradingNoticeBusy}><FileText size={18} />{gradingNoticeBusy ? 'PDF作成中...' : '格付結果通知書'}</button>
     </div>
     <form className="inspection-group-add section-band" onSubmit={(event) => void addInspectionGroup(event)}>
       <label>年度<input type="number" min="1" max="99" value={addGroupForm.fiscal_year} onChange={(event) => setAddGroupForm((current) => ({ ...current, fiscal_year: event.target.value }))} required /></label>
