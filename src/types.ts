@@ -103,6 +103,7 @@ export type FlexconInspection = {
   fiscal_year: number
   purchase_date: string
   inspection_date: string | null
+  inspector_name: string | null
   inspection_location: string | null
   flexcon_no: number
   lot_number: string
@@ -127,6 +128,7 @@ export type PaperBagInspection = {
   fiscal_year: number
   purchase_date: string
   inspection_date: string | null
+  inspector_name: string | null
   inspection_location: string | null
   brand: string | null
   bag_count: number
@@ -148,7 +150,7 @@ export type InspectionWeight = {
 
 export type InspectionOption = {
   id: string
-  option_type: 'location' | 'brand' | 'brand_aomori' | 'brand_iwate' | 'grade' | 'grade_reason' | 'shipment_product'
+  option_type: 'location' | 'inspector' | 'brand' | 'brand_aomori' | 'brand_iwate' | 'grade' | 'grade_reason' | 'shipment_product'
   name: string
   active: boolean
   sort_order: number

@@ -22,6 +22,7 @@ type InlineDetailDraft = {
   fiscal_year: string
   purchase_date: string
   inspection_date: string
+  inspector_name: string
   inspection_location: string
   brand: string
   quantity: string
@@ -75,6 +76,7 @@ function isInspectionResultComplete(item: FlexconInspection | PaperBagInspection
   return item.fiscal_year > 0
     && Boolean(item.purchase_date)
     && Boolean(item.inspection_date)
+    && Boolean(item.inspector_name?.trim())
     && Boolean(item.inspection_location?.trim())
     && Boolean(item.brand?.trim())
     && quantity > 0
@@ -172,6 +174,7 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
   }, [search, summaryRows])
 
   const locationOptions = inspectionOptions.filter((item) => item.option_type === 'location')
+  const inspectorOptions = inspectionOptions.filter((item) => item.option_type === 'inspector')
   const gradeOptions = inspectionOptions.filter((item) => item.option_type === 'grade')
   const reasonOptions = inspectionOptions.filter((item) => item.option_type === 'grade_reason')
   const selectedBrandType = brandTypeForPrefecture(selectedAuthorization?.prefecture ?? null)
@@ -210,6 +213,7 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
     fiscal_year: String(item.fiscal_year),
     purchase_date: item.purchase_date,
     inspection_date: item.inspection_date ?? '',
+    inspector_name: item.inspector_name ?? '',
     inspection_location: item.inspection_location ?? '',
     brand: item.brand ?? '',
     quantity: String('quantity_kg' in item ? item.quantity_kg : item.bag_count),
@@ -250,6 +254,7 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
       p_fiscal_year: fiscalYear,
       p_purchase_date: draft.purchase_date,
       p_inspection_date: draft.inspection_date || null,
+      p_inspector_name: draft.inspector_name.trim() || null,
       p_inspection_location: draft.inspection_location.trim() || null,
       p_brand: draft.brand,
       p_grade: draft.grade.trim() || null,
@@ -268,6 +273,7 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
         fiscal_year: fiscalYear,
         purchase_date: draft.purchase_date,
         inspection_date: draft.inspection_date || null,
+        inspector_name: draft.inspector_name.trim() || null,
         inspection_location: draft.inspection_location.trim() || null,
         brand: draft.brand,
         grade: draft.grade.trim() || null,
@@ -304,6 +310,7 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
       <td className="inspection-inline-cell inspection-year-cell"><input type="number" min="1" max="99" value={draft.fiscal_year} aria-label="年度" disabled={busy} onChange={(event) => changeDetailDraft(item, { fiscal_year: event.target.value })} onBlur={() => save()} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur() }} /></td>
       <td className="inspection-inline-cell inspection-date-cell"><input type="date" value={draft.purchase_date} aria-label="仕入日" disabled={busy} onChange={(event) => { const purchase_date = event.target.value; changeDetailDraft(item, { purchase_date }); save({ purchase_date }) }} /></td>
       <td className="inspection-inline-cell inspection-date-cell"><input type="date" value={draft.inspection_date} aria-label="検査日" disabled={busy} onChange={(event) => { const inspection_date = event.target.value; changeDetailDraft(item, { inspection_date }); save({ inspection_date }) }} /></td>
+      <td className="inspection-inline-cell inspection-inspector-cell"><select value={draft.inspector_name} aria-label="検査員" disabled={busy} onChange={(event) => { const inspector_name = event.target.value; changeDetailDraft(item, { inspector_name }); save({ inspector_name }) }}><option value="">未選択</option>{inspectorOptions.map((option) => <option key={option.id} value={option.name}>{option.name}</option>)}</select></td>
       <td className="inspection-inline-cell inspection-location-cell"><select value={draft.inspection_location} aria-label="検査場所" disabled={busy} onChange={(event) => { const inspection_location = event.target.value; changeDetailDraft(item, { inspection_location }); save({ inspection_location }) }}><option value="">未選択</option>{locationOptions.map((option) => <option key={option.id} value={option.name}>{option.name}</option>)}</select></td>
     </>
   }
@@ -436,6 +443,7 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
           lotNumber: item.lot_number || `${westernYear(item.fiscal_year)}${selectedAuthorization.authorization_no.padStart(4, '0')}${String(item.flexcon_no).padStart(3, '0')}`,
           fiscalYear: item.fiscal_year,
           inspectionDate: item.inspection_date,
+          inspectorName: item.inspector_name ?? '',
           brand: item.brand ?? '',
           quantityKg: item.quantity_kg,
           grade: item.grade ?? '',
@@ -604,17 +612,17 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
     <section className="section-band inspection-detail-section">
       <div className="section-title"><div><h2>紙袋</h2><span>{selectedPaperBags.length}件</span></div></div>
       <div className="inspection-detail-table-wrap"><table className="inspection-detail-table paper-detail-table">
-        <thead><tr><th>年度</th><th>仕入日</th><th>検査日</th><th>検査場所</th><th>銘柄</th><th>数量（袋）</th><th>総重量</th><th>水分</th><th>等級</th><th>理由</th><th></th></tr></thead>
+        <thead><tr><th>年度</th><th>仕入日</th><th>検査日</th><th>検査員</th><th>検査場所</th><th>銘柄</th><th>数量（袋）</th><th>総重量</th><th>水分</th><th>等級</th><th>理由</th><th></th></tr></thead>
         <tbody>{selectedPaperBags.map((item) => <tr className={isInspectionResultComplete(item) ? 'inspection-complete-row' : undefined} key={item.id}>{renderInlineMetadataFields('paper', item)}{renderInlineProductFields('paper', item)}<td>{(Number(detailDraft(item).quantity || 0) * 30).toLocaleString()}kg</td>{renderInlineResultFields('paper', item)}<td className="inspection-row-actions inspection-row-actions-wide"><button className="icon-button" type="button" title="2行に分割" aria-label={`${item.brand ?? ''}の紙袋を2行に分割`} disabled={busy || item.bag_count < 2} onClick={() => beginSplitPaperBags(item)}><TableRowsSplit size={17} /></button><button className="icon-button delete-icon" type="button" title="削除" aria-label={`${item.brand ?? ''}の紙袋を削除`} onClick={() => void deletePaperBags(item)}><Trash2 size={17} /></button></td></tr>)}
-        {selectedPaperBags.length === 0 && <tr><td colSpan={11} className="empty-state">紙袋は登録されていません</td></tr>}</tbody>
+        {selectedPaperBags.length === 0 && <tr><td colSpan={12} className="empty-state">紙袋は登録されていません</td></tr>}</tbody>
       </table></div>
     </section>
     <section className="section-band inspection-detail-section">
       <div className="section-title"><div><h2>フレコン</h2><span>{selectedFlexcons.length}本</span></div><div className="button-row"><span className="certificate-status-key"><span aria-hidden="true" />印刷済み</span><button className="secondary-button certificate-create-button" type="button" disabled={selectedFlexcons.length === 0} onClick={openCertificateDialog}><FileText size={18} />検査証明書作成</button></div></div>
       <div className="inspection-detail-table-wrap"><table className="inspection-detail-table">
-        <thead><tr><th>№</th><th>年度</th><th>仕入日</th><th>検査日</th><th>検査場所</th><th>銘柄</th><th>数量（kg）</th><th>水分</th><th>等級</th><th>理由</th><th></th></tr></thead>
+        <thead><tr><th>№</th><th>年度</th><th>仕入日</th><th>検査日</th><th>検査員</th><th>検査場所</th><th>銘柄</th><th>数量（kg）</th><th>水分</th><th>等級</th><th>理由</th><th></th></tr></thead>
         <tbody>{selectedFlexcons.map((item) => <tr className={[(item.certificate_print_count ?? 0) > 0 ? 'certificate-printed-row' : '', isInspectionResultComplete(item) ? 'inspection-complete-row' : ''].filter(Boolean).join(' ') || undefined} title={(item.certificate_print_count ?? 0) > 0 ? `印刷済み（${item.certificate_print_count}回）` : '未印刷'} key={item.id}><td>{item.flexcon_no}</td>{renderInlineMetadataFields('flexcon', item)}{renderInlineProductFields('flexcon', item)}{renderInlineResultFields('flexcon', item)}<td className="inspection-row-actions"><button className="icon-button delete-icon" type="button" title="削除" aria-label={`№${item.flexcon_no}を削除`} onClick={() => void deleteFlexcon(item)}><Trash2 size={17} /></button></td></tr>)}
-        {selectedFlexcons.length === 0 && <tr><td colSpan={11} className="empty-state">フレコンは登録されていません</td></tr>}</tbody>
+        {selectedFlexcons.length === 0 && <tr><td colSpan={12} className="empty-state">フレコンは登録されていません</td></tr>}</tbody>
       </table></div>
     </section>
     {certificateDialogOpen && <div className="modal-backdrop"><section className="registration-modal certificate-modal" role="dialog" aria-modal="true" aria-labelledby="certificate-dialog-title">

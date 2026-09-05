@@ -306,7 +306,7 @@
 .inspection-detail-section .section-title > div:first-child h2 { margin: 0; }
 .inspection-detail-section .section-title > div:first-child span { color: var(--muted); font-size: 12px; }
 .inspection-detail-table-wrap { max-width: 100%; overflow-x: auto; border: 1px solid var(--line); border-radius: 6px; }
-.inspection-detail-table { width: 100%; min-width: 1460px; border-collapse: collapse; font-size: 13px; }
+.inspection-detail-table { width: 100%; min-width: 1600px; border-collapse: collapse; font-size: 13px; }
 .inspection-detail-table th, .inspection-detail-table td { height: 42px; padding: 8px 10px; border-right: 1px solid #e4e8e5; border-bottom: 1px solid var(--line); text-align: left; }
 .inspection-detail-table th { background: #eef2ee; color: #3d4840; }
 .inspection-detail-table tbody tr:hover { background: var(--green-soft); }
@@ -324,6 +324,7 @@
 .inspection-year-cell { min-width: 76px; width: 76px; }
 .inspection-year-cell input { min-width: 62px; }
 .inspection-date-cell { min-width: 142px; }
+.inspection-inspector-cell { min-width: 140px; }
 .inspection-location-cell { min-width: 150px; }
 .inspection-brand-cell { min-width: 160px; }
 .inspection-quantity-cell { min-width: 108px; }

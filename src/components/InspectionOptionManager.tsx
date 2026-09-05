@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ArrowDown, ArrowUp, Award, Building2, Check, ChevronDown, ListChecks, MapPin, Pencil, Plus, Scale, Tags, Trash2, Truck, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, Award, Building2, Check, ChevronDown, ListChecks, MapPin, Pencil, Plus, Scale, Tags, Trash2, Truck, UserCheck, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import type { InspectionOption, InspectionWeight } from '../types'
 import { DestinationManager } from './DestinationManager'
@@ -101,7 +101,7 @@ function OptionSection({ workerId, optionType, title, items, onChanged, onError 
     else onChanged(`${item.name}の表示順を変更しました。`)
   }
 
-  const Icon = optionType === 'location' ? MapPin : optionType === 'grade' ? Award : optionType === 'grade_reason' ? ListChecks : Tags
+  const Icon = optionType === 'location' ? MapPin : optionType === 'inspector' ? UserCheck : optionType === 'grade' ? Award : optionType === 'grade_reason' ? ListChecks : Tags
 
   return (
     <details className="master-accordion inspection-option-section">
@@ -265,6 +265,14 @@ export function InspectionOptionManager({ workerId }: Props) {
           optionType="location"
           title="検査場所"
           items={items.filter((item) => item.option_type === 'location')}
+          onChanged={changed}
+          onError={failed}
+        />
+        <OptionSection
+          workerId={workerId}
+          optionType="inspector"
+          title="検査員"
+          items={items.filter((item) => item.option_type === 'inspector')}
           onChanged={changed}
           onError={failed}
         />
