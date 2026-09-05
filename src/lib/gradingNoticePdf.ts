@@ -30,6 +30,10 @@ function normalized(value: string) {
   return value.trim()
 }
 
+function isFeedRice(brand: string) {
+  return normalized(brand) === '飼料用玄米'
+}
+
 function groupKey(record: GradingNoticeRecord) {
   return JSON.stringify([
     normalized(record.authorizationNo),
@@ -163,7 +167,9 @@ function drawGradingNoticeOverlay(page: GradingNoticePage) {
   drawTextInBox(context, packaging, 454.8, 201.6, 343.8, 24.6, 10, 'left')
   drawTextInBox(context, requestQuantity, 346.8, 226.2, 108, 25.2, 10)
 
-  drawTextInBox(context, page.brand, 42, 279.6, 109.8, 111, 18, 'center', 9)
+  if (!isFeedRice(page.brand)) {
+    drawTextInBox(context, page.brand, 42, 279.6, 109.8, 111, 18, 'center', 9)
+  }
   drawTextInBox(context, page.grade, 151.8, 279.6, 108.6, 111, 24, 'center', 10)
   drawTextInBox(context, page.quantity.toLocaleString('ja-JP'), 260.4, 279.6, 86.4, 92, 23, 'center', 10)
   drawTextInBox(context, quantityUnit, 315, 367.5, 27, 20, 14, 'right', 10)
@@ -188,11 +194,20 @@ export async function generateGradingNoticePdf(records: GradingNoticeRecord[]) {
   const pages = aggregateGradingNoticeRecords(records)
   if (pages.length === 0) throw new Error('格付結果通知書に出力できる検査記録がありません。')
 
-  const templateResponse = await fetch(`${import.meta.env.BASE_URL}grading-notice-template.pdf`)
-  if (!templateResponse.ok) throw new Error('格付結果通知書のひな型を読み込めませんでした。')
-  const templateBytes = await templateResponse.arrayBuffer()
+  const [standardTemplateResponse, feedTemplateResponse] = await Promise.all([
+    fetch(`${import.meta.env.BASE_URL}grading-notice-template.pdf`),
+    fetch(`${import.meta.env.BASE_URL}grading-notice-feed-template.pdf`),
+  ])
+  if (!standardTemplateResponse.ok || !feedTemplateResponse.ok) {
+    throw new Error('格付結果通知書のひな型を読み込めませんでした。')
+  }
+  const [standardTemplateBytes, feedTemplateBytes] = await Promise.all([
+    standardTemplateResponse.arrayBuffer(),
+    feedTemplateResponse.arrayBuffer(),
+  ])
   const pdf = await PDFDocument.create()
-  const [templatePage] = await pdf.embedPdf(templateBytes, [0])
+  const [standardTemplatePage] = await pdf.embedPdf(standardTemplateBytes, [0])
+  const [feedTemplatePage] = await pdf.embedPdf(feedTemplateBytes, [0])
   const viewerPreferences = pdf.catalog.getOrCreateViewerPreferences()
   viewerPreferences.setPrintScaling(PrintScaling.None)
   viewerPreferences.setPickTrayByPDFSize(true)
@@ -200,6 +215,7 @@ export async function generateGradingNoticePdf(records: GradingNoticeRecord[]) {
   for (const noticePage of pages) {
     const overlay = await pdf.embedPng(await canvasToPng(drawGradingNoticeOverlay(noticePage)))
     const page = pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT])
+    const templatePage = isFeedRice(noticePage.brand) ? feedTemplatePage : standardTemplatePage
     page.drawPage(templatePage, { x: 0, y: 0, width: PAGE_WIDTH, height: PAGE_HEIGHT })
     page.drawImage(overlay, { x: 0, y: 0, width: PAGE_WIDTH, height: PAGE_HEIGHT })
   }
