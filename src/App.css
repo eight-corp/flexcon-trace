@@ -32,7 +32,7 @@
 .full-width { width: 100%; }
 .button-row { display: flex; gap: 10px; flex-wrap: wrap; }
 .bottom-nav {
-  position: fixed; left: 0; right: 0; bottom: 0; height: 66px; z-index: 30; display: grid; grid-template-columns: repeat(7, 1fr);
+  position: fixed; left: 0; right: 0; bottom: 0; height: 66px; z-index: 30; display: grid; grid-template-columns: repeat(5, 1fr);
   background: #fff; border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom);
 }
 .bottom-nav button { border: 0; background: transparent; color: #707b73; display: grid; place-content: center; justify-items: center; gap: 2px; font-size: 11px; }
@@ -217,7 +217,18 @@
 .moisture-high { color: var(--red) !important; font-weight: 700; }
 .inspection-form-actions { flex-wrap: nowrap; margin-top: 4px; }
 .certificate-create-button { color: var(--green-dark); border-color: #8db59a; }
-.inspection-master-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
+.inspection-master-grid { display: grid; grid-template-columns: 1fr; gap: 10px; align-items: start; }
+.master-accordion { min-width: 0; border: 1px solid var(--line); border-radius: 7px; background: #fff; overflow: hidden; }
+.master-accordion-summary { min-height: 58px; display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 10px 14px; color: #304339; cursor: pointer; list-style: none; font-weight: 700; }
+.master-accordion-summary::-webkit-details-marker { display: none; }
+.master-accordion-summary:hover { background: var(--green-soft); }
+.master-accordion-summary > span { min-width: 0; display: flex; align-items: center; gap: 9px; }
+.master-accordion-summary > span:last-child { flex: 0 0 auto; color: var(--muted); font-size: 12px; font-weight: 600; }
+.master-accordion-chevron { transition: transform .18s ease; }
+.master-accordion[open] > .master-accordion-summary { background: #edf5ef; border-bottom: 1px solid var(--line); color: var(--green-dark); }
+.master-accordion[open] > .master-accordion-summary .master-accordion-chevron { transform: rotate(180deg); }
+.master-accordion-content { padding: 16px; }
+.master-accordion-content > div > section:last-child { margin-bottom: 0; }
 .inspection-option-section { min-width: 0; }
 .inspection-option-form { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; margin-bottom: 12px; }
 .inspection-option-form input { min-width: 0; }
@@ -294,7 +305,7 @@
 @media (min-width: 760px) {
   .app-shell { padding-bottom: 0; padding-left: 188px; }
   .app-header { margin-left: -188px; padding-left: 20px; }
-  .bottom-nav { top: 64px; bottom: 0; right: auto; width: 188px; height: auto; grid-template-columns: 1fr; grid-template-rows: repeat(7, 58px) 1fr; border-top: 0; border-right: 1px solid var(--line); padding: 14px 10px; gap: 6px; }
+  .bottom-nav { top: 64px; bottom: 0; right: auto; width: 188px; height: auto; grid-template-columns: 1fr; grid-template-rows: repeat(5, 58px) 1fr; border-top: 0; border-right: 1px solid var(--line); padding: 14px 10px; gap: 6px; }
   .bottom-nav button { display: flex; justify-content: flex-start; align-items: center; place-content: initial; gap: 10px; padding: 0 14px; border-radius: 6px; font-size: 13px; }
   .app-main { padding: 28px 28px 48px; }
   .app-main.app-main-wide { width: 100%; max-width: none; height: calc(100vh - 64px); padding-bottom: 28px; overflow: hidden; }
@@ -338,6 +349,7 @@
   .inspection-form-actions { flex-wrap: wrap; }
   .inspection-form-actions .certificate-create-button { flex-basis: 100%; }
   .inspection-master-grid { grid-template-columns: 1fr; }
+  .master-accordion-content { padding: 13px 12px; }
   .inspection-option-list { max-height: none; }
   .inspection-weight-form { grid-template-columns: 1fr; }
   .producer-inspection-heading { grid-template-columns: 42px minmax(0, 1fr); }

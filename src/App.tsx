@@ -1,18 +1,16 @@
 import { useEffect, useState } from 'react'
-import { ClipboardList, FileSignature, History, ListPlus, LogOut, MapPinned, ScanLine, Truck, Wheat } from 'lucide-react'
+import { ClipboardList, FileSignature, History, LogOut, ScanLine, Settings2, Wheat } from 'lucide-react'
 import { AuthScreen } from './components/AuthScreen'
 import { AuthorizationManager } from './components/AuthorizationManager'
-import { DestinationManager } from './components/DestinationManager'
 import { InspectionRecordManager } from './components/InspectionRecordManager'
 import { InspectionOptionManager } from './components/InspectionOptionManager'
 import { ShipmentHistory } from './components/ShipmentHistory'
 import { ShipmentScanner } from './components/ShipmentScanner'
-import { TransportManager } from './components/TransportManager'
 import { clearWorkerSession, restoreWorkerSession } from './lib/workerAuth'
 import type { Worker } from './types'
 import './App.css'
 
-type Tab = 'scan' | 'history' | 'destinations' | 'transport' | 'authorizations' | 'inspections' | 'inspection-options'
+type Tab = 'scan' | 'history' | 'authorizations' | 'inspections' | 'master'
 
 function App() {
   const [worker, setWorker] = useState<Worker | null>(null)
@@ -74,8 +72,6 @@ function App() {
           />
         )}
         {tab === 'history' && <ShipmentHistory refreshKey={historyVersion} workerId={worker.worker_id} isAdmin={worker.role === 'admin'} />}
-        {tab === 'destinations' && <DestinationManager workerId={worker.worker_id} />}
-        {tab === 'transport' && <TransportManager workerId={worker.worker_id} />}
         {tab === 'authorizations' && (
           <AuthorizationManager
             workerId={worker.worker_id}
@@ -93,7 +89,7 @@ function App() {
             onSelectedAuthorizationChange={setInspectionAuthorizationId}
           />
         )}
-        {tab === 'inspection-options' && <InspectionOptionManager workerId={worker.worker_id} />}
+        {tab === 'master' && <InspectionOptionManager workerId={worker.worker_id} />}
       </main>
 
       <nav className="bottom-nav" aria-label="メインメニュー">
@@ -103,20 +99,14 @@ function App() {
         <button className={tab === 'history' ? 'active' : ''} onClick={() => setTab('history')}>
           <History size={22} /><span>出荷履歴</span>
         </button>
-        <button className={tab === 'destinations' ? 'active' : ''} onClick={() => setTab('destinations')}>
-          <MapPinned size={22} /><span>納品先</span>
-        </button>
-        <button className={tab === 'transport' ? 'active' : ''} onClick={() => setTab('transport')}>
-          <Truck size={22} /><span>運送会社</span>
-        </button>
         <button className={tab === 'authorizations' ? 'active' : ''} onClick={() => setTab('authorizations')}>
           <FileSignature size={22} /><span>委任状一覧</span>
         </button>
         <button className={tab === 'inspections' ? 'active' : ''} onClick={() => { setInspectionAuthorizationId(null); setTab('inspections') }}>
           <ClipboardList size={22} /><span>検査記録</span>
         </button>
-        <button className={tab === 'inspection-options' ? 'active' : ''} onClick={() => setTab('inspection-options')}>
-          <ListPlus size={22} /><span>検査項目</span>
+        <button className={tab === 'master' ? 'active' : ''} onClick={() => setTab('master')}>
+          <Settings2 size={22} /><span>マスタ</span>
         </button>
       </nav>
     </div>

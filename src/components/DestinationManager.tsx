@@ -6,7 +6,7 @@ import { ToggleSwitch } from './ToggleSwitch'
 
 type Notice = { type: 'success' | 'error'; text: string } | null
 
-export function DestinationManager({ workerId }: { workerId: string }) {
+export function DestinationManager({ workerId, embedded = false }: { workerId: string; embedded?: boolean }) {
   const [items, setItems] = useState<Destination[]>([])
   const [name, setName] = useState('')
   const [address, setAddress] = useState('')
@@ -78,7 +78,7 @@ export function DestinationManager({ workerId }: { workerId: string }) {
 
   return (
     <div>
-      <div className="page-heading"><h1>納品先管理</h1><p>出荷登録で選択する納品先を管理します。</p></div>
+      {!embedded && <div className="page-heading"><h1>納品先管理</h1><p>出荷登録で選択する納品先を管理します。</p></div>}
       {notice && <div className={`notice ${notice.type}`}>{notice.text}</div>}
       <section className={`section-band master-form ${editingId ? 'master-form-active' : ''}`} ref={formRef}>
         <div className="section-title"><h2>{editingId ? '納品先を編集' : '納品先を追加'}</h2></div>

@@ -6,7 +6,7 @@ import { ToggleSwitch } from './ToggleSwitch'
 
 type Notice = { type: 'success' | 'error'; text: string } | null
 
-export function TransportManager({ workerId }: { workerId: string }) {
+export function TransportManager({ workerId, embedded = false }: { workerId: string; embedded?: boolean }) {
   const [items, setItems] = useState<TransportProfile[]>([])
   const [companyName, setCompanyName] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -71,7 +71,7 @@ export function TransportManager({ workerId }: { workerId: string }) {
 
   return (
     <div>
-      <div className="page-heading"><h1>運送会社管理</h1><p>出荷時に選択する運送会社名を管理します。</p></div>
+      {!embedded && <div className="page-heading"><h1>運送会社管理</h1><p>出荷時に選択する運送会社名を管理します。</p></div>}
       {notice && <div className={`notice ${notice.type}`}>{notice.text}</div>}
       <section className={`section-band master-form ${editingId ? 'master-form-active' : ''}`} ref={formRef}>
         <div className="section-title"><h2>{editingId ? '運送会社を編集' : '運送会社を追加'}</h2></div>

@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
-import { ArrowDown, ArrowUp, Award, Check, ListChecks, MapPin, Pencil, Plus, Scale, Tags, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, Award, Building2, Check, ChevronDown, ListChecks, MapPin, Pencil, Plus, Scale, Tags, Truck, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import type { InspectionOption, InspectionWeight } from '../types'
+import { DestinationManager } from './DestinationManager'
 import { ToggleSwitch } from './ToggleSwitch'
+import { TransportManager } from './TransportManager'
 
 type Props = { workerId: string }
 type OptionType = InspectionOption['option_type']
@@ -82,38 +84,39 @@ function OptionSection({ workerId, optionType, title, items, onChanged, onError 
   const Icon = optionType === 'location' ? MapPin : optionType === 'grade' ? Award : optionType === 'grade_reason' ? ListChecks : Tags
 
   return (
-    <section className="inspection-option-section">
-      <div className="section-title">
-        <h2>{title}</h2>
-        <span>{items.filter((item) => item.active).length}件使用中</span>
-      </div>
+    <details className="master-accordion inspection-option-section">
+      <summary className="master-accordion-summary">
+        <span><Icon size={20} />{title}</span>
+        <span>{items.filter((item) => item.active).length}件使用中<ChevronDown className="master-accordion-chevron" size={20} /></span>
+      </summary>
+      <div className="master-accordion-content">
+        <form className="inspection-option-form" onSubmit={(event) => void submit(event)}>
+          <input value={name} onChange={(event) => setName(event.target.value)} required aria-label={`${title}名`} />
+          <button className="primary-button" type="submit" disabled={busy}>
+            {editingId ? <><Check size={18} />保存</> : <><Plus size={18} />追加</>}
+          </button>
+          {editingId && (
+            <button className="icon-button" type="button" title="編集を取り消す" aria-label="編集を取り消す" onClick={reset} disabled={busy}><X size={18} /></button>
+          )}
+        </form>
 
-      <form className="inspection-option-form" onSubmit={(event) => void submit(event)}>
-        <input value={name} onChange={(event) => setName(event.target.value)} required aria-label={`${title}名`} />
-        <button className="primary-button" type="submit" disabled={busy}>
-          {editingId ? <><Check size={18} />保存</> : <><Plus size={18} />追加</>}
-        </button>
-        {editingId && (
-          <button className="icon-button" type="button" title="編集を取り消す" aria-label="編集を取り消す" onClick={reset} disabled={busy}><X size={18} /></button>
-        )}
-      </form>
-
-      <div className="inspection-option-list">
-        {items.map((item, index) => (
-          <div className={`inspection-option-row ${item.active ? '' : 'inactive-item'}`} key={item.id}>
-            <Icon size={19} color={item.active ? '#236640' : '#7a847c'} />
-            <strong>{item.name}</strong>
-            <div className="inspection-option-order-buttons">
-              <button className="icon-button" type="button" title="上へ移動" aria-label={`${item.name}を上へ移動`} onClick={() => void move(item, -1)} disabled={busy || index === 0}><ArrowUp size={16} /></button>
-              <button className="icon-button" type="button" title="下へ移動" aria-label={`${item.name}を下へ移動`} onClick={() => void move(item, 1)} disabled={busy || index === items.length - 1}><ArrowDown size={16} /></button>
+        <div className="inspection-option-list">
+          {items.map((item, index) => (
+            <div className={`inspection-option-row ${item.active ? '' : 'inactive-item'}`} key={item.id}>
+              <Icon size={19} color={item.active ? '#236640' : '#7a847c'} />
+              <strong>{item.name}</strong>
+              <div className="inspection-option-order-buttons">
+                <button className="icon-button" type="button" title="上へ移動" aria-label={`${item.name}を上へ移動`} onClick={() => void move(item, -1)} disabled={busy || index === 0}><ArrowUp size={16} /></button>
+                <button className="icon-button" type="button" title="下へ移動" aria-label={`${item.name}を下へ移動`} onClick={() => void move(item, 1)} disabled={busy || index === items.length - 1}><ArrowDown size={16} /></button>
+              </div>
+              <button className="icon-button" type="button" title="編集" aria-label={`${item.name}を編集`} onClick={() => beginEdit(item)} disabled={busy}><Pencil size={17} /></button>
+              <ToggleSwitch checked={item.active} label={`${item.name}を${item.active ? '無効' : '有効'}にする`} onChange={() => void toggle(item)} />
             </div>
-            <button className="icon-button" type="button" title="編集" aria-label={`${item.name}を編集`} onClick={() => beginEdit(item)} disabled={busy}><Pencil size={17} /></button>
-            <ToggleSwitch checked={item.active} label={`${item.name}を${item.active ? '無効' : '有効'}にする`} onChange={() => void toggle(item)} />
-          </div>
-        ))}
-        {items.length === 0 && <div className="empty-state">登録されていません</div>}
+          ))}
+          {items.length === 0 && <div className="empty-state">登録されていません</div>}
+        </div>
       </div>
-    </section>
+    </details>
   )
 }
 
@@ -156,20 +159,23 @@ function InspectionWeightSection({
   }
 
   return (
-    <section className="inspection-option-section inspection-weight-section">
-      <div className="section-title">
-        <h2><Scale className="inline-icon" size={19} />量目</h2>
+    <details className="master-accordion inspection-option-section inspection-weight-section">
+      <summary className="master-accordion-summary">
+        <span><Scale size={20} />量目</span>
+        <span><ChevronDown className="master-accordion-chevron" size={20} /></span>
+      </summary>
+      <div className="master-accordion-content">
+        <form className="inspection-weight-form" onSubmit={(event) => void save(event)}>
+          <label>銘柄米
+            <input type="number" min="1" step="1" value={brandedRiceWeight} onChange={(event) => setBrandedRiceWeight(event.target.value)} required />
+          </label>
+          <label>飼料用玄米
+            <input type="number" min="1" step="1" value={feedRiceWeight} onChange={(event) => setFeedRiceWeight(event.target.value)} required />
+          </label>
+          <button className="primary-button" type="submit" disabled={busy}><Check size={18} />{busy ? '保存中...' : '保存'}</button>
+        </form>
       </div>
-      <form className="inspection-weight-form" onSubmit={(event) => void save(event)}>
-        <label>銘柄米
-          <input type="number" min="1" step="1" value={brandedRiceWeight} onChange={(event) => setBrandedRiceWeight(event.target.value)} required />
-        </label>
-        <label>飼料用玄米
-          <input type="number" min="1" step="1" value={feedRiceWeight} onChange={(event) => setFeedRiceWeight(event.target.value)} required />
-        </label>
-        <button className="primary-button" type="submit" disabled={busy}><Check size={18} />{busy ? '保存中...' : '保存'}</button>
-      </form>
-    </section>
+    </details>
   )
 }
 
@@ -215,8 +221,22 @@ export function InspectionOptionManager({ workerId }: Props) {
 
   return (
     <div>
-      <div className="page-heading"><h1>検査項目管理</h1><p>検査場所と県別の銘柄を管理します。</p></div>
+      <div className="page-heading"><h1>マスタ</h1><p>各項目を選択して登録内容を管理します。</p></div>
       <div className="inspection-master-grid">
+        <details className="master-accordion">
+          <summary className="master-accordion-summary">
+            <span><Building2 size={20} />納品先</span>
+            <span><ChevronDown className="master-accordion-chevron" size={20} /></span>
+          </summary>
+          <div className="master-accordion-content"><DestinationManager workerId={workerId} embedded /></div>
+        </details>
+        <details className="master-accordion">
+          <summary className="master-accordion-summary">
+            <span><Truck size={20} />運送会社</span>
+            <span><ChevronDown className="master-accordion-chevron" size={20} /></span>
+          </summary>
+          <div className="master-accordion-content"><TransportManager workerId={workerId} embedded /></div>
+        </details>
         <OptionSection
           workerId={workerId}
           optionType="location"
