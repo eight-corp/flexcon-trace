@@ -11,7 +11,7 @@ export function TransportManager({ workerId, embedded = false, onCountChange }: 
   const [companyName, setCompanyName] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [notice, setNotice] = useState<Notice>(null)
-  const formRef = useRef<HTMLElement>(null)
+  const formRef = useRef<HTMLFormElement>(null)
   const deleting = useRef(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
@@ -103,21 +103,16 @@ export function TransportManager({ workerId, embedded = false, onCountChange }: 
     <div>
       {!embedded && <div className="page-heading"><h1>運送会社管理</h1><p>出荷時に選択する運送会社名を管理します。</p></div>}
       {notice && <div className={`notice ${notice.type}`}>{notice.text}</div>}
-      <section className={`section-band master-form ${editingId ? 'master-form-active' : ''}`} ref={formRef}>
-        <div className="section-title"><h2>{editingId ? '運送会社を編集' : '運送会社を追加'}</h2></div>
-        <form className="form-grid" onSubmit={submit}>
-          <label>運送会社名<input value={companyName} onChange={(e) => setCompanyName(e.target.value)} required placeholder="例：〇〇運送" /></label>
-          <div className="button-row">
-            <button className="primary-button" type="submit">
-              {editingId ? <><Check size={18} />保存</> : <><Plus size={18} />追加</>}
-            </button>
-            {editingId && <button className="secondary-button" type="button" onClick={resetForm}><X size={18} />取消</button>}
-          </div>
-        </form>
-      </section>
+      <form className="inspection-option-form" onSubmit={submit} ref={formRef}>
+        <input value={companyName} onChange={(e) => setCompanyName(e.target.value)} required aria-label="運送会社名" />
+        <button className="primary-button" type="submit">
+          {editingId ? <><Check size={18} />保存</> : <><Plus size={18} />追加</>}
+        </button>
+        {editingId && <button className="icon-button" type="button" title="編集を取り消す" aria-label="編集を取り消す" onClick={resetForm}><X size={18} /></button>}
+      </form>
 
       <section>
-        <div className="section-title"><h2>登録済み運送会社</h2><span>{items.filter((item) => item.active).length}件使用中</span></div>
+        {!embedded && <div className="section-title"><h2>登録済み運送会社</h2><span>{items.filter((item) => item.active).length}件使用中</span></div>}
         <div className="destination-list">
           {items.map((item) => (
             <article className={`destination-item ${item.active ? '' : 'inactive-item'}`} key={item.id}>
