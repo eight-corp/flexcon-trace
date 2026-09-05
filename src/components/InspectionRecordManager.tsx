@@ -62,6 +62,19 @@ function emptyAddGroupForm(): AddGroupForm {
 function isHighMoisture(value: string | number | null | undefined) {
   return value !== null && value !== undefined && value !== '' && Number(value) > 16
 }
+function isInspectionResultComplete(item: FlexconInspection | PaperBagInspection) {
+  const reasonOptional = item.grade === '1等' || item.grade === '合格'
+  const quantity = 'quantity_kg' in item ? item.quantity_kg : item.bag_count
+  return item.fiscal_year > 0
+    && Boolean(item.purchase_date)
+    && Boolean(item.inspection_date)
+    && Boolean(item.inspection_location?.trim())
+    && Boolean(item.brand?.trim())
+    && quantity > 0
+    && item.moisture !== null
+    && Boolean(item.grade?.trim())
+    && (reasonOptional || Boolean(item.reason?.trim()))
+}
 function displayDate(value: string | null | undefined) { return value ? value.replaceAll('-', '/') : '' }
 function brandTypeForPrefecture(prefecture: string | null): 'brand_aomori' | 'brand_iwate' | null {
   const normalized = (prefecture ?? '').trim().replace(/県$/, '')
@@ -470,10 +483,10 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
   const createGradingNoticePdf = async () => {
     if (!selectedAuthorization || gradingNoticeBusy) return
     const authorizationById = new Map(authorizations.map((authorization) => [authorization.id, authorization]))
-    const completedFlexcons = flexcons.filter((item) => item.authorization_id === selectedAuthorization.id && item.inspection_date && item.grade && item.brand)
-    const completedPaperBags = paperBags.filter((item) => item.authorization_id === selectedAuthorization.id && item.inspection_date && item.grade && item.brand)
-    if (completedFlexcons.length === 0 && completedPaperBags.length === 0) {
-      setNotice({ type: 'error', text: '検査日・銘柄・等級が入力された検査記録がありません。' })
+    const targetFlexcons = flexcons.filter((item) => item.authorization_id === selectedAuthorization.id)
+    const targetPaperBags = paperBags.filter((item) => item.authorization_id === selectedAuthorization.id)
+    if (targetFlexcons.length === 0 && targetPaperBags.length === 0) {
+      setNotice({ type: 'error', text: 'この委任状には格付結果通知書に出力する検査記録がありません。' })
       return
     }
 
@@ -486,7 +499,7 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
     setNotice(null)
     try {
       const { generateGradingNoticePdf } = await import('../lib/gradingNoticePdf')
-      const records = [...completedFlexcons.map((item) => {
+      const records = [...targetFlexcons.map((item) => {
         const authorization = authorizationById.get(item.authorization_id)
         return authorization ? {
           authorizationNo: authorization.authorization_no,
@@ -503,7 +516,7 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
           quantity: item.quantity_kg,
           moisture: item.moisture,
         } : null
-      }), ...completedPaperBags.map((item) => {
+      }), ...targetPaperBags.map((item) => {
         const authorization = authorizationById.get(item.authorization_id)
         return authorization ? {
           authorizationNo: authorization.authorization_no,
@@ -575,7 +588,7 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
       <div className="section-title"><div><h2>紙袋</h2><span>{selectedPaperBags.length}件</span></div></div>
       <div className="inspection-detail-table-wrap"><table className="inspection-detail-table paper-detail-table">
         <thead><tr><th>年度</th><th>仕入日</th><th>検査日</th><th>検査場所</th><th>銘柄</th><th>数量（袋）</th><th>総重量</th><th>水分</th><th>等級</th><th>理由</th><th></th></tr></thead>
-        <tbody>{selectedPaperBags.map((item) => <tr key={item.id}>{renderInlineMetadataFields('paper', item)}{renderInlineProductFields('paper', item)}<td>{(Number(detailDraft(item).quantity || 0) * 30).toLocaleString()}kg</td>{renderInlineResultFields('paper', item)}<td className="inspection-row-actions inspection-row-actions-wide"><button className="icon-button" type="button" title="2行に分割" aria-label={`${item.brand ?? ''}の紙袋を2行に分割`} disabled={busy || item.bag_count < 2} onClick={() => beginSplitPaperBags(item)}><TableRowsSplit size={17} /></button><button className="icon-button delete-icon" type="button" title="削除" aria-label={`${item.brand ?? ''}の紙袋を削除`} onClick={() => void deletePaperBags(item)}><Trash2 size={17} /></button></td></tr>)}
+        <tbody>{selectedPaperBags.map((item) => <tr className={isInspectionResultComplete(item) ? 'inspection-complete-row' : undefined} key={item.id}>{renderInlineMetadataFields('paper', item)}{renderInlineProductFields('paper', item)}<td>{(Number(detailDraft(item).quantity || 0) * 30).toLocaleString()}kg</td>{renderInlineResultFields('paper', item)}<td className="inspection-row-actions inspection-row-actions-wide"><button className="icon-button" type="button" title="2行に分割" aria-label={`${item.brand ?? ''}の紙袋を2行に分割`} disabled={busy || item.bag_count < 2} onClick={() => beginSplitPaperBags(item)}><TableRowsSplit size={17} /></button><button className="icon-button delete-icon" type="button" title="削除" aria-label={`${item.brand ?? ''}の紙袋を削除`} onClick={() => void deletePaperBags(item)}><Trash2 size={17} /></button></td></tr>)}
         {selectedPaperBags.length === 0 && <tr><td colSpan={11} className="empty-state">紙袋は登録されていません</td></tr>}</tbody>
       </table></div>
     </section>
@@ -583,7 +596,7 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
       <div className="section-title"><div><h2>フレコン</h2><span>{selectedFlexcons.length}本</span></div><div className="button-row"><span className="certificate-status-key"><span aria-hidden="true" />印刷済み</span><button className="secondary-button certificate-create-button" type="button" disabled={selectedFlexcons.length === 0} onClick={openCertificateDialog}><FileText size={18} />検査証明書作成</button></div></div>
       <div className="inspection-detail-table-wrap"><table className="inspection-detail-table">
         <thead><tr><th>№</th><th>年度</th><th>仕入日</th><th>検査日</th><th>検査場所</th><th>銘柄</th><th>数量（kg）</th><th>水分</th><th>等級</th><th>理由</th><th></th></tr></thead>
-        <tbody>{selectedFlexcons.map((item) => <tr className={(item.certificate_print_count ?? 0) > 0 ? 'certificate-printed-row' : undefined} title={(item.certificate_print_count ?? 0) > 0 ? `印刷済み（${item.certificate_print_count}回）` : '未印刷'} key={item.id}><td>{item.flexcon_no}</td>{renderInlineMetadataFields('flexcon', item)}{renderInlineProductFields('flexcon', item)}{renderInlineResultFields('flexcon', item)}<td className="inspection-row-actions"><button className="icon-button delete-icon" type="button" title="削除" aria-label={`№${item.flexcon_no}を削除`} onClick={() => void deleteFlexcon(item)}><Trash2 size={17} /></button></td></tr>)}
+        <tbody>{selectedFlexcons.map((item) => <tr className={[(item.certificate_print_count ?? 0) > 0 ? 'certificate-printed-row' : '', isInspectionResultComplete(item) ? 'inspection-complete-row' : ''].filter(Boolean).join(' ') || undefined} title={(item.certificate_print_count ?? 0) > 0 ? `印刷済み（${item.certificate_print_count}回）` : '未印刷'} key={item.id}><td>{item.flexcon_no}</td>{renderInlineMetadataFields('flexcon', item)}{renderInlineProductFields('flexcon', item)}{renderInlineResultFields('flexcon', item)}<td className="inspection-row-actions"><button className="icon-button delete-icon" type="button" title="削除" aria-label={`№${item.flexcon_no}を削除`} onClick={() => void deleteFlexcon(item)}><Trash2 size={17} /></button></td></tr>)}
         {selectedFlexcons.length === 0 && <tr><td colSpan={11} className="empty-state">フレコンは登録されていません</td></tr>}</tbody>
       </table></div>
     </section>
