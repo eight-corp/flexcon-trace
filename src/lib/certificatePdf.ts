@@ -31,7 +31,7 @@ const DESIGN_HEIGHT = 420.72
 const PAGE_WIDTH = 210 * 72 / 25.4
 const PAGE_HEIGHT = 148 * 72 / 25.4
 const CANVAS_SCALE = 4
-const FONT_FAMILY = '"Yu Mincho", "Yu Gothic", "Noto Serif JP", "Noto Sans JP", serif'
+const FONT_FAMILY = '"Yu Mincho", "YuMincho", serif'
 
 function setFont(context: CanvasRenderingContext2D, size: number, weight = 700) {
   context.font = `${weight} ${size * CANVAS_SCALE}px ${FONT_FAMILY}`

@@ -27,7 +27,7 @@ const PAGE_HEIGHT = 595.2
 const CANVAS_SCALE = 2
 const FONT_SCALE = 1.1
 const TEXT_VERTICAL_OFFSET = 1.25
-const FONT_FAMILY = '"Yu Gothic", "Meiryo", "Noto Sans JP", sans-serif'
+const FONT_FAMILY = '"Yu Mincho", "YuMincho", serif'
 
 function normalized(value: string) {
   return value.trim()

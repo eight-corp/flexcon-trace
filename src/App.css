@@ -354,6 +354,10 @@
 .paper-split-form input { width: 100%; }
 .paper-split-total { grid-column: 1 / -1; padding: 10px; border: 1px solid var(--line); border-radius: 5px; background: #f3f6f3; text-align: center; font-weight: 700; }
 .paper-split-form .modal-actions { grid-column: 1 / -1; }
+.grading-notice-failure-modal { width: min(100%, 560px); }
+.grading-notice-failure-modal .modal-header h2 { display: flex; align-items: center; gap: 8px; color: var(--red); }
+.grading-notice-failure-modal > p { margin: 0 0 12px; line-height: 1.6; }
+.grading-notice-failure-modal ul { margin: 0 0 18px; padding: 12px 12px 12px 34px; border: 1px solid #efc7c2; border-radius: 6px; background: #fff5f3; line-height: 1.8; }
 
 @media (min-width: 760px) {
   .app-shell { padding-bottom: 0; padding-left: 188px; }

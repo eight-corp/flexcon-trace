@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, ExternalLink, FileText, Plus, Printer, Search, TableRowsSplit, Trash2, X } from 'lucide-react'
+import { ArrowLeft, CircleAlert, ExternalLink, FileText, Plus, Printer, Search, TableRowsSplit, Trash2, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import type { AuthorizationRecord, FlexconInspection, InspectionOption, InspectionWeight, PaperBagInspection } from '../types'
 
@@ -36,6 +36,10 @@ type GeneratedCertificate = {
   flexconIds: string[]
   count: number
   previouslyPrintedCount: number
+}
+type GradingNoticeFailure = {
+  summary: string
+  reasons: string[]
 }
 
 const DEFAULT_BRANDED_RICE_WEIGHT = 1020
@@ -85,6 +89,43 @@ function isInspectionResultComplete(item: FlexconInspection | PaperBagInspection
     && isGradeAllowedForBrand(item.brand ?? '', item.grade ?? '')
     && (reasonOptional || Boolean(item.reason?.trim()))
 }
+function incompleteInspectionFields(item: FlexconInspection | PaperBagInspection) {
+  const fields: string[] = []
+  const quantity = 'quantity_kg' in item ? item.quantity_kg : item.bag_count
+  if (item.fiscal_year <= 0) fields.push('年度')
+  if (!item.purchase_date) fields.push('仕入日')
+  if (!item.inspection_date) fields.push('検査日')
+  if (!item.inspector_name?.trim()) fields.push('検査員')
+  if (!item.inspection_location?.trim()) fields.push('検査場所')
+  if (!item.brand?.trim()) fields.push('銘柄')
+  if (quantity <= 0) fields.push('数量')
+  if (item.moisture === null) fields.push('水分')
+  if (!item.grade?.trim()) {
+    fields.push('等級')
+  } else if (!isGradeAllowedForBrand(item.brand ?? '', item.grade)) {
+    fields.push('銘柄に対応する等級')
+  }
+  if (item.grade?.trim() && item.grade !== '1等' && item.grade !== '合格' && !item.reason?.trim()) fields.push('理由')
+  return fields
+}
+function gradingNoticeFailureFor(items: Array<FlexconInspection | PaperBagInspection>): GradingNoticeFailure {
+  if (items.length === 0) {
+    return {
+      summary: '格付結果通知票の対象となる検査記録がありません。',
+      reasons: ['フレコンまたは紙袋を登録してください。'],
+    }
+  }
+  const missingCounts = new Map<string, number>()
+  items.forEach((item) => incompleteInspectionFields(item).forEach((field) => (
+    missingCounts.set(field, (missingCounts.get(field) ?? 0) + 1)
+  )))
+  return {
+    summary: '検査完了と判定できる行がないため、格付結果通知票を作成できません。',
+    reasons: missingCounts.size > 0
+      ? [...missingCounts].map(([field, count]) => `${field}：未完了 ${count}行`)
+      : ['検査記録の入力内容を確認してください。'],
+  }
+}
 function displayDate(value: string | null | undefined) { return value ? value.replaceAll('-', '/') : '' }
 function brandTypeForPrefecture(prefecture: string | null): 'brand_aomori' | 'brand_iwate' | null {
   const normalized = (prefecture ?? '').trim().replace(/県$/, '')
@@ -112,6 +153,7 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
   const [certificateError, setCertificateError] = useState('')
   const [generatedCertificate, setGeneratedCertificate] = useState<GeneratedCertificate | null>(null)
   const [gradingNoticeBusy, setGradingNoticeBusy] = useState(false)
+  const [gradingNoticeFailure, setGradingNoticeFailure] = useState<GradingNoticeFailure | null>(null)
   const detailSaveChains = useRef(new Map<string, Promise<void>>())
 
   useEffect(() => {
@@ -506,11 +548,14 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
 
   const createGradingNoticePdf = async () => {
     if (!selectedAuthorization || gradingNoticeBusy) return
+    setGradingNoticeFailure(null)
     const authorizationById = new Map(authorizations.map((authorization) => [authorization.id, authorization]))
-    const targetFlexcons = flexcons.filter((item) => item.authorization_id === selectedAuthorization.id && isInspectionResultComplete(item))
-    const targetPaperBags = paperBags.filter((item) => item.authorization_id === selectedAuthorization.id && isInspectionResultComplete(item))
+    const producerFlexcons = flexcons.filter((item) => item.authorization_id === selectedAuthorization.id)
+    const producerPaperBags = paperBags.filter((item) => item.authorization_id === selectedAuthorization.id)
+    const targetFlexcons = producerFlexcons.filter(isInspectionResultComplete)
+    const targetPaperBags = producerPaperBags.filter(isInspectionResultComplete)
     if (targetFlexcons.length === 0 && targetPaperBags.length === 0) {
-      setNotice({ type: 'error', text: 'この委任状には検査が完了した記録がありません。' })
+      setGradingNoticeFailure(gradingNoticeFailureFor([...producerFlexcons, ...producerPaperBags]))
       return
     }
 
@@ -574,7 +619,10 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
       setNotice({ type: 'success', text: `${pageCount}ページの格付結果通知書PDFを作成しました。PDF画面で印刷するページを指定できます。` })
     } catch (error) {
       if (pdfWindow) pdfWindow.close()
-      setNotice({ type: 'error', text: error instanceof Error ? error.message : '格付結果通知書PDFを作成できませんでした。' })
+      setGradingNoticeFailure({
+        summary: '格付結果通知票を作成できませんでした。',
+        reasons: [error instanceof Error ? error.message : 'PDFの作成中に不明なエラーが発生しました。'],
+      })
     } finally {
       setGradingNoticeBusy(false)
     }
@@ -652,6 +700,12 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
         <div className="paper-split-total">合計 {(Number(splitCounts.first) || 0) + (Number(splitCounts.second) || 0)} / {splitPaper.bag_count}袋</div>
         <div className="modal-actions"><button className="primary-button" type="submit" disabled={busy}><TableRowsSplit size={18} />{busy ? '分割中...' : '分割する'}</button><button className="secondary-button" type="button" onClick={() => setSplitPaper(null)} disabled={busy}>取り消し</button></div>
       </form>
+    </section></div>}
+    {gradingNoticeFailure && <div className="modal-backdrop"><section className="registration-modal grading-notice-failure-modal" role="alertdialog" aria-modal="true" aria-labelledby="grading-notice-failure-title" aria-describedby="grading-notice-failure-description">
+      <div className="modal-header"><div><h2 id="grading-notice-failure-title"><CircleAlert size={22} />格付結果通知票を作成できません</h2></div><button className="icon-button" type="button" title="閉じる" aria-label="閉じる" onClick={() => setGradingNoticeFailure(null)}><X size={20} /></button></div>
+      <p id="grading-notice-failure-description">{gradingNoticeFailure.summary}</p>
+      <ul>{gradingNoticeFailure.reasons.map((reason) => <li key={reason}>{reason}</li>)}</ul>
+      <div className="modal-actions"><button className="primary-button" type="button" autoFocus onClick={() => setGradingNoticeFailure(null)}>閉じる</button></div>
     </section></div>}
     {notice && <div className={`notice operation-log ${notice.type}`}>{notice.text}</div>}
   </div>
