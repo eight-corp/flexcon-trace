@@ -88,6 +88,7 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
   const [certificateBusy, setCertificateBusy] = useState(false)
   const [certificateError, setCertificateError] = useState('')
   const [generatedCertificate, setGeneratedCertificate] = useState<GeneratedCertificate | null>(null)
+  const [gradingNoticeBusy, setGradingNoticeBusy] = useState(false)
   const detailSaveChains = useRef(new Map<string, Promise<void>>())
 
   useEffect(() => {
@@ -466,9 +467,83 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
     closeCertificateDialog()
   }
 
+  const createGradingNoticePdf = async () => {
+    if (gradingNoticeBusy) return
+    const authorizationById = new Map(authorizations.map((authorization) => [authorization.id, authorization]))
+    const completedFlexcons = flexcons.filter((item) => item.inspection_date && item.grade && item.brand)
+    const completedPaperBags = paperBags.filter((item) => item.inspection_date && item.grade && item.brand)
+    if (completedFlexcons.length === 0 && completedPaperBags.length === 0) {
+      setNotice({ type: 'error', text: '検査日・銘柄・等級が入力された検査記録がありません。' })
+      return
+    }
+
+    const pdfWindow = window.open('', '_blank')
+    if (pdfWindow) {
+      pdfWindow.document.title = '格付結果通知書を作成中'
+      pdfWindow.document.body.textContent = '格付結果通知書PDFを作成しています...'
+    }
+    setGradingNoticeBusy(true)
+    setNotice(null)
+    try {
+      const { generateGradingNoticePdf } = await import('../lib/gradingNoticePdf')
+      const records = [...completedFlexcons.map((item) => {
+        const authorization = authorizationById.get(item.authorization_id)
+        return authorization ? {
+          authorizationNo: authorization.authorization_no,
+          fullName: authorization.full_name,
+          prefecture: authorization.prefecture ?? '',
+          municipality: authorization.municipality ?? '',
+          inspectionDate: item.inspection_date ?? '',
+          inspectionLocation: item.inspection_location ?? '',
+          fiscalYear: item.fiscal_year,
+          brand: item.brand ?? '',
+          grade: item.grade ?? '',
+          reason: item.reason ?? '',
+          kind: 'flexcon' as const,
+          quantity: item.quantity_kg,
+          moisture: item.moisture,
+        } : null
+      }), ...completedPaperBags.map((item) => {
+        const authorization = authorizationById.get(item.authorization_id)
+        return authorization ? {
+          authorizationNo: authorization.authorization_no,
+          fullName: authorization.full_name,
+          prefecture: authorization.prefecture ?? '',
+          municipality: authorization.municipality ?? '',
+          inspectionDate: item.inspection_date ?? '',
+          inspectionLocation: item.inspection_location ?? '',
+          fiscalYear: item.fiscal_year,
+          brand: item.brand ?? '',
+          grade: item.grade ?? '',
+          reason: item.reason ?? '',
+          kind: 'paper_bag' as const,
+          quantity: item.bag_count,
+          moisture: item.moisture,
+        } : null
+      })].filter((record) => record !== null)
+      const { blob, pageCount } = await generateGradingNoticePdf(records)
+      const url = URL.createObjectURL(blob)
+      if (pdfWindow) {
+        pdfWindow.location.href = url
+      } else {
+        const anchor = document.createElement('a')
+        anchor.href = url
+        anchor.download = `格付結果通知書_${today().replaceAll('-', '')}.pdf`
+        anchor.click()
+      }
+      window.setTimeout(() => URL.revokeObjectURL(url), 300_000)
+      setNotice({ type: 'success', text: `${pageCount}ページの格付結果通知書PDFを作成しました。PDF画面で印刷するページを指定できます。` })
+    } catch (error) {
+      if (pdfWindow) pdfWindow.close()
+      setNotice({ type: 'error', text: error instanceof Error ? error.message : '格付結果通知書PDFを作成できませんでした。' })
+    } finally {
+      setGradingNoticeBusy(false)
+    }
+  }
+
   if (!selectedAuthorization) {
     return <div className="inspection-page">
-      <div className="page-heading inspection-heading"><div><h1>検査記録</h1><p>生産者ごとの検査数量を集計表示します。</p></div></div>
+      <div className="page-heading inspection-heading"><div><h1>検査記録</h1><p>生産者ごとの検査数量を集計表示します。</p></div><button className="secondary-button" type="button" onClick={() => void createGradingNoticePdf()} disabled={gradingNoticeBusy}><FileText size={18} />{gradingNoticeBusy ? 'PDF作成中...' : '格付結果通知書'}</button></div>
       <div className="search-row"><div className="search-input-wrap"><Search size={18} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="委任状№・氏名・産地・銘柄で検索" /></div></div>
       <div className="inspection-summary-wrap"><table className="inspection-summary-table">
         <thead><tr><th>委任状№</th><th>氏名</th><th>産地</th><th>最終仕入日</th><th>銘柄</th><th>フレコン</th><th>紙袋</th><th>総数量</th></tr></thead>
