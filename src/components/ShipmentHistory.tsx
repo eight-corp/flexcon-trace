@@ -17,6 +17,7 @@ type SortDirection = 'asc' | 'desc'
 type TableColumn = 'shippedAt' | 'destination' | 'origin' | 'productName' | 'flexconQuantity' | 'paperBagQuantity' | 'carrier' | 'driver' | 'vehicle' | 'worker' | 'note'
 type ShipmentTableRow = {
   id: string
+  shipment: Shipment
   originalOrder: number
   shippedAt: string
   shippedAtValue: number
@@ -32,6 +33,12 @@ type ShipmentTableRow = {
   vehicle: string
   worker: string
   note: string
+}
+
+type DestinationSummaryRow = {
+  destination: string
+  flexconQuantity: number
+  paperBagQuantity: number
 }
 
 const TABLE_COLUMNS: Array<{ key: TableColumn; label: string }> = [
@@ -221,6 +228,7 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
   const tableRows = useMemo(() => shipments.flatMap((shipment, shipmentIndex) =>
     shipmentProductGroups(shipment).map((group, groupIndex) => ({
       id: `${shipment.id}-${groupIndex}-${group.name}`,
+      shipment,
       originalOrder: shipmentIndex * 100 + groupIndex,
       shippedAt: new Date(shipment.shipped_at).toLocaleString('ja-JP'),
       shippedAtValue: new Date(shipment.shipped_at).getTime(),
@@ -275,6 +283,29 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
       return sort.direction === 'asc' ? comparison : -comparison
     })
   }, [columnFilters, search, sort, tableRows])
+
+  const destinationSummaryRows = useMemo(() => {
+    const summaries = new Map<string, {
+      flexconQuantity: number
+      paperBagQuantity: number
+    }>()
+
+    displayedTableRows.forEach((row) => {
+      const summary = summaries.get(row.destination) ?? {
+        flexconQuantity: 0,
+        paperBagQuantity: 0,
+      }
+      summary.flexconQuantity += row.flexconQuantity
+      summary.paperBagQuantity += row.paperBagQuantity
+      summaries.set(row.destination, summary)
+    })
+
+    return Array.from(summaries, ([destination, summary]): DestinationSummaryRow => ({
+      destination,
+      flexconQuantity: summary.flexconQuantity,
+      paperBagQuantity: summary.paperBagQuantity,
+    })).sort((a, b) => a.destination.localeCompare(b.destination, 'ja', { numeric: true }))
+  }, [displayedTableRows])
 
   const changeSort = (key: TableColumn) => {
     setSort((current) => {
@@ -493,42 +524,72 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
           {filtered.length === 0 && <div className="empty-state">該当する出荷履歴がありません</div>}
         </div>
       ) : (
-        <div className="shipment-table-wrap">
-          <table className="shipment-table">
-            <thead>
-              <tr>
-                {TABLE_COLUMNS.map((column) => (
-                  <ShipmentColumnHeader
-                    key={column.key}
-                    column={column}
-                    sort={sort}
-                    values={filterValues[column.key]}
-                    selectedValues={columnFilters[column.key]}
-                    onSort={changeSort}
-                    onFilterChange={changeColumnFilter}
-                  />
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {displayedTableRows.map((row) => (
-                <tr key={row.id}>
-                  <td>{row.shippedAt}</td>
-                  <td>{row.destination}</td>
-                  <td>{row.origin}</td>
-                  <td>{row.productName}</td>
-                  <td>{row.flexconQuantityText}</td>
-                  <td>{row.paperBagQuantityText}</td>
-                  <td>{row.carrier}</td>
-                  <td>{row.driver}</td>
-                  <td>{row.vehicle}</td>
-                  <td>{row.worker}</td>
-                  <td>{row.note}</td>
+        <div className="shipment-table-view">
+          <section className="shipment-destination-summary" aria-labelledby="destination-summary-title">
+            <div className="section-title"><div><h2 id="destination-summary-title">納品先別集計</h2><span>{destinationSummaryRows.length}件</span></div></div>
+            <div className="shipment-summary-table-wrap">
+              <table className="shipment-summary-table">
+                <thead><tr><th>納品先</th><th>フレコン本数</th><th>紙袋数</th></tr></thead>
+                <tbody>
+                  {destinationSummaryRows.map((row) => (
+                    <tr key={row.destination}>
+                      <td>{row.destination}</td>
+                      <td>{row.flexconQuantity ? `${row.flexconQuantity}本` : ''}</td>
+                      <td>{row.paperBagQuantity ? `${row.paperBagQuantity}袋` : ''}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {destinationSummaryRows.length === 0 && <div className="empty-state">集計する出荷履歴がありません</div>}
+            </div>
+          </section>
+
+          <div className="shipment-table-wrap">
+            <table className="shipment-table">
+              <thead>
+                <tr>
+                  {TABLE_COLUMNS.map((column) => (
+                    <ShipmentColumnHeader
+                      key={column.key}
+                      column={column}
+                      sort={sort}
+                      values={filterValues[column.key]}
+                      selectedValues={columnFilters[column.key]}
+                      onSort={changeSort}
+                      onFilterChange={changeColumnFilter}
+                    />
+                  ))}
+                  {isAdmin && <th className="shipment-actions-heading">操作</th>}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-          {displayedTableRows.length === 0 && <div className="empty-state">該当する出荷履歴がありません</div>}
+              </thead>
+              <tbody>
+                {displayedTableRows.map((row) => (
+                  <tr key={row.id}>
+                    <td>{row.shippedAt}</td>
+                    <td>{row.destination}</td>
+                    <td>{row.origin}</td>
+                    <td>{row.productName}</td>
+                    <td>{row.flexconQuantityText}</td>
+                    <td>{row.paperBagQuantityText}</td>
+                    <td>{row.carrier}</td>
+                    <td>{row.driver}</td>
+                    <td>{row.vehicle}</td>
+                    <td>{row.worker}</td>
+                    <td className="shipment-note-cell">{row.note}</td>
+                    {isAdmin && (
+                      <td className="shipment-actions-cell">
+                        <div className="shipment-table-actions">
+                          <button className="icon-button" type="button" title="出荷履歴を編集" aria-label={`${row.destination}の出荷履歴を編集`} onClick={() => beginEdit(row.shipment)} disabled={busy}><Pencil size={17} /></button>
+                          <button className="icon-button delete-icon" type="button" title="出荷履歴を削除" aria-label={`${row.destination}の出荷履歴を削除`} onClick={() => void deleteShipment(row.shipment)} disabled={busy}><Trash2 size={17} /></button>
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {displayedTableRows.length === 0 && <div className="empty-state">該当する出荷履歴がありません</div>}
+          </div>
         </div>
       )}
 
