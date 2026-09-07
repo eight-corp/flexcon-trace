@@ -19,6 +19,7 @@ export type InspectionLedgerRecord = {
   reason: string
   kind: 'flexcon' | 'paper_bag'
   quantityCount: number
+  quantityKg: number
   weightKg: number
   moisture: number | null
 }
@@ -89,6 +90,7 @@ export function aggregateInspectionLedgerRecords(records: InspectionLedgerRecord
     const current = grouped.get(key)
     if (current) {
       current.record.quantityCount += record.quantityCount
+      current.record.quantityKg += record.quantityKg
       if (moisture !== null) {
         current.moistureTotal += moisture * record.quantityCount
         current.moistureQuantity += record.quantityCount
@@ -200,7 +202,7 @@ function drawLedgerOverlay(
     const isFeedRice = record.brand === '飼料用玄米'
     const packaging = record.kind === 'paper_bag' ? '紙袋' : '推フレ'
     const weight = `${record.weightKg.toLocaleString('ja-JP')}kg`
-    const quantity = record.quantityCount.toLocaleString('ja-JP')
+    const quantity = record.quantityKg.toLocaleString('ja-JP')
     const moisture = record.moistureAverage === null ? '' : `${record.moistureAverage.toFixed(1)}%`
 
     drawTextInBox(context, ledgerDate(record.inspectionDate), 28.8, top, 37.44, DATA_ROW_HEIGHT, 6, 3.5)
