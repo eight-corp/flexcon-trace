@@ -70,6 +70,7 @@ supabase/migrations/202609050012_inspection_option_descriptions.sql
 supabase/migrations/202609070001_paper_bag_shipment_products.sql
 supabase/migrations/202609070002_mixed_flexcons.sql
 supabase/migrations/202609070003_mixed_flexcon_source_records.sql
+supabase/migrations/202609070004_mixed_flexcon_edit_delete_usage.sql
 ```
 
 `202609050001_certificate_print_status.sql` まで実行済みの場合は、`202609050003_year_prefixed_lot_numbers.sql` の全内容だけを実行してください。前回の7桁化SQLを実行済みでも未実行でも使用できます。委任状№ごとに全仕入日のフレコン・紙袋を一覧表示し、年度、仕入日、検査日、検査場所、銘柄、数量、水分、等級、理由は各行で直接編集します。紙袋は合計袋数を変えずに2行へ分割できます。検査証明書はExcelを起動せず、ブラウザ内でA5横の複数ページPDFとして作成します。新しいQRは西暦4桁＋委任状№4桁＋フレコン№3桁の11桁です。

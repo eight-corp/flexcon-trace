@@ -37,6 +37,7 @@ type GeneratedCertificate = {
   count: number
   previouslyPrintedCount: number
 }
+type MixedUsage = { mixedNo: number; quantityKg: number }
 type GradingNoticeFailure = {
   summary: string
   reasons: string[]
@@ -146,6 +147,7 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
   const [paperBags, setPaperBags] = useState<PaperBagInspection[]>([])
   const [inspectionOptions, setInspectionOptions] = useState<InspectionOption[]>([])
   const [weights, setWeights] = useState<Record<InspectionWeight['weight_type'], number>>({ branded_rice: DEFAULT_BRANDED_RICE_WEIGHT, feed_rice: DEFAULT_FEED_RICE_WEIGHT })
+  const [mixedUsageBySource, setMixedUsageBySource] = useState<Record<string, MixedUsage[]>>({})
   const [addGroupForm, setAddGroupForm] = useState<AddGroupForm>(emptyAddGroupForm)
   const [detailDrafts, setDetailDrafts] = useState<Record<string, InlineDetailDraft>>({})
   const [splitPaper, setSplitPaper] = useState<PaperBagInspection | null>(null)
@@ -167,12 +169,13 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
 
   useEffect(() => {
     const load = async () => {
-      const [authorizationResult, flexconResult, paperResult, optionResult, weightResult] = await Promise.all([
+      const [authorizationResult, flexconResult, paperResult, optionResult, weightResult, mixedUsageResult] = await Promise.all([
         supabase.from('flexcon_authorizations').select('*').order('authorization_no'),
         supabase.from('flexcon_inspection_flexcons').select('*').order('purchase_date', { ascending: false }).order('flexcon_no'),
         supabase.from('flexcon_inspection_paper_bags').select('*').order('purchase_date', { ascending: false }).order('created_at'),
         supabase.from('flexcon_inspection_options').select('*').eq('active', true).order('sort_order').order('name'),
         supabase.from('flexcon_inspection_weights').select('*'),
+        supabase.from('flexcon_mixed_flexcon_members').select('source_flexcon_id, quantity_kg, flexcon_mixed_flexcons(mixed_no)').not('source_flexcon_id', 'is', null),
       ])
       if (flexconResult.error || paperResult.error) {
         setNotice({ type: 'error', text: '委任状単位の検査記録用SQLを実行してください。' })
@@ -194,6 +197,17 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
           branded_rice: loadedWeights.find((item) => item.weight_type === 'branded_rice')?.weight_kg ?? DEFAULT_BRANDED_RICE_WEIGHT,
           feed_rice: loadedWeights.find((item) => item.weight_type === 'feed_rice')?.weight_kg ?? DEFAULT_FEED_RICE_WEIGHT,
         })
+      }
+      if (!mixedUsageResult.error) {
+        const usage: Record<string, MixedUsage[]> = {}
+        for (const row of mixedUsageResult.data ?? []) {
+          const sourceId = row.source_flexcon_id
+          const mixedRecord = Array.isArray(row.flexcon_mixed_flexcons) ? row.flexcon_mixed_flexcons[0] : row.flexcon_mixed_flexcons
+          if (!sourceId || !mixedRecord?.mixed_no) continue
+          usage[sourceId] ??= []
+          usage[sourceId].push({ mixedNo: Number(mixedRecord.mixed_no), quantityKg: Number(row.quantity_kg) })
+        }
+        setMixedUsageBySource(usage)
       }
     }
     void load()
@@ -761,9 +775,9 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
     <section className="section-band inspection-detail-section">
       <div className="section-title"><div><h2>フレコン</h2><span>{selectedFlexcons.length}本</span></div><div className="button-row"><span className="certificate-status-key"><span aria-hidden="true" />印刷済み</span><button className="secondary-button certificate-create-button" type="button" disabled={certificateEligibleFlexcons.length === 0} onClick={openCertificateDialog}><FileText size={18} />検査証明書作成</button></div></div>
       <div className="inspection-detail-table-wrap"><table className="inspection-detail-table">
-        <thead><tr><th>№</th><th>年度</th><th>仕入日</th><th>検査日</th><th>検査員</th><th>検査場所</th><th>産地</th><th>銘柄</th><th>数量（kg）</th><th>水分</th><th>等級</th><th>理由</th><th></th></tr></thead>
-        <tbody>{selectedFlexcons.map((item) => <tr className={[(item.certificate_print_count ?? 0) > 0 ? 'certificate-printed-row' : '', isInspectionResultComplete(item) ? 'inspection-complete-row' : ''].filter(Boolean).join(' ') || undefined} title={(item.certificate_print_count ?? 0) > 0 ? `印刷済み（${item.certificate_print_count}回）` : '未印刷'} key={item.id}><td>{item.flexcon_no}</td>{renderInlineMetadataFields('flexcon', item)}{renderInlineProductFields('flexcon', item)}{renderInlineResultFields('flexcon', item)}<td className="inspection-row-actions"><button className="icon-button delete-icon" type="button" title="削除" aria-label={`№${item.flexcon_no}を削除`} onClick={() => void deleteFlexcon(item)}><Trash2 size={17} /></button></td></tr>)}
-        {selectedFlexcons.length === 0 && <tr><td colSpan={13} className="empty-state">フレコンは登録されていません</td></tr>}</tbody>
+        <thead><tr><th>№</th><th>年度</th><th>仕入日</th><th>検査日</th><th>検査員</th><th>検査場所</th><th>産地</th><th>銘柄</th><th>数量（kg）</th><th>混在使用</th><th>水分</th><th>等級</th><th>理由</th><th></th></tr></thead>
+        <tbody>{selectedFlexcons.map((item) => <tr className={[(item.certificate_print_count ?? 0) > 0 ? 'certificate-printed-row' : '', isInspectionResultComplete(item) ? 'inspection-complete-row' : ''].filter(Boolean).join(' ') || undefined} title={(item.certificate_print_count ?? 0) > 0 ? `印刷済み（${item.certificate_print_count}回）` : '未印刷'} key={item.id}><td>{item.flexcon_no}</td>{renderInlineMetadataFields('flexcon', item)}{renderInlineProductFields('flexcon', item)}<td className="mixed-usage-cell">{(mixedUsageBySource[item.id] ?? []).map((usage) => <span key={usage.mixedNo}>混在№{usage.mixedNo}　{usage.quantityKg.toLocaleString()}kg</span>)}</td>{renderInlineResultFields('flexcon', item)}<td className="inspection-row-actions"><button className="icon-button delete-icon" type="button" title="削除" aria-label={`№${item.flexcon_no}を削除`} onClick={() => void deleteFlexcon(item)}><Trash2 size={17} /></button></td></tr>)}
+        {selectedFlexcons.length === 0 && <tr><td colSpan={14} className="empty-state">フレコンは登録されていません</td></tr>}</tbody>
       </table></div>
     </section>
     {certificateDialogOpen && <div className="modal-backdrop"><section className="registration-modal certificate-modal" role="dialog" aria-modal="true" aria-labelledby="certificate-dialog-title">

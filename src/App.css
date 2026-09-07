@@ -391,7 +391,7 @@
 .mixed-total-panel.complete { border-color: #8fbea0; background: var(--green-soft); }
 .mixed-total-panel.complete strong { color: var(--green-dark); }
 .mixed-add-form { display: grid; gap: 12px; }
-.mixed-base-fields { display: grid; grid-template-columns: 92px minmax(130px, .7fr) minmax(170px, 1fr); gap: 10px; }
+.mixed-base-fields { display: grid; grid-template-columns: 82px 142px minmax(130px, .7fr) minmax(170px, 1fr); gap: 10px; }
 .mixed-base-fields label, .mixed-add-form > label { margin: 0; }
 .mixed-candidate-picker { display: grid; grid-template-columns: minmax(190px, .8fr) minmax(0, 1.4fr); gap: 10px; align-items: start; }
 .mixed-candidate-picker label { margin: 0; }
@@ -412,7 +412,13 @@
 .mixed-member-row input { min-width: 0; height: 36px; }
 .mixed-members-summary .section-title strong { color: var(--green-dark); font-size: 19px; }
 .mixed-member-summary-list { border-top: 1px solid var(--line); }
-.mixed-member-summary-list > div { min-height: 42px; display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 8px 4px; border-bottom: 1px solid var(--line); }
+.mixed-member-summary-list > div { min-height: 48px; display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 8px 4px; border-bottom: 1px solid var(--line); }
+.mixed-member-summary-list > div > span { display: grid; gap: 2px; }
+.mixed-member-summary-list small { color: #69736c; font-size: 11px; }
+.mixed-member-summary-list label { display: flex; align-items: center; gap: 5px; margin: 0; }
+.mixed-member-summary-list input { width: 120px; }
+.mixed-usage-cell { min-width: 145px; }
+.mixed-usage-cell span { display: block; white-space: nowrap; }
 .mixed-member-summary-list > div:last-child { border-bottom: 0; }
 .mixed-inspection-form { margin-bottom: 0; }
 .mixed-inspection-grid { display: grid; grid-template-columns: 90px repeat(2, minmax(140px, .8fr)) repeat(2, minmax(150px, 1fr)); gap: 10px; }
@@ -505,5 +511,6 @@
   .mixed-member-editor { overflow-x: auto; }
   .mixed-member-editor-head, .mixed-member-row { min-width: 560px; }
   .mixed-notes-field { grid-column: 1; }
-  .mixed-detail-page .producer-inspection-heading > .secondary-button { grid-column: 1 / -1; width: 100%; }
+  .mixed-detail-page .producer-inspection-heading > .button-row { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 1fr) 42px; width: 100%; }
+  .mixed-detail-page .producer-inspection-heading > .button-row .secondary-button { width: 100%; }
 }
