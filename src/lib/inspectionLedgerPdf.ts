@@ -42,8 +42,8 @@ const DATA_ROW_HEIGHT = 28.56
 const GRADE_COLUMNS: Record<string, { x: number; width: number }> = {
   '1等': { x: 340.32, width: 26.4 },
   '2等': { x: 366.72, width: 26.4 },
-  '合格': { x: 393.12, width: 26.4 },
-  '3等': { x: 419.52, width: 26.4 },
+  '3等': { x: 393.12, width: 26.4 },
+  '合格': { x: 419.52, width: 26.4 },
 }
 
 function normalized(value: string) {
@@ -183,7 +183,15 @@ function drawLedgerOverlay(
   drawTextInBox(context, authorization.fullName, 28.8, 97.92, 286.56, 19.2, 8, 5, 'left')
   drawTextInBox(context, authorization.address, 315.36, 97.92, 451.68, 19.2, 7.5, 4.5, 'left')
   drawTextInBox(context, authorization.authorizationNo, 767.04, 97.92, 37.92, 19.2, 7)
-  drawTextInBox(context, '3等', 419.52, 151.2, 26.4, 41.28, 5.5, 4)
+
+  context.save()
+  context.fillStyle = '#fff'
+  context.fillRect(393.62, 169.7, 25.4, 22.28)
+  context.fillRect(420.02, 169.7, 25.4, 22.28)
+  context.restore()
+  context.fillStyle = '#000'
+  drawTextInBox(context, '3等', 393.12, 172, 26.4, 21, 5.5, 4)
+  drawTextInBox(context, '合格', 419.52, 170, 26.4, 22.5, 5.5, 4)
 
   records.forEach((record, index) => {
     const top = DATA_TOP + index * DATA_ROW_HEIGHT
@@ -209,7 +217,7 @@ function drawLedgerOverlay(
       drawTextInBox(context, quantity, gradeColumn.x, top, gradeColumn.width, halfHeight, 6.5, 4)
       drawTextInBox(context, record.reason, gradeColumn.x, top + halfHeight, gradeColumn.width, halfHeight, 5, 3.2)
     }
-    drawTextInBox(context, quantity, 498.72, top, 26.4, DATA_ROW_HEIGHT, 6.5, 4)
+    drawTextInBox(context, quantity, 498.72, top, 26.4, halfHeight, 6.5, 4)
     drawTextInBox(context, quantity, 709.92, top, 28.8, DATA_ROW_HEIGHT, 6.5, 4)
     drawTextInBox(context, moisture, 738.72, top, 28.32, DATA_ROW_HEIGHT, 5.8, 3.5, 'right')
     drawTextInBox(context, record.inspectorName, 767.04, top, 37.92, DATA_ROW_HEIGHT, 5.8, 3.5)
