@@ -126,6 +126,7 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
   const [notice, setNotice] = useState<{ type: 'success' | 'error' | 'warning'; text: string } | null>(null)
   const [busy, setBusy] = useState(false)
   const lastRead = useRef({ value: '', time: 0 })
+  const checkingLots = useRef(new Set<string>())
   const shipmentBrandCounts = Object.entries(lots.reduce<Record<string, number>>((counts, lot) => {
     const brand = inspectionLotDetails[lot]?.brand.trim() || '銘柄未登録'
     counts[brand] = (counts[brand] ?? 0) + 1
@@ -226,7 +227,7 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
     }
   }
 
-  const addLot = useCallback((rawValue: string) => {
+  const addLot = useCallback(async (rawValue: string) => {
     const value = rawValue.trim()
     const now = Date.now()
     if (lastRead.current.value === value && now - lastRead.current.time < 1800) return
@@ -236,6 +237,29 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
       setNotice({ type: 'error', text: `「${value.slice(0, 24)}」は11桁のロット番号ではありません。` })
       return
     }
+
+    if (checkingLots.current.has(value)) return
+    checkingLots.current.add(value)
+
+    const { data: flexcon, error } = await supabase
+      .from('flexcon_flexcons')
+      .select('status')
+      .eq('lot_number', value)
+      .maybeSingle()
+
+    checkingLots.current.delete(value)
+
+    if (error) {
+      setNotice({ type: 'error', text: `${value} の出荷状況を確認できませんでした。通信状態を確認して、もう一度読み取ってください。` })
+      navigator.vibrate?.([180, 100, 180])
+      return
+    }
+    if (flexcon?.status === 'shipped') {
+      setNotice({ type: 'warning', text: `${value} は既に出荷済みです。一覧には追加しませんでした。` })
+      navigator.vibrate?.([220, 100, 220])
+      return
+    }
+
     setLots((current) => {
       if (current.length >= plannedCount) return current
       if (current.includes(value)) {
