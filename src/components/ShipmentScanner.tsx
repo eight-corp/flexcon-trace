@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
-import { Package, Plus, Send, Trash2, UserRound, Wheat, X } from 'lucide-react'
+import { Minus, Package, Plus, Send, Trash2, UserRound, Wheat, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { formatPrefectureName } from '../lib/prefecture'
 import type { Destination, InspectionOption, TransportProfile } from '../types'
@@ -224,6 +224,8 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
     setPlannedCount(nextCount)
     if (lots.length > 0 && lots.length >= nextCount) {
       setScannerActive(false)
+      setManualShipmentKind(null)
+      setRegistrationOpen(true)
     }
   }
 
@@ -415,9 +417,13 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
       <section className="section-band">
         <div className="count-panel">
           <div className="count-display"><strong>{lots.length}</strong><span>/ {plannedCount}本</span></div>
-          <label className="target-control">予定本数
-            <input type="number" min={Math.max(1, lots.length)} max={24} value={plannedCount} onChange={(e) => changePlannedCount(Number(e.target.value))} />
-          </label>
+          <div className="target-control"><span>予定本数</span>
+            <span className="planned-count-stepper">
+              <button type="button" title="予定本数を1本減らす" aria-label="予定本数を1本減らす" onClick={() => changePlannedCount(plannedCount - 1)} disabled={plannedCount <= Math.max(1, lots.length)}><Minus size={20} /></button>
+              <input aria-label="予定本数" type="number" min={Math.max(1, lots.length)} max={24} value={plannedCount} onChange={(e) => changePlannedCount(Number(e.target.value))} />
+              <button type="button" title="予定本数を1本増やす" aria-label="予定本数を1本増やす" onClick={() => changePlannedCount(plannedCount + 1)} disabled={plannedCount >= 24}><Plus size={20} /></button>
+            </span>
+          </div>
         </div>
 
         {lots.length === 0 ? <div className="empty-state">まだ読み取られていません</div> : (
