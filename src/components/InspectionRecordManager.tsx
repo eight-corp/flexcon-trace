@@ -16,6 +16,7 @@ type Props = {
 export type InspectionRecordTarget = { kind: 'flexcon' | 'paper'; id: string }
 type Notice = { type: 'success' | 'error'; text: string } | null
 type AddGroupForm = {
+  authorization_id: string
   producer_name: string
   fiscal_year: string
   purchase_date: string
@@ -107,6 +108,7 @@ function today() {
 }
 function emptyAddGroupForm(): AddGroupForm {
   return {
+    authorization_id: '',
     producer_name: '',
     fiscal_year: String(currentFiscalYear()),
     purchase_date: today(),
@@ -206,6 +208,7 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
   const [inspectionOptions, setInspectionOptions] = useState<InspectionOption[]>([])
   const [weights, setWeights] = useState<Record<InspectionWeight['weight_type'], number>>({ branded_rice: DEFAULT_BRANDED_RICE_WEIGHT, feed_rice: DEFAULT_FEED_RICE_WEIGHT })
   const [addGroupForm, setAddGroupForm] = useState<AddGroupForm>(emptyAddGroupForm)
+  const [producerPickerOpen, setProducerPickerOpen] = useState(false)
   const [detailDrafts, setDetailDrafts] = useState<Record<string, InlineDetailDraft>>({})
   const [splitPaper, setSplitPaper] = useState<PaperBagInspection | null>(null)
   const [splitCounts, setSplitCounts] = useState({ first: '', second: '' })
@@ -282,7 +285,16 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
   }, [flexcons, paperBags, selectedAuthorizationId, selectedRecordTarget])
 
   const selectedAuthorization = authorizations.find((item) => item.id === selectedAuthorizationId) ?? null
-  const addAuthorization = authorizations.find((item) => item.full_name.trim() === addGroupForm.producer_name.trim()) ?? null
+  const addAuthorization = authorizations.find((item) => item.id === addGroupForm.authorization_id) ?? null
+  const producerCandidates = useMemo(() => {
+    const term = addGroupForm.producer_name.trim().toLowerCase()
+    return authorizations.filter((item) => !term || [
+      item.authorization_no,
+      item.full_name,
+      item.prefecture,
+      item.municipality,
+    ].some((value) => String(value ?? '').toLowerCase().includes(term))).slice(0, 20)
+  }, [addGroupForm.producer_name, authorizations])
   const selectedFlexcons = flexcons
     .filter((item) => item.authorization_id === selectedAuthorizationId)
     .sort((left, right) => left.flexcon_no - right.flexcon_no)
@@ -977,8 +989,13 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
       <div className="page-heading inspection-heading"><div><h1>検査記録</h1><p>生産者詳細で追加した順番に検査記録を表示します。</p></div></div>
       <div className="search-row"><div className="search-input-wrap"><Search size={18} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="登録No.・氏名・産地・銘柄などで検索" /></div></div>
       {!readOnly && <form className="inspection-group-add inspection-summary-add section-band" onSubmit={(event) => void addInspectionGroup(event)}>
-        <label>生産者名<input list="inspection-producer-options" value={addGroupForm.producer_name} onChange={(event) => setAddGroupForm((current) => ({ ...current, producer_name: event.target.value, brand: '' }))} placeholder="氏名を入力" autoComplete="off" required /></label>
-        <datalist id="inspection-producer-options">{authorizations.map((item) => <option key={item.id} value={item.full_name}>{`委任状No. ${item.authorization_no}`}</option>)}</datalist>
+        <div className="inspection-producer-picker" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setProducerPickerOpen(false) }}>
+          <label>生産者名<input value={addGroupForm.producer_name} onFocus={() => setProducerPickerOpen(true)} onChange={(event) => { const producerName = event.target.value; const exactMatches = authorizations.filter((item) => item.full_name.trim() === producerName.trim()); setAddGroupForm((current) => ({ ...current, authorization_id: exactMatches.length === 1 ? exactMatches[0].id : '', producer_name: producerName, brand: '' })); setProducerPickerOpen(true) }} placeholder="氏名・委任状No.で絞り込み" autoComplete="off" role="combobox" aria-expanded={producerPickerOpen} aria-controls="inspection-producer-candidates" required /></label>
+          {producerPickerOpen && <div id="inspection-producer-candidates" className="inspection-producer-candidates" role="listbox">
+            {producerCandidates.map((item) => <button type="button" role="option" aria-selected={item.id === addGroupForm.authorization_id} key={item.id} onClick={() => { setAddGroupForm((current) => ({ ...current, authorization_id: item.id, producer_name: item.full_name, brand: '' })); setProducerPickerOpen(false) }}><span>No. {item.authorization_no}</span><strong>{item.full_name}<small>{[formatPrefectureName(item.prefecture), item.municipality].filter(Boolean).join(' ') || '産地未登録'}</small></strong></button>)}
+            {producerCandidates.length === 0 && <span className="empty-state">該当する生産者がありません</span>}
+          </div>}
+        </div>
         <label>年度<input type="number" min="1" max="99" value={addGroupForm.fiscal_year} onChange={(event) => setAddGroupForm((current) => ({ ...current, fiscal_year: event.target.value }))} required /></label>
         <label>仕入日<input type="date" value={addGroupForm.purchase_date} onChange={(event) => setAddGroupForm((current) => ({ ...current, purchase_date: event.target.value }))} required /></label>
         <label>検査日<input type="date" value={addGroupForm.inspection_date} onChange={(event) => setAddGroupForm((current) => ({ ...current, inspection_date: event.target.value }))} /></label>
@@ -1022,10 +1039,10 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
     <div className="producer-inspection-heading">
       <button className="icon-button" type="button" title={readOnly ? '委任状一覧へ戻る' : '検査記録へ戻る'} aria-label={readOnly ? '委任状一覧へ戻る' : '検査記録へ戻る'} onClick={onBack}><ArrowLeft size={21} /></button>
       <div><h1>{selectedAuthorization.full_name}</h1><p>委任状№ {selectedAuthorization.authorization_no}　{[selectedAuthorization.prefecture, selectedAuthorization.municipality].filter(Boolean).join(' ')}</p></div>
-      <div className="producer-inspection-actions">
+      {readOnly && <div className="producer-inspection-actions">
         <button className="secondary-button" type="button" onClick={() => void createInspectionLedgerPdf()} disabled={inspectionLedgerBusy || gradingNoticeBusy}><ClipboardList size={18} />{inspectionLedgerBusy ? 'PDF作成中...' : '検査請求者別検査台帳'}</button>
         <button className="secondary-button" type="button" onClick={() => void createGradingNoticePdf()} disabled={gradingNoticeBusy || inspectionLedgerBusy}><FileText size={18} />{gradingNoticeBusy ? 'PDF作成中...' : '格付結果通知票'}</button>
-      </div>
+      </div>}
     </div>
     <section className="section-band inspection-detail-section">
       <div className="section-title"><div><h2>紙袋</h2><span>{selectedPaperBags.length}件</span></div></div>
