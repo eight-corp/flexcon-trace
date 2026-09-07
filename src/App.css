@@ -368,6 +368,8 @@
 .inspection-brand-cell { min-width: 160px; }
 .inspection-quantity-cell { min-width: 108px; }
 .inspection-inline-cell select:disabled { background: #edf1ee; color: #7a847c; cursor: not-allowed; }
+.inspection-missing { background: #fff1bf !important; border-color: #d39a28 !important; box-shadow: inset 0 0 0 1px rgba(211, 154, 40, .12); }
+.inspection-missing:focus { outline-color: rgba(177, 113, 8, .22); border-color: #a86b08 !important; }
 .certificate-status-key { display: inline-flex; align-items: center; gap: 6px; color: #4b6553; font-size: 12px; white-space: nowrap; }
 .certificate-status-key > span { width: 16px; height: 16px; border: 1px solid #9cc9a8; border-radius: 3px; background: #e4f2e7; }
 .inspection-detail-table tbody tr.certificate-printed-row { background: #e4f2e7; }

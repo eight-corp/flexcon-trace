@@ -319,6 +319,7 @@ export function MixedFlexconManager({ workerId }: Props) {
 
   if (selected && draft) {
     const reasonForbidden = draft.grade === '1等' || draft.grade === '合格'
+    const reasonMissing = !reasonForbidden && Boolean(draft.grade) && !draft.reason
     return <div className="mixed-detail-page">
       <div className="producer-inspection-heading">
         <button className="icon-button" type="button" title="一覧へ戻る" aria-label="一覧へ戻る" onClick={() => { setSelectedId(null); setDraft(null); setNotice(null) }}><ArrowLeft size={21} /></button>
@@ -334,15 +335,15 @@ export function MixedFlexconManager({ workerId }: Props) {
       <form className="section-band mixed-inspection-form" onSubmit={(event) => void saveInspection(event)}>
         <div className="mixed-inspection-grid">
           <label>年度<input value={selected.fiscal_year} readOnly /></label>
-          <label>検査日<input type="date" value={draft.inspectionDate} onChange={(event) => setDraft((current) => current ? { ...current, inspectionDate: event.target.value } : current)} /></label>
-          <label>検査員<select value={draft.inspectorName} onChange={(event) => setDraft((current) => current ? { ...current, inspectorName: event.target.value } : current)}><option value="">未選択</option>{inspectorOptions.map((option) => <option key={option.id}>{option.name}</option>)}</select></label>
-          <label>検査場所<select value={draft.inspectionLocation} onChange={(event) => setDraft((current) => current ? { ...current, inspectionLocation: event.target.value } : current)}><option value="">未選択</option>{locationOptions.map((option) => <option key={option.id}>{option.name}</option>)}</select></label>
+          <label>検査日<input className={!draft.inspectionDate ? 'inspection-missing' : ''} type="date" value={draft.inspectionDate} onChange={(event) => setDraft((current) => current ? { ...current, inspectionDate: event.target.value } : current)} /></label>
+          <label>検査員<select className={!draft.inspectorName ? 'inspection-missing' : ''} value={draft.inspectorName} onChange={(event) => setDraft((current) => current ? { ...current, inspectorName: event.target.value } : current)}><option value="">未選択</option>{inspectorOptions.map((option) => <option key={option.id}>{option.name}</option>)}</select></label>
+          <label>検査場所<select className={!draft.inspectionLocation ? 'inspection-missing' : ''} value={draft.inspectionLocation} onChange={(event) => setDraft((current) => current ? { ...current, inspectionLocation: event.target.value } : current)}><option value="">未選択</option>{locationOptions.map((option) => <option key={option.id}>{option.name}</option>)}</select></label>
           <label>産地<input value={selected.origin_prefecture} readOnly /></label>
           <label>銘柄<input value={selected.brand} readOnly /></label>
           <label>数量<input value={`${selected.quantity_kg.toLocaleString()}kg`} readOnly /></label>
-          <label>水分<input className={Number(draft.moisture) > 16 ? 'moisture-high' : ''} type="number" min="0" max="100" step="0.1" value={draft.moisture} onChange={(event) => setDraft((current) => current ? { ...current, moisture: event.target.value } : current)} /></label>
-          <label>等級<select value={draft.grade} onChange={(event) => { const grade = event.target.value; setDraft((current) => current ? { ...current, grade, reason: grade === '1等' || grade === '合格' ? '' : current.reason } : current) }}><option value="">未選択</option>{gradeOptions.map((option) => <option key={option.id}>{option.name}</option>)}</select></label>
-          <label>理由<select value={draft.reason} disabled={reasonForbidden || !draft.grade} onChange={(event) => setDraft((current) => current ? { ...current, reason: event.target.value } : current)}><option value="">未選択</option>{reasonOptions.map((option) => <option key={option.id}>{option.name}</option>)}</select></label>
+          <label>水分<input className={[draft.moisture === '' ? 'inspection-missing' : '', Number(draft.moisture) > 16 ? 'moisture-high' : ''].filter(Boolean).join(' ')} type="number" min="0" max="100" step="0.1" value={draft.moisture} onChange={(event) => setDraft((current) => current ? { ...current, moisture: event.target.value } : current)} /></label>
+          <label>等級<select className={!draft.grade ? 'inspection-missing' : ''} value={draft.grade} onChange={(event) => { const grade = event.target.value; setDraft((current) => current ? { ...current, grade, reason: grade === '1等' || grade === '合格' ? '' : current.reason } : current) }}><option value="">未選択</option>{gradeOptions.map((option) => <option key={option.id}>{option.name}</option>)}</select></label>
+          <label>理由<select className={reasonMissing ? 'inspection-missing' : ''} value={draft.reason} disabled={reasonForbidden || !draft.grade} onChange={(event) => setDraft((current) => current ? { ...current, reason: event.target.value } : current)}><option value="">未選択</option>{reasonOptions.map((option) => <option key={option.id}>{option.name}</option>)}</select></label>
           <label className="mixed-notes-field">備考<textarea rows={2} value={draft.notes} onChange={(event) => setDraft((current) => current ? { ...current, notes: event.target.value } : current)} /></label>
         </div>
         <div className="modal-actions"><button className="primary-button" type="submit" disabled={busy}>{busy ? '保存中...' : '保存'}</button></div>
