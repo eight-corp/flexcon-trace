@@ -11,7 +11,8 @@ import { clearWorkerSession, restoreWorkerSession } from './lib/workerAuth'
 import type { Worker } from './types'
 import './App.css'
 
-type Tab = 'scan' | 'history' | 'authorizations' | 'mixed' | 'inspections' | 'master'
+type Tab = 'scan' | 'history' | 'authorizations' | 'inspections' | 'master'
+type InspectionView = 'single' | 'mixed'
 
 function App() {
   const [worker, setWorker] = useState<Worker | null>(null)
@@ -19,6 +20,7 @@ function App() {
   const [tab, setTab] = useState<Tab>('scan')
   const [historyVersion, setHistoryVersion] = useState(0)
   const [inspectionAuthorizationId, setInspectionAuthorizationId] = useState<string | null>(null)
+  const [inspectionView, setInspectionView] = useState<InspectionView>('single')
 
   useEffect(() => {
     void restoreWorkerSession()
@@ -63,7 +65,7 @@ function App() {
         </button>
       </header>
 
-      <main className={`app-main ${tab === 'history' || tab === 'authorizations' || tab === 'mixed' || tab === 'inspections' ? 'app-main-wide' : ''}`}>
+      <main className={`app-main ${tab === 'history' || tab === 'authorizations' || tab === 'inspections' ? 'app-main-wide' : ''}`}>
         {tab === 'scan' && (
           <ShipmentScanner
             key={worker.worker_id}
@@ -78,19 +80,29 @@ function App() {
             workerId={worker.worker_id}
             onOpenInspections={(authorizationId) => {
               setInspectionAuthorizationId(authorizationId)
+              setInspectionView('single')
               setTab('inspections')
             }}
           />
         )}
         {tab === 'inspections' && (
-          <InspectionRecordManager
-            key={inspectionAuthorizationId ?? 'inspection-summary'}
-            workerId={worker.worker_id}
-            selectedAuthorizationId={inspectionAuthorizationId}
-            onSelectedAuthorizationChange={setInspectionAuthorizationId}
-          />
+          <div className="inspection-workspace">
+            <div className="inspection-record-tabs" role="tablist" aria-label="検査記録の種類">
+              <button type="button" role="tab" aria-selected={inspectionView === 'single'} className={inspectionView === 'single' ? 'active' : ''} onClick={() => setInspectionView('single')}><ClipboardList size={18} />単一フレコン</button>
+              <button type="button" role="tab" aria-selected={inspectionView === 'mixed'} className={inspectionView === 'mixed' ? 'active' : ''} onClick={() => setInspectionView('mixed')}><Blend size={18} />混在フレコン</button>
+            </div>
+            <div className="inspection-workspace-content">
+              {inspectionView === 'single' ? (
+                <InspectionRecordManager
+                  key={inspectionAuthorizationId ?? 'inspection-summary'}
+                  workerId={worker.worker_id}
+                  selectedAuthorizationId={inspectionAuthorizationId}
+                  onSelectedAuthorizationChange={setInspectionAuthorizationId}
+                />
+              ) : <MixedFlexconManager workerId={worker.worker_id} />}
+            </div>
+          </div>
         )}
-        {tab === 'mixed' && <MixedFlexconManager workerId={worker.worker_id} />}
         {tab === 'master' && <InspectionOptionManager workerId={worker.worker_id} />}
       </main>
 
@@ -104,10 +116,7 @@ function App() {
         <button className={tab === 'authorizations' ? 'active' : ''} onClick={() => setTab('authorizations')}>
           <FileSignature size={22} /><span>委任状一覧</span>
         </button>
-        <button className={tab === 'mixed' ? 'active' : ''} onClick={() => setTab('mixed')}>
-          <Blend size={22} /><span>混在フレコン</span>
-        </button>
-        <button className={tab === 'inspections' ? 'active' : ''} onClick={() => { setInspectionAuthorizationId(null); setTab('inspections') }}>
+        <button className={tab === 'inspections' ? 'active' : ''} onClick={() => { setInspectionAuthorizationId(null); setInspectionView('single'); setTab('inspections') }}>
           <ClipboardList size={22} /><span>検査記録</span>
         </button>
         <button className={tab === 'master' ? 'active' : ''} onClick={() => setTab('master')}>
