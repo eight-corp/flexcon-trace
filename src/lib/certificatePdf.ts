@@ -180,6 +180,7 @@ async function drawCertificateOverlay(
     68 * CANVAS_SCALE,
     68 * CANVAS_SCALE,
   )
+  drawCenteredText(context, '当検査機関の管理用ロット情報', 66.5, 383, 110, 6.5, 5)
 
   return canvas
 }
