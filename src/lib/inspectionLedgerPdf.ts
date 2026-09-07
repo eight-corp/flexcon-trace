@@ -4,6 +4,7 @@ export type InspectionLedgerAuthorization = {
   authorizationNo: string
   fullName: string
   address: string
+  feedRiceVariety: string
 }
 
 export type InspectionLedgerRecord = {
@@ -208,7 +209,7 @@ function drawLedgerOverlay(
     drawTextInBox(context, cropType(record.brand), 141.12, top, 50.88, DATA_ROW_HEIGHT, 5.8, 3.5)
     drawTextInBox(context, String(record.fiscalYear), 192, top, 19.68, DATA_ROW_HEIGHT, 7)
     drawTextInBox(context, record.origin, 211.68, top, 28.8, DATA_ROW_HEIGHT, 6, 3.5)
-    drawTextInBox(context, isFeedRice ? '' : record.brand, 240.48, top, 50.4, DATA_ROW_HEIGHT, 6, 3.5)
+    drawTextInBox(context, isFeedRice ? authorization.feedRiceVariety : record.brand, 240.48, top, 50.4, DATA_ROW_HEIGHT, 6, 3.5)
     drawTextInBox(context, packaging, 290.88, top, 24.48, DATA_ROW_HEIGHT, 6, 3.5)
     drawTextInBox(context, weight, 315.36, top, 24.96, DATA_ROW_HEIGHT, 5.5, 3.3)
 

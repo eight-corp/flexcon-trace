@@ -605,6 +605,7 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
           authorizationNo: selectedAuthorization.authorization_no,
           fullName: selectedAuthorization.full_name,
           address: selectedAuthorization.address ?? '',
+          feedRiceVariety: selectedAuthorization.feed_rice_variety ?? '',
         },
         records,
       })
