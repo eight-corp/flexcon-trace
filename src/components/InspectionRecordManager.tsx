@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft, CircleAlert, ClipboardList, ExternalLink, FileText, Plus, Printer, Search, TableRowsSplit, Trash2, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { formatPrefectureName } from '../lib/prefecture'
 import type { AuthorizationRecord, FlexconInspection, InspectionOption, InspectionWeight, PaperBagInspection } from '../types'
 
 type Props = {
@@ -42,6 +43,13 @@ type MixedUsage = { mixedNo: number; quantityKg: number }
 type GradingNoticeFailure = {
   summary: string
   reasons: string[]
+}
+type InspectionProgressRow = {
+  fiscalYear: number
+  origin: string
+  brand: string
+  inspectedQuantity: number
+  uninspectedQuantity: number
 }
 
 const DEFAULT_BRANDED_RICE_WEIGHT = 1020
@@ -137,6 +145,7 @@ function inspectionLedgerFailureFor(items: Array<FlexconInspection | PaperBagIns
   }
 }
 function displayDate(value: string | null | undefined) { return value ? value.replaceAll('-', '/') : '' }
+function displayCropYear(value: number) { return value >= 2000 ? `${value}年産` : `令和${value}年産` }
 function brandTypeForPrefecture(prefecture: string | null): 'brand_aomori' | 'brand_iwate' | null {
   const normalized = (prefecture ?? '').trim().replace(/県$/, '')
   if (normalized === '青森') return 'brand_aomori'
@@ -242,6 +251,40 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
     if (!term) return summaryRows
     return summaryRows.filter(({ authorization, brands }) => [authorization.authorization_no, authorization.full_name, authorization.prefecture, authorization.municipality, brands].some((value) => String(value ?? '').toLowerCase().includes(term)))
   }, [search, summaryRows])
+  const inspectionProgressRows = useMemo(() => {
+    const authorizationById = new Map(authorizations.map((authorization) => [authorization.id, authorization]))
+    const grouped = new Map<string, InspectionProgressRow>()
+    const addRecord = (item: FlexconInspection | PaperBagInspection, quantity: number) => {
+      const authorization = authorizationById.get(item.authorization_id)
+      const origin = formatPrefectureName(authorization?.prefecture) || '産地未登録'
+      const brand = item.brand?.trim() || '銘柄未登録'
+      const key = JSON.stringify([item.fiscal_year, origin, brand])
+      const row = grouped.get(key) ?? {
+        fiscalYear: item.fiscal_year,
+        origin,
+        brand,
+        inspectedQuantity: 0,
+        uninspectedQuantity: 0,
+      }
+      if (isInspectionResultComplete(item)) {
+        row.inspectedQuantity += quantity
+      } else {
+        row.uninspectedQuantity += quantity
+      }
+      grouped.set(key, row)
+    }
+    flexcons.forEach((item) => addRecord(item, item.quantity_kg))
+    paperBags.forEach((item) => addRecord(item, item.bag_count * 30))
+    return [...grouped.values()].sort((left, right) => (
+      right.fiscalYear - left.fiscalYear
+      || left.origin.localeCompare(right.origin, 'ja', { numeric: true })
+      || left.brand.localeCompare(right.brand, 'ja', { numeric: true })
+    ))
+  }, [authorizations, flexcons, paperBags])
+  const inspectionProgressTotals = useMemo(() => inspectionProgressRows.reduce((totals, row) => ({
+    inspected: totals.inspected + row.inspectedQuantity,
+    uninspected: totals.uninspected + row.uninspectedQuantity,
+  }), { inspected: 0, uninspected: 0 }), [inspectionProgressRows])
 
   const locationOptions = inspectionOptions.filter((item) => item.option_type === 'location')
   const inspectorOptions = inspectionOptions.filter((item) => item.option_type === 'inspector')
@@ -738,6 +781,19 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
   if (!selectedAuthorization) {
     return <div className="inspection-page">
       <div className="page-heading inspection-heading"><div><h1>検査記録</h1><p>生産者ごとの検査数量を集計表示します。</p></div></div>
+      <section className="inspection-progress-section section-band">
+        <div className="section-title">
+          <div><h2>検査数量</h2><span>産年・産地・銘柄別</span></div>
+          <div className="inspection-progress-totals"><span>検査済み <strong>{inspectionProgressTotals.inspected.toLocaleString()}kg</strong></span><span>未検査 <strong>{inspectionProgressTotals.uninspected.toLocaleString()}kg</strong></span></div>
+        </div>
+        <div className="inspection-progress-table-wrap"><table className="inspection-progress-table">
+          <thead><tr><th>産年</th><th>産地</th><th>銘柄</th><th>検査済み数量</th><th>未検査数量</th></tr></thead>
+          <tbody>{inspectionProgressRows.map((row) => <tr key={`${row.fiscalYear}-${row.origin}-${row.brand}`}>
+            <td>{displayCropYear(row.fiscalYear)}</td><td>{row.origin}</td><td>{row.brand}</td><td className="inspection-progress-inspected">{row.inspectedQuantity.toLocaleString()}kg</td><td className="inspection-progress-uninspected">{row.uninspectedQuantity.toLocaleString()}kg</td>
+          </tr>)}
+          {inspectionProgressRows.length === 0 && <tr><td colSpan={5} className="empty-state">検査記録は登録されていません</td></tr>}</tbody>
+        </table></div>
+      </section>
       <div className="search-row"><div className="search-input-wrap"><Search size={18} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="委任状№・氏名・産地・銘柄で検索" /></div></div>
       <div className="inspection-summary-wrap"><table className="inspection-summary-table">
         <thead><tr><th>委任状№</th><th>氏名</th><th>産地</th><th>最終仕入日</th><th>銘柄</th><th>フレコン</th><th>紙袋</th><th>総数量</th></tr></thead>
