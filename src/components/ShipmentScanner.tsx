@@ -275,7 +275,11 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
       })
       navigator.vibrate?.(80)
       if (next.length >= plannedCount) {
-        window.setTimeout(() => setScannerActive(false), 0)
+        window.setTimeout(() => {
+          setManualShipmentKind(null)
+          setScannerActive(false)
+          setRegistrationOpen(true)
+        }, 0)
       }
       return next
     })
