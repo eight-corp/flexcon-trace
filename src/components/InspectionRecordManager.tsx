@@ -302,9 +302,9 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
   const selectedFlexcons = flexcons
     .filter((item) => item.authorization_id === selectedAuthorizationId && (readOnly || !selectedRegistrationId || item.registration_id === selectedRegistrationId))
     .sort((left, right) => left.flexcon_no - right.flexcon_no)
-  const certificateEligibleFlexcons = selectedFlexcons.filter((item) => (
-    isFeedRiceBrand(item.brand ?? '') || item.quantity_kg === weights.branded_rice
-  ))
+  const selectedStandardFlexcons = selectedFlexcons.filter((item) => item.quantity_kg === (isFeedRiceBrand(item.brand ?? '') ? weights.feed_rice : weights.branded_rice))
+  const selectedBulkFlexcons = selectedFlexcons.filter((item) => !selectedStandardFlexcons.includes(item))
+  const certificateEligibleFlexcons = selectedStandardFlexcons
   const selectedPaperBags = paperBags.filter((item) => item.authorization_id === selectedAuthorizationId && (readOnly || !selectedRegistrationId || item.registration_id === selectedRegistrationId))
   const selectedRegistration = registrations.find((item) => item.id === selectedRegistrationId) ?? null
 
@@ -1000,6 +1000,14 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
       </table></div>
     </details>
   }
+  const renderFlexconSection = (title: string, items: FlexconInspection[], showCertificate: boolean) => <section className="section-band inspection-detail-section">
+    <div className="section-title"><div><h2>{title}</h2><span>{items.length}本</span></div>{showCertificate && !readOnly && <div className="button-row"><span className="certificate-status-key"><span aria-hidden="true" />印刷済み</span><button className="secondary-button certificate-create-button" type="button" disabled={certificateEligibleFlexcons.length === 0} onClick={openCertificateDialog}><FileText size={18} />検査証明書作成</button></div>}</div>
+    <div className="inspection-detail-table-wrap"><table className="inspection-detail-table">
+      <thead><tr><th>№</th><th>年度</th><th>仕入日</th><th>検査日</th><th>検査員</th><th>検査場所</th><th>産地</th><th>銘柄</th><th>数量（kg）</th><th>水分</th><th>等級</th><th>理由</th>{!readOnly && <th></th>}</tr></thead>
+      <tbody>{items.map((item) => <tr id={`inspection-record-${item.id}`} className={[(item.certificate_print_count ?? 0) > 0 ? 'certificate-printed-row' : '', isInspectionResultComplete(item) ? 'inspection-complete-row' : '', selectedRecordTarget?.kind === 'flexcon' && selectedRecordTarget.id === item.id ? 'inspection-target-row' : ''].filter(Boolean).join(' ') || undefined} title={(item.certificate_print_count ?? 0) > 0 ? `印刷済み（${item.certificate_print_count}回）` : '未印刷'} key={item.id}><td>{item.flexcon_no}</td>{readOnly ? renderReadOnlyMetadataFields(item) : renderInlineMetadataFields('flexcon', item)}{readOnly ? renderReadOnlyProductFields(item) : renderInlineProductFields('flexcon', item)}{readOnly ? renderReadOnlyResultFields(item) : renderInlineResultFields('flexcon', item)}{!readOnly && <td className="inspection-row-actions"><button className="icon-button delete-icon" type="button" title="削除" aria-label={`№${item.flexcon_no}を削除`} onClick={() => void deleteFlexcon(item)}><Trash2 size={17} /></button></td>}</tr>)}
+      {items.length === 0 && <tr><td colSpan={readOnly ? 12 : 13} className="empty-state">{title}は登録されていません</td></tr>}</tbody>
+    </table></div>
+  </section>
 
   if (!selectedAuthorization) {
     return <div className="inspection-page">
@@ -1067,6 +1075,7 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
         <button className="secondary-button" type="button" onClick={() => void createGradingNoticePdf()} disabled={gradingNoticeBusy || inspectionLedgerBusy}><FileText size={18} />{gradingNoticeBusy ? 'PDF作成中...' : '格付結果通知票'}</button>
       </div>}
     </div>
+    {renderFlexconSection('推フレ', selectedStandardFlexcons, true)}
     <section className="section-band inspection-detail-section">
       <div className="section-title"><div><h2>紙袋</h2><span>{selectedPaperBags.length}件</span></div></div>
       <div className="inspection-detail-table-wrap"><table className="inspection-detail-table paper-detail-table">
@@ -1075,14 +1084,7 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
         {selectedPaperBags.length === 0 && <tr><td colSpan={readOnly ? 12 : 13} className="empty-state">紙袋は登録されていません</td></tr>}</tbody>
       </table></div>
     </section>
-    <section className="section-band inspection-detail-section">
-      <div className="section-title"><div><h2>フレコン</h2><span>{selectedFlexcons.length}本</span></div>{!readOnly && <div className="button-row"><span className="certificate-status-key"><span aria-hidden="true" />印刷済み</span><button className="secondary-button certificate-create-button" type="button" disabled={certificateEligibleFlexcons.length === 0} onClick={openCertificateDialog}><FileText size={18} />検査証明書作成</button></div>}</div>
-      <div className="inspection-detail-table-wrap"><table className="inspection-detail-table">
-        <thead><tr><th>№</th><th>年度</th><th>仕入日</th><th>検査日</th><th>検査員</th><th>検査場所</th><th>産地</th><th>銘柄</th><th>数量（kg）</th><th>水分</th><th>等級</th><th>理由</th>{!readOnly && <th></th>}</tr></thead>
-        <tbody>{selectedFlexcons.map((item) => <tr id={`inspection-record-${item.id}`} className={[(item.certificate_print_count ?? 0) > 0 ? 'certificate-printed-row' : '', isInspectionResultComplete(item) ? 'inspection-complete-row' : '', selectedRecordTarget?.kind === 'flexcon' && selectedRecordTarget.id === item.id ? 'inspection-target-row' : ''].filter(Boolean).join(' ') || undefined} title={(item.certificate_print_count ?? 0) > 0 ? `印刷済み（${item.certificate_print_count}回）` : '未印刷'} key={item.id}><td>{item.flexcon_no}</td>{readOnly ? renderReadOnlyMetadataFields(item) : renderInlineMetadataFields('flexcon', item)}{readOnly ? renderReadOnlyProductFields(item) : renderInlineProductFields('flexcon', item)}{readOnly ? renderReadOnlyResultFields(item) : renderInlineResultFields('flexcon', item)}{!readOnly && <td className="inspection-row-actions"><button className="icon-button delete-icon" type="button" title="削除" aria-label={`№${item.flexcon_no}を削除`} onClick={() => void deleteFlexcon(item)}><Trash2 size={17} /></button></td>}</tr>)}
-        {selectedFlexcons.length === 0 && <tr><td colSpan={readOnly ? 12 : 13} className="empty-state">フレコンは登録されていません</td></tr>}</tbody>
-      </table></div>
-    </section>
+    {renderFlexconSection('バラ', selectedBulkFlexcons, false)}
     {!readOnly && certificateDialogOpen && <div className="modal-backdrop"><section className="registration-modal certificate-modal" role="dialog" aria-modal="true" aria-labelledby="certificate-dialog-title">
       <div className="modal-header"><div><h2 id="certificate-dialog-title">検査証明書作成</h2><p>{selectedAuthorization.full_name}　委任状№ {selectedAuthorization.authorization_no}</p></div><button className="icon-button" type="button" title="閉じる" aria-label="閉じる" onClick={closeCertificateDialog} disabled={certificateBusy}><X size={20} /></button></div>
       {!generatedCertificate ? <form className="certificate-range-form" onSubmit={(event) => void createCertificatePdf(event)}>
