@@ -399,6 +399,8 @@
 .mixed-candidate-list button { width: 100%; min-height: 40px; display: grid; grid-template-columns: 82px minmax(0, 1fr); align-items: center; gap: 8px; padding: 7px 10px; border: 0; border-bottom: 1px solid var(--line); background: #fff; text-align: left; }
 .mixed-candidate-list button:hover { background: var(--green-soft); }
 .mixed-candidate-list button:last-of-type { border-bottom: 0; }
+.mixed-candidate-list strong, .mixed-member-row strong { display: grid; gap: 2px; }
+.mixed-candidate-list small, .mixed-member-row small { color: #69736c; font-size: 11px; font-weight: 400; }
 .mixed-candidate-list .empty-state { display: block; padding: 12px; }
 .mixed-member-editor { border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
 .mixed-member-editor-head, .mixed-member-row { display: grid; grid-template-columns: 82px minmax(130px, 1fr) 130px 42px; align-items: center; gap: 8px; padding: 7px 9px; }

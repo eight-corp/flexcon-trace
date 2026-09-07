@@ -163,6 +163,7 @@ export type MixedFlexconMember = {
   id: string
   mixed_flexcon_id: string
   authorization_id: string
+  source_flexcon_id: string | null
   quantity_kg: number
   sort_order: number
   flexcon_authorizations: AuthorizationRecord | null

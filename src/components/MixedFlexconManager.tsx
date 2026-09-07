@@ -2,11 +2,12 @@ import { useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, FileText, Plus, Search, Trash2, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { formatPrefectureName } from '../lib/prefecture'
-import type { AuthorizationRecord, InspectionOption, InspectionWeight, MixedFlexcon } from '../types'
+import type { AuthorizationRecord, FlexconInspection, InspectionOption, InspectionWeight, MixedFlexcon } from '../types'
 
 type Props = { workerId: string }
 type Notice = { type: 'success' | 'error'; text: string } | null
-type MemberDraft = { authorization: AuthorizationRecord; quantity: string }
+type SourceFlexcon = { flexcon: FlexconInspection; authorization: AuthorizationRecord }
+type MemberDraft = SourceFlexcon & { quantity: string }
 type AddForm = {
   fiscalYear: string
   origin: string
@@ -72,7 +73,7 @@ export function MixedFlexconManager({ workerId }: Props) {
   const [authorizations, setAuthorizations] = useState<AuthorizationRecord[]>([])
   const [options, setOptions] = useState<InspectionOption[]>([])
   const [weights, setWeights] = useState<Record<InspectionWeight['weight_type'], number>>({ branded_rice: DEFAULT_BRANDED_RICE_WEIGHT, feed_rice: DEFAULT_FEED_RICE_WEIGHT })
-  const [authorizationBrands, setAuthorizationBrands] = useState<Record<string, string[]>>({})
+  const [sourceFlexcons, setSourceFlexcons] = useState<FlexconInspection[]>([])
   const [search, setSearch] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [addOpen, setAddOpen] = useState(false)
@@ -85,13 +86,12 @@ export function MixedFlexconManager({ workerId }: Props) {
 
   useEffect(() => {
     const load = async () => {
-      const [mixedResult, authorizationResult, optionResult, weightResult, flexconResult, paperResult] = await Promise.all([
+      const [mixedResult, authorizationResult, optionResult, weightResult, flexconResult] = await Promise.all([
         supabase.from('flexcon_mixed_flexcons').select('*, flexcon_mixed_flexcon_members(*, flexcon_authorizations(*))').order('mixed_no'),
         supabase.from('flexcon_authorizations').select('*').order('authorization_no'),
         supabase.from('flexcon_inspection_options').select('*').eq('active', true).order('sort_order').order('name'),
         supabase.from('flexcon_inspection_weights').select('*'),
-        supabase.from('flexcon_inspection_flexcons').select('authorization_id, brand'),
-        supabase.from('flexcon_inspection_paper_bags').select('authorization_id, brand'),
+        supabase.from('flexcon_inspection_flexcons').select('*').order('flexcon_no'),
       ])
       if (mixedResult.error) {
         setNotice({ type: 'error', text: '混在フレコン用SQLを実行してください。' })
@@ -107,47 +107,45 @@ export function MixedFlexconManager({ workerId }: Props) {
           feed_rice: loaded.find((item) => item.weight_type === 'feed_rice')?.weight_kg ?? DEFAULT_FEED_RICE_WEIGHT,
         })
       }
-      const brands: Record<string, Set<string>> = {}
-      for (const record of [...(flexconResult.data ?? []), ...(paperResult.data ?? [])]) {
-        const authorizationId = String(record.authorization_id)
-        const brand = String(record.brand ?? '').trim()
-        if (!brand) continue
-        brands[authorizationId] ??= new Set<string>()
-        brands[authorizationId].add(brand)
-      }
-      setAuthorizationBrands(Object.fromEntries(Object.entries(brands).map(([id, names]) => [id, [...names]])))
+      if (!flexconResult.error) setSourceFlexcons((flexconResult.data ?? []) as FlexconInspection[])
     }
     void load()
   }, [version])
 
   const selected = items.find((item) => item.id === selectedId) ?? null
 
-  const originOptions = useMemo(() => [...new Set(authorizations
-    .map((item) => formatPrefectureName(item.prefecture))
-    .filter(Boolean))].sort((left, right) => left.localeCompare(right, 'ja')), [authorizations])
+  const authorizationById = useMemo(() => new Map(authorizations.map((item) => [item.id, item])), [authorizations])
+  const usedSourceIds = useMemo(() => new Set(items.flatMap((item) => item.flexcon_mixed_flexcon_members.map((member) => member.source_flexcon_id).filter(Boolean))), [items])
+  const availableSources = useMemo(() => sourceFlexcons.flatMap((flexcon): SourceFlexcon[] => {
+    const authorization = authorizationById.get(flexcon.authorization_id)
+    if (!authorization || !flexcon.brand || isFeedRice(flexcon.brand) || flexcon.quantity_kg >= weights.branded_rice || usedSourceIds.has(flexcon.id)) return []
+    return [{ flexcon, authorization }]
+  }), [authorizationById, sourceFlexcons, usedSourceIds, weights.branded_rice])
+  const originOptions = useMemo(() => [...new Set(availableSources
+    .map((item) => formatPrefectureName(item.authorization.prefecture))
+    .filter(Boolean))].sort((left, right) => left.localeCompare(right, 'ja')), [availableSources])
   const selectedBrandType = brandTypeForOrigin(addForm.origin)
-  const brandOptions = options.filter((item) => item.option_type === 'brand' || item.option_type === selectedBrandType)
-  const targetWeight = isFeedRice(addForm.brand) ? weights.feed_rice : weights.branded_rice
+  const availableBrandNames = new Set(availableSources
+    .filter((item) => normalizedOrigin(item.authorization.prefecture) === normalizedOrigin(addForm.origin))
+    .map((item) => item.flexcon.brand))
+  const brandOptions = options.filter((item) => (item.option_type === 'brand' || item.option_type === selectedBrandType) && availableBrandNames.has(item.name))
+  const targetWeight = weights.branded_rice
   const totalWeight = members.reduce((total, member) => total + (Number(member.quantity) || 0), 0)
   const gradeOptions = options.filter((item) => item.option_type === 'grade' && (selected ? (isFeedRice(selected.brand) ? item.name === '合格' : item.name !== '合格') : true))
   const reasonOptions = options.filter((item) => item.option_type === 'grade_reason')
   const inspectorOptions = options.filter((item) => item.option_type === 'inspector')
   const locationOptions = options.filter((item) => item.option_type === 'location')
 
-  const candidateAuthorizations = useMemo(() => {
+  const candidateSources = useMemo(() => {
     if (!addForm.origin || !addForm.brand) return []
     const term = addForm.candidateSearch.trim().toLowerCase()
-    return authorizations.filter((authorization) => {
+    return availableSources.filter(({ authorization, flexcon }) => {
       if (normalizedOrigin(authorization.prefecture) !== normalizedOrigin(addForm.origin)) return false
-      if (members.some((member) => member.authorization.id === authorization.id)) return false
-      const knownBrands = authorizationBrands[authorization.id] ?? []
-      const brandMatches = knownBrands.length === 0
-        || knownBrands.includes(addForm.brand)
-        || (isFeedRice(addForm.brand) && Boolean(authorization.feed_rice_variety))
-      if (!brandMatches) return false
+      if (flexcon.brand !== addForm.brand || flexcon.fiscal_year !== Number(addForm.fiscalYear)) return false
+      if (members.some((member) => member.authorization.id === authorization.id || member.flexcon.id === flexcon.id)) return false
       return !term || authorization.authorization_no.toLowerCase().includes(term) || authorization.full_name.toLowerCase().includes(term)
     }).slice(0, 30)
-  }, [addForm.brand, addForm.candidateSearch, addForm.origin, authorizationBrands, authorizations, members])
+  }, [addForm.brand, addForm.candidateSearch, addForm.fiscalYear, addForm.origin, availableSources, members])
 
   const filteredItems = useMemo(() => {
     const term = search.trim().toLowerCase()
@@ -167,8 +165,8 @@ export function MixedFlexconManager({ workerId }: Props) {
     setDraft(inspectionDraft(item))
     setNotice(null)
   }
-  const addMember = (authorization: AuthorizationRecord) => {
-    setMembers((current) => [...current, { authorization, quantity: '' }])
+  const addMember = (source: SourceFlexcon) => {
+    setMembers((current) => [...current, { ...source, quantity: String(source.flexcon.quantity_kg) }])
     setAddForm((current) => ({ ...current, candidateSearch: '' }))
   }
   const registerMixedFlexcon = async (event: React.FormEvent) => {
@@ -186,7 +184,7 @@ export function MixedFlexconManager({ workerId }: Props) {
       p_brand: addForm.brand,
       p_quantity_kg: targetWeight,
       p_notes: addForm.notes.trim() || null,
-      p_members: members.map((member) => ({ authorization_id: member.authorization.id, quantity_kg: Number(member.quantity) })),
+      p_members: members.map((member) => ({ authorization_id: member.authorization.id, source_flexcon_id: member.flexcon.id, quantity_kg: Number(member.quantity) })),
     })
     setBusy(false)
     if (error) return setNotice({ type: 'error', text: error.message })
@@ -319,7 +317,7 @@ export function MixedFlexconManager({ workerId }: Props) {
     </tbody></table></div>
 
     {addOpen && <div className="modal-backdrop"><section className="registration-modal mixed-add-modal" role="dialog" aria-modal="true" aria-labelledby="mixed-add-title">
-      <div className="modal-header"><div><h2 id="mixed-add-title">混在フレコンを追加</h2><p>産地と銘柄を選び、生産者別の数量を入力します。</p></div><button className="icon-button" type="button" title="閉じる" aria-label="閉じる" onClick={() => setAddOpen(false)} disabled={busy}><X size={20} /></button></div>
+      <div className="modal-header"><div><h2 id="mixed-add-title">混在フレコンを追加</h2><p>産地と銘柄を選び、量目初期値未満の検査記録を組み合わせます。</p></div><button className="icon-button" type="button" title="閉じる" aria-label="閉じる" onClick={() => setAddOpen(false)} disabled={busy}><X size={20} /></button></div>
       <div className={`mixed-total-panel ${totalWeight === targetWeight && members.length >= 2 ? 'complete' : ''}`}><span>合計</span><strong>{totalWeight.toLocaleString()}kg</strong><span>/ 量目 {targetWeight.toLocaleString()}kg</span></div>
       {notice && <div className={`notice ${notice.type}`}>{notice.text}</div>}
       <form className="mixed-add-form" onSubmit={(event) => void registerMixedFlexcon(event)}>
@@ -330,9 +328,9 @@ export function MixedFlexconManager({ workerId }: Props) {
         </div>
         <div className="mixed-candidate-picker">
           <label>委任状№または氏名<input value={addForm.candidateSearch} disabled={!addForm.brand} onChange={(event) => setAddForm((current) => ({ ...current, candidateSearch: event.target.value }))} placeholder="入力して候補を絞り込み" /></label>
-          {addForm.brand && <div className="mixed-candidate-list">{candidateAuthorizations.map((authorization) => <button type="button" key={authorization.id} onClick={() => addMember(authorization)}><span>№{authorization.authorization_no}</span><strong>{authorization.full_name}</strong></button>)}{candidateAuthorizations.length === 0 && <span className="empty-state">候補がありません</span>}</div>}
+          {addForm.brand && <div className="mixed-candidate-list">{candidateSources.map((source) => <button type="button" key={source.flexcon.id} onClick={() => addMember(source)}><span>№{source.authorization.authorization_no}</span><strong>{source.authorization.full_name}<small>フレコン№{source.flexcon.flexcon_no}　{source.flexcon.quantity_kg.toLocaleString()}kg</small></strong></button>)}{candidateSources.length === 0 && <span className="empty-state">条件に合う検査記録がありません</span>}</div>}
         </div>
-        <div className="mixed-member-editor"><div className="mixed-member-editor-head"><span>登録する生産者</span><strong>{members.length}名</strong></div>{members.map((member) => <div className="mixed-member-row" key={member.authorization.id}><span>№{member.authorization.authorization_no}</span><strong>{member.authorization.full_name}</strong><label><input type="number" min="1" step="1" inputMode="numeric" value={member.quantity} onChange={(event) => setMembers((current) => current.map((item) => item.authorization.id === member.authorization.id ? { ...item, quantity: event.target.value } : item))} /><span>kg</span></label><button className="icon-button delete-icon" type="button" title="取り消し" aria-label={`${member.authorization.full_name}を取り消す`} onClick={() => setMembers((current) => current.filter((item) => item.authorization.id !== member.authorization.id))}><Trash2 size={17} /></button></div>)}</div>
+        <div className="mixed-member-editor"><div className="mixed-member-editor-head"><span>登録する検査記録</span><strong>{members.length}名</strong></div>{members.map((member) => <div className="mixed-member-row" key={member.flexcon.id}><span>№{member.authorization.authorization_no}</span><strong>{member.authorization.full_name}<small>フレコン№{member.flexcon.flexcon_no}</small></strong><label><input value={member.quantity} readOnly /><span>kg</span></label><button className="icon-button delete-icon" type="button" title="取り消し" aria-label={`${member.authorization.full_name}を取り消す`} onClick={() => setMembers((current) => current.filter((item) => item.flexcon.id !== member.flexcon.id))}><Trash2 size={17} /></button></div>)}</div>
         <label>備考（任意）<textarea rows={2} value={addForm.notes} onChange={(event) => setAddForm((current) => ({ ...current, notes: event.target.value }))} /></label>
         <div className="modal-actions"><button className="secondary-button" type="button" onClick={() => setAddOpen(false)} disabled={busy}>取り消し</button><button className="primary-button" type="submit" disabled={busy || members.length < 2 || totalWeight !== targetWeight}>{busy ? '登録中...' : '登録'}</button></div>
       </form>
