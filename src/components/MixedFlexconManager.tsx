@@ -16,7 +16,6 @@ type AddForm = {
   notes: string
 }
 type InspectionDraft = {
-  purchaseDate: string
   inspectionDate: string
   inspectorName: string
   inspectionLocation: string
@@ -51,7 +50,6 @@ function fullMemberNames(item: MixedFlexcon) {
 }
 function inspectionDraft(item: MixedFlexcon): InspectionDraft {
   return {
-    purchaseDate: item.purchase_date ?? '',
     inspectionDate: item.inspection_date ?? '',
     inspectorName: item.inspector_name ?? '',
     inspectionLocation: item.inspection_location ?? '',
@@ -228,14 +226,14 @@ export function MixedFlexconManager({ workerId }: Props) {
     setVersion((value) => value + 1)
   }
 
-  const deleteMixedFlexcon = async () => {
-    if (!selected || busy || !window.confirm(`混在フレコン№${selected.mixed_no}を削除しますか？`)) return
+  const deleteMixedFlexcon = async (item: MixedFlexcon) => {
+    if (busy || !window.confirm(`混在フレコン№${item.mixed_no}を削除しますか？`)) return
     setBusy(true); setNotice(null)
-    const { error } = await supabase.rpc('flexcon_delete_mixed_flexcon', { p_worker_id: workerId, p_mixed_flexcon_id: selected.id })
+    const { error } = await supabase.rpc('flexcon_delete_mixed_flexcon', { p_worker_id: workerId, p_mixed_flexcon_id: item.id })
     setBusy(false)
     if (error) return setNotice({ type: 'error', text: error.message })
-    setSelectedId(null); setDraft(null); setMemberQuantities({})
-    setNotice({ type: 'success', text: `混在フレコン№${selected.mixed_no}を削除しました。` })
+    if (selectedId === item.id) { setSelectedId(null); setDraft(null); setMemberQuantities({}) }
+    setNotice({ type: 'success', text: `混在フレコン№${item.mixed_no}を削除しました。` })
     setVersion((value) => value + 1)
   }
 
@@ -248,7 +246,7 @@ export function MixedFlexconManager({ workerId }: Props) {
     const { error } = await supabase.rpc('flexcon_save_mixed_flexcon_inspection', {
       p_worker_id: workerId,
       p_mixed_flexcon_id: selected.id,
-      p_purchase_date: draft.purchaseDate || null,
+      p_purchase_date: null,
       p_inspection_date: draft.inspectionDate || null,
       p_inspector_name: draft.inspectorName || null,
       p_inspection_location: draft.inspectionLocation || null,
@@ -267,7 +265,7 @@ export function MixedFlexconManager({ workerId }: Props) {
     if (!selected || !draft || busy) return
     const reasonOptional = draft.grade === '1等' || draft.grade === '合格'
     const missing = [
-      !draft.purchaseDate && '仕入日', !draft.inspectionDate && '検査日', !draft.inspectorName && '検査員',
+      !draft.inspectionDate && '検査日', !draft.inspectorName && '検査員',
       !draft.inspectionLocation && '検査場所', !draft.moisture && '水分', !draft.grade && '等級',
       !reasonOptional && !draft.reason && '理由',
     ].filter((value): value is string => Boolean(value))
@@ -325,18 +323,17 @@ export function MixedFlexconManager({ workerId }: Props) {
       <div className="producer-inspection-heading">
         <button className="icon-button" type="button" title="一覧へ戻る" aria-label="一覧へ戻る" onClick={() => { setSelectedId(null); setDraft(null); setNotice(null) }}><ArrowLeft size={21} /></button>
         <div><h1>混在フレコン №{selected.mixed_no}</h1><p>{memberLabel(selected)}　{selected.origin_prefecture}　{selected.brand}　{selected.lot_number}</p></div>
-        <div className="button-row"><button className="secondary-button" type="button" onClick={() => void createCertificate()} disabled={busy}><FileText size={18} />検査証明書作成</button><button className="icon-button delete-icon" type="button" title="混在フレコンを削除" aria-label="混在フレコンを削除" onClick={() => void deleteMixedFlexcon()} disabled={busy}><Trash2 size={18} /></button></div>
+        <div className="button-row"><button className="secondary-button" type="button" onClick={() => void createCertificate()} disabled={busy}><FileText size={18} />検査証明書作成</button><button className="icon-button delete-icon" type="button" title="混在フレコンを削除" aria-label="混在フレコンを削除" onClick={() => void deleteMixedFlexcon(selected)} disabled={busy}><Trash2 size={18} /></button></div>
       </div>
       {notice && <div className={`notice ${notice.type}`}>{notice.text}</div>}
       <section className="section-band mixed-members-summary">
         <div className="section-title"><h2>生産者別内訳</h2><strong>合計 {selected.flexcon_mixed_flexcon_members.reduce((total, member) => total + Number(memberQuantities[member.id] ?? 0), 0).toLocaleString()}kg</strong></div>
-        <div className="mixed-member-summary-list">{[...selected.flexcon_mixed_flexcon_members].sort((a, b) => a.sort_order - b.sort_order).map((member) => { const source = sourceFlexcons.find((item) => item.id === member.source_flexcon_id); const otherAllocated = (allocatedBySource[member.source_flexcon_id ?? ''] ?? 0) - member.quantity_kg; const maxQuantity = Math.max(member.quantity_kg, (source?.quantity_kg ?? member.quantity_kg) - otherAllocated); return <div key={member.id}><span>委任状№ {member.flexcon_authorizations?.authorization_no}　{member.flexcon_authorizations?.full_name}<small>元フレコン№{source?.flexcon_no ?? '-'}　上限{maxQuantity.toLocaleString()}kg</small></span><label><input type="number" min="1" max={maxQuantity} step="1" value={memberQuantities[member.id] ?? ''} onChange={(event) => setMemberQuantities((current) => ({ ...current, [member.id]: event.target.value }))} /><span>kg</span></label></div> })}</div>
+        <div className="mixed-member-summary-list">{[...selected.flexcon_mixed_flexcon_members].sort((a, b) => a.sort_order - b.sort_order).map((member) => { const source = sourceFlexcons.find((item) => item.id === member.source_flexcon_id); const otherAllocated = (allocatedBySource[member.source_flexcon_id ?? ''] ?? 0) - member.quantity_kg; const maxQuantity = Math.max(member.quantity_kg, (source?.quantity_kg ?? member.quantity_kg) - otherAllocated); return <div key={member.id}><span>委任状№ {member.flexcon_authorizations?.authorization_no}　{member.flexcon_authorizations?.full_name}<small>仕入日 {source?.purchase_date ?? '-'}　元フレコン№{source?.flexcon_no ?? '-'}　上限{maxQuantity.toLocaleString()}kg</small></span><label><input type="number" min="1" max={maxQuantity} step="1" value={memberQuantities[member.id] ?? ''} onChange={(event) => setMemberQuantities((current) => ({ ...current, [member.id]: event.target.value }))} /><span>kg</span></label></div> })}</div>
         <div className="modal-actions"><button className="secondary-button" type="button" disabled={busy} onClick={() => void saveMemberQuantities()}>{busy ? '保存中...' : '使用数量を保存'}</button></div>
       </section>
       <form className="section-band mixed-inspection-form" onSubmit={(event) => void saveInspection(event)}>
         <div className="mixed-inspection-grid">
           <label>年度<input value={selected.fiscal_year} readOnly /></label>
-          <label>仕入日<input type="date" value={draft.purchaseDate} onChange={(event) => setDraft((current) => current ? { ...current, purchaseDate: event.target.value } : current)} /></label>
           <label>検査日<input type="date" value={draft.inspectionDate} onChange={(event) => setDraft((current) => current ? { ...current, inspectionDate: event.target.value } : current)} /></label>
           <label>検査員<select value={draft.inspectorName} onChange={(event) => setDraft((current) => current ? { ...current, inspectorName: event.target.value } : current)}><option value="">未選択</option>{inspectorOptions.map((option) => <option key={option.id}>{option.name}</option>)}</select></label>
           <label>検査場所<select value={draft.inspectionLocation} onChange={(event) => setDraft((current) => current ? { ...current, inspectionLocation: event.target.value } : current)}><option value="">未選択</option>{locationOptions.map((option) => <option key={option.id}>{option.name}</option>)}</select></label>
@@ -357,9 +354,9 @@ export function MixedFlexconManager({ workerId }: Props) {
     <div className="page-heading authorization-heading"><div><h1>混在フレコン</h1><p>複数生産者の玄米を1本のフレコンとして登録します。</p></div><button className="primary-button" type="button" onClick={beginAdd}><Plus size={18} />追加</button></div>
     {notice && <div className={`notice ${notice.type}`}>{notice.text}</div>}
     <div className="search-row"><div className="search-input-wrap"><Search size={18} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="№・氏名・産地・銘柄・備考で検索" /></div></div>
-    <div className="mixed-table-wrap"><table className="mixed-table"><thead><tr><th>№</th><th>氏名</th><th>産地</th><th>銘柄名</th><th>備考</th></tr></thead><tbody>
-      {filteredItems.map((item) => <tr key={item.id} tabIndex={0} onClick={() => openMixedFlexcon(item)} onKeyDown={(event) => { if (event.key === 'Enter') openMixedFlexcon(item) }}><td>{item.mixed_no}</td><td><strong>{memberLabel(item)}</strong></td><td>{item.origin_prefecture}</td><td>{item.brand}</td><td>{item.notes ?? ''}</td></tr>)}
-      {filteredItems.length === 0 && <tr><td className="empty-state" colSpan={5}>登録された混在フレコンはありません</td></tr>}
+    <div className="mixed-table-wrap"><table className="mixed-table"><thead><tr><th>№</th><th>氏名</th><th>産地</th><th>銘柄名</th><th>備考</th><th></th></tr></thead><tbody>
+      {filteredItems.map((item) => <tr key={item.id} tabIndex={0} onClick={() => openMixedFlexcon(item)} onKeyDown={(event) => { if (event.key === 'Enter' && event.target === event.currentTarget) openMixedFlexcon(item) }}><td>{item.mixed_no}</td><td><strong>{memberLabel(item)}</strong></td><td>{item.origin_prefecture}</td><td>{item.brand}</td><td>{item.notes ?? ''}</td><td className="mixed-list-actions"><button className="icon-button delete-icon" type="button" title="削除" aria-label={`混在フレコン№${item.mixed_no}を削除`} disabled={busy} onClick={(event) => { event.stopPropagation(); void deleteMixedFlexcon(item) }}><Trash2 size={17} /></button></td></tr>)}
+      {filteredItems.length === 0 && <tr><td className="empty-state" colSpan={6}>登録された混在フレコンはありません</td></tr>}
     </tbody></table></div>
 
     {addOpen && <div className="modal-backdrop"><section className="registration-modal mixed-add-modal" role="dialog" aria-modal="true" aria-labelledby="mixed-add-title">
@@ -369,7 +366,6 @@ export function MixedFlexconManager({ workerId }: Props) {
       <form className="mixed-add-form" onSubmit={(event) => void registerMixedFlexcon(event)}>
         <div className="mixed-base-fields">
           <label>年度<input type="number" min="1" max="99" value={addForm.fiscalYear} onChange={(event) => setAddForm((current) => ({ ...current, fiscalYear: event.target.value }))} required /></label>
-          <label>仕入日<input type="date" value={members[0]?.flexcon.purchase_date ?? ''} readOnly /></label>
           <label>産地<select value={addForm.origin} onChange={(event) => { const origin = event.target.value; setAddForm((current) => ({ ...current, origin, brand: '', candidateSearch: '' })); setMembers([]) }} required><option value="">選択してください</option>{originOptions.map((origin) => <option key={origin}>{origin}</option>)}</select></label>
           <label>銘柄名<select value={addForm.brand} disabled={!addForm.origin} onChange={(event) => { const brand = event.target.value; setAddForm((current) => ({ ...current, brand, candidateSearch: '' })); setMembers([]) }} required><option value="">選択してください</option>{brandOptions.map((option) => <option key={option.id}>{option.name}</option>)}</select></label>
         </div>

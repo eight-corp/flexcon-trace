@@ -17,6 +17,7 @@ type AddGroupForm = {
   brand: string
   flexcon_count: string
   paper_bag_count: string
+  bulk_quantity_kg: string
 }
 type InlineDetailDraft = {
   fiscal_year: string
@@ -63,6 +64,7 @@ function emptyAddGroupForm(): AddGroupForm {
     brand: '',
     flexcon_count: '',
     paper_bag_count: '',
+    bulk_quantity_kg: '',
   }
 }
 function isHighMoisture(value: string | number | null | undefined) {
@@ -253,9 +255,11 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
     if (!selectedAuthorization || busy) return
     const flexconCount = Number(addGroupForm.flexcon_count || 0)
     const paperBagCount = Number(addGroupForm.paper_bag_count || 0)
+    const bulkQuantityKg = Number(addGroupForm.bulk_quantity_kg || 0)
     if (!addGroupForm.purchase_date) return setNotice({ type: 'error', text: '仕入日を入力してください。' })
     if (!addGroupForm.brand) return setNotice({ type: 'error', text: '銘柄を選択してください。' })
-    if (flexconCount <= 0 && paperBagCount <= 0) return setNotice({ type: 'error', text: 'フレコン本数または紙袋数を入力してください。' })
+    if (!Number.isInteger(bulkQuantityKg) || bulkQuantityKg < 0) return setNotice({ type: 'error', text: 'バラは0kg以上の整数で入力してください。' })
+    if (flexconCount <= 0 && paperBagCount <= 0 && bulkQuantityKg <= 0) return setNotice({ type: 'error', text: 'フレコン本数、紙袋数、バラのいずれかを入力してください。' })
     const flexconQuantity = addGroupForm.brand === '飼料用玄米' ? weights.feed_rice : weights.branded_rice
     setBusy(true); setNotice(null)
     const { error } = await supabase.rpc('flexcon_add_inspection_group', {
@@ -269,10 +273,11 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
       p_flexcon_count: flexconCount,
       p_paper_bag_count: paperBagCount,
       p_flexcon_quantity_kg: flexconQuantity,
+      p_bulk_quantity_kg: bulkQuantityKg,
     })
     setBusy(false)
     if (error) return setNotice({ type: 'error', text: error.message })
-    setAddGroupForm((current) => ({ ...current, brand: '', flexcon_count: '', paper_bag_count: '' }))
+    setAddGroupForm((current) => ({ ...current, brand: '', flexcon_count: '', paper_bag_count: '', bulk_quantity_kg: '' }))
     setNotice({ type: 'success', text: `${addGroupForm.brand}を追加しました。` })
     setVersion((value) => value + 1)
   }
@@ -762,6 +767,7 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
       <label>銘柄<select value={addGroupForm.brand} onChange={(event) => setAddGroupForm((current) => ({ ...current, brand: event.target.value }))} required><option value="">選択してください</option>{brandOptions.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}</select></label>
       <label>フレコン本数<input type="number" min="0" max="999" value={addGroupForm.flexcon_count} onChange={(event) => setAddGroupForm((current) => ({ ...current, flexcon_count: event.target.value }))} placeholder="0" /></label>
       <label>紙袋数<input type="number" min="0" value={addGroupForm.paper_bag_count} onChange={(event) => setAddGroupForm((current) => ({ ...current, paper_bag_count: event.target.value }))} placeholder="0" /></label>
+      <label>バラ（kg）<input type="number" min="0" step="1" value={addGroupForm.bulk_quantity_kg} onChange={(event) => setAddGroupForm((current) => ({ ...current, bulk_quantity_kg: event.target.value }))} placeholder="0" /></label>
       <button className="primary-button" type="submit" disabled={busy}><Plus size={18} />{busy ? '追加中...' : '追加'}</button>
     </form>
     <section className="section-band inspection-detail-section">

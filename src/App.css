@@ -318,7 +318,7 @@
 .producer-inspection-heading h1 { margin: 0; }
 .producer-inspection-heading p { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
 .producer-inspection-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; justify-self: end; gap: 8px; }
-.inspection-group-add { display: grid; grid-template-columns: 82px minmax(135px, .8fr) minmax(135px, .8fr) minmax(145px, .9fr) minmax(110px, .7fr) minmax(170px, 1.2fr) 104px 104px auto; align-items: end; gap: 10px; border-color: #9dbca7; background: #f6fbf7; }
+.inspection-group-add { display: grid; grid-template-columns: 82px minmax(135px, .8fr) minmax(135px, .8fr) minmax(145px, .9fr) minmax(110px, .7fr) minmax(170px, 1.2fr) 104px 104px 110px auto; align-items: end; gap: 10px; border-color: #9dbca7; background: #f6fbf7; }
 .inspection-group-add label { min-width: 0; margin: 0; }
 .inspection-group-add input, .inspection-group-add select { width: 100%; min-width: 0; }
 .inspection-group-add input[readonly] { background: #edf1ee; color: #4b5650; }
@@ -385,13 +385,15 @@
 .mixed-table tbody tr:not(:only-child) { cursor: pointer; }
 .mixed-table tbody tr:hover, .mixed-table tbody tr:focus { background: var(--green-soft); outline: none; }
 .mixed-table th:last-child, .mixed-table td:last-child { border-right: 0; }
+.mixed-list-actions { width: 50px; text-align: center !important; }
+.mixed-list-actions { width: 50px; text-align: center !important; }
 .mixed-add-modal { width: min(100%, 820px); }
 .mixed-total-panel { min-height: 76px; display: flex; align-items: baseline; justify-content: center; gap: 10px; margin-bottom: 14px; padding: 12px 16px; border-top: 1px solid #c8cec9; border-bottom: 1px solid #c8cec9; background: #f3f6f3; color: #4d5950; }
 .mixed-total-panel strong { color: #8b3d20; font-size: 32px; }
 .mixed-total-panel.complete { border-color: #8fbea0; background: var(--green-soft); }
 .mixed-total-panel.complete strong { color: var(--green-dark); }
 .mixed-add-form { display: grid; gap: 12px; }
-.mixed-base-fields { display: grid; grid-template-columns: 82px 142px minmax(130px, .7fr) minmax(170px, 1fr); gap: 10px; }
+.mixed-base-fields { display: grid; grid-template-columns: 82px minmax(130px, .7fr) minmax(170px, 1fr); gap: 10px; }
 .mixed-base-fields label, .mixed-add-form > label { margin: 0; }
 .mixed-candidate-picker { display: grid; grid-template-columns: minmax(190px, .8fr) minmax(0, 1.4fr); gap: 10px; align-items: start; }
 .mixed-candidate-picker label { margin: 0; }
