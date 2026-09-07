@@ -117,6 +117,7 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
   const [note, setNote] = useState(initialDraft.note)
   const [purchasePrice, setPurchasePrice] = useState(initialDraft.purchasePrice)
   const [plannedCount, setPlannedCount] = useState(initialDraft.plannedCount)
+  const [plannedCountInput, setPlannedCountInput] = useState(String(initialDraft.plannedCount))
   const [lots, setLots] = useState<string[]>(initialDraft.lots)
   const [scannerActive, setScannerActive] = useState(false)
   const [registrationOpen, setRegistrationOpen] = useState(false)
@@ -222,11 +223,14 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
     const minimumCount = Math.max(1, lots.length)
     const nextCount = Math.min(24, Math.max(minimumCount, value || minimumCount))
     setPlannedCount(nextCount)
+    setPlannedCountInput(String(nextCount))
     if (lots.length > 0 && lots.length >= nextCount) {
       setScannerActive(false)
-      setManualShipmentKind(null)
-      setRegistrationOpen(true)
     }
+  }
+
+  const editPlannedCount = (value: string) => {
+    setPlannedCountInput(value.replace(/\D/g, '').slice(0, 2))
   }
 
   const addLot = useCallback(async (rawValue: string) => {
@@ -401,6 +405,8 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
     ? manualItems.map((item) => item.originPrefecture)
     : lots.map((lot) => inspectionLotDetails[lot]?.origin)
   ).filter((origin): origin is string => Boolean(origin)))].join('、') || '産地未登録'
+  const minimumPlannedCount = Math.max(1, lots.length)
+  const plannedCountCandidate = Math.min(24, Math.max(minimumPlannedCount, Number(plannedCountInput) || plannedCount))
 
   return (
     <div>
@@ -417,11 +423,24 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
       <section className="section-band">
         <div className="count-panel">
           <div className="count-display"><strong>{lots.length}</strong><span>/ {plannedCount}本</span></div>
-          <div className="target-control"><span>予定本数</span>
+          <div className="target-control"><span>出荷予定本数</span>
             <span className="planned-count-stepper">
-              <button type="button" title="予定本数を1本減らす" aria-label="予定本数を1本減らす" onClick={() => changePlannedCount(plannedCount - 1)} disabled={plannedCount <= Math.max(1, lots.length)}><Minus size={20} /></button>
-              <input aria-label="予定本数" type="number" min={Math.max(1, lots.length)} max={24} value={plannedCount} onChange={(e) => changePlannedCount(Number(e.target.value))} />
-              <button type="button" title="予定本数を1本増やす" aria-label="予定本数を1本増やす" onClick={() => changePlannedCount(plannedCount + 1)} disabled={plannedCount >= 24}><Plus size={20} /></button>
+              <button type="button" title="出荷予定本数を1本減らす" aria-label="出荷予定本数を1本減らす" onClick={() => changePlannedCount(plannedCountCandidate - 1)} disabled={plannedCountCandidate <= minimumPlannedCount}><Minus size={20} /></button>
+              <input
+                aria-label="出荷予定本数"
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={2}
+                value={plannedCountInput}
+                onChange={(e) => editPlannedCount(e.target.value)}
+                onBlur={() => changePlannedCount(Number(plannedCountInput))}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') e.currentTarget.blur()
+                  if (e.key === 'Escape') setPlannedCountInput(String(plannedCount))
+                }}
+              />
+              <button type="button" title="出荷予定本数を1本増やす" aria-label="出荷予定本数を1本増やす" onClick={() => changePlannedCount(plannedCountCandidate + 1)} disabled={plannedCountCandidate >= 24}><Plus size={20} /></button>
             </span>
           </div>
         </div>
