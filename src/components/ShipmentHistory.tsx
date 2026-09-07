@@ -14,7 +14,7 @@ type Props = {
 type Notice = { type: 'success' | 'error'; text: string } | null
 type ViewMode = 'cards' | 'table'
 type SortDirection = 'asc' | 'desc'
-type TableColumn = 'shippedAt' | 'destination' | 'origin' | 'productName' | 'quantity' | 'carrier' | 'driver' | 'vehicle' | 'worker' | 'note'
+type TableColumn = 'shippedAt' | 'destination' | 'origin' | 'productName' | 'flexconQuantity' | 'paperBagQuantity' | 'carrier' | 'driver' | 'vehicle' | 'worker' | 'note'
 type ShipmentTableRow = {
   id: string
   originalOrder: number
@@ -23,8 +23,10 @@ type ShipmentTableRow = {
   destination: string
   origin: string
   productName: string
-  quantity: number
-  quantityText: string
+  flexconQuantity: number
+  flexconQuantityText: string
+  paperBagQuantity: number
+  paperBagQuantityText: string
   carrier: string
   driver: string
   vehicle: string
@@ -37,7 +39,8 @@ const TABLE_COLUMNS: Array<{ key: TableColumn; label: string }> = [
   { key: 'destination', label: '納品先' },
   { key: 'origin', label: '産地' },
   { key: 'productName', label: '品名' },
-  { key: 'quantity', label: '本数' },
+  { key: 'flexconQuantity', label: 'フレコン本数' },
+  { key: 'paperBagQuantity', label: '紙袋数' },
   { key: 'carrier', label: '運送会社' },
   { key: 'driver', label: 'ドライバー' },
   { key: 'vehicle', label: '車両番号' },
@@ -87,7 +90,9 @@ function shipmentProductGroups(shipment: Shipment) {
 }
 
 function tableFilterValue(row: ShipmentTableRow, key: TableColumn) {
-  return key === 'quantity' ? row.quantityText : row[key]
+  if (key === 'flexconQuantity') return row.flexconQuantityText
+  if (key === 'paperBagQuantity') return row.paperBagQuantityText
+  return row[key]
 }
 
 function ShipmentColumnHeader({
@@ -222,8 +227,10 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
       destination: shipment.flexcon_destinations?.name ?? '納品先不明',
       origin: group.origin,
       productName: group.name,
-      quantity: group.count,
-      quantityText: `${group.count}${group.unit}`,
+      flexconQuantity: group.unit === '本' ? group.count : 0,
+      flexconQuantityText: group.unit === '本' ? `${group.count}本` : '',
+      paperBagQuantity: group.unit === '袋' ? group.count : 0,
+      paperBagQuantityText: group.unit === '袋' ? `${group.count}袋` : '',
       carrier: shipment.carrier_name ?? '',
       driver: shipment.driver_name ?? '',
       vehicle: shipment.vehicle_no ?? '',
@@ -248,8 +255,20 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
 
     if (!sort) return rows.sort((a, b) => a.originalOrder - b.originalOrder)
     return rows.sort((a, b) => {
-      const left = sort.key === 'quantity' ? a.quantity : sort.key === 'shippedAt' ? a.shippedAtValue : a[sort.key]
-      const right = sort.key === 'quantity' ? b.quantity : sort.key === 'shippedAt' ? b.shippedAtValue : b[sort.key]
+      const left = sort.key === 'flexconQuantity'
+        ? a.flexconQuantity
+        : sort.key === 'paperBagQuantity'
+          ? a.paperBagQuantity
+          : sort.key === 'shippedAt'
+            ? a.shippedAtValue
+            : a[sort.key]
+      const right = sort.key === 'flexconQuantity'
+        ? b.flexconQuantity
+        : sort.key === 'paperBagQuantity'
+          ? b.paperBagQuantity
+          : sort.key === 'shippedAt'
+            ? b.shippedAtValue
+            : b[sort.key]
       const comparison = typeof left === 'number' && typeof right === 'number'
         ? left - right
         : String(left).localeCompare(String(right), 'ja', { numeric: true })
@@ -498,7 +517,8 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
                   <td>{row.destination}</td>
                   <td>{row.origin}</td>
                   <td>{row.productName}</td>
-                  <td>{row.quantityText}</td>
+                  <td>{row.flexconQuantityText}</td>
+                  <td>{row.paperBagQuantityText}</td>
                   <td>{row.carrier}</td>
                   <td>{row.driver}</td>
                   <td>{row.vehicle}</td>
