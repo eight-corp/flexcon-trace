@@ -653,7 +653,10 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
     setBusy(true)
     const { error } = await supabase.rpc('flexcon_delete_inspection_flexcon', { p_worker_id: workerId, p_flexcon_id: item.id })
     setBusy(false)
-    if (error) return setNotice({ type: 'error', text: error.message })
+    if (error) {
+      const isRetiredMixedReference = error.code === '23503' && error.message.includes('source_flexcon_id')
+      return setNotice({ type: 'error', text: isRetiredMixedReference ? '過去の混在フレコン参照が残っています。混在参照解除SQLを実行してください。' : error.message })
+    }
     setNotice({ type: 'success', text: 'フレコン検査記録を削除しました。' }); setVersion((value) => value + 1)
   }
   const deletePaperBags = async (item: PaperBagInspection) => {

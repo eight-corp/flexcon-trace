@@ -82,6 +82,7 @@ supabase/migrations/202609070004_mixed_flexcon_edit_delete_usage.sql
 supabase/migrations/202609070005_mixed_dates_and_bulk_flexcon.sql
 supabase/migrations/202609070006_mixed_flexcon_shipping.sql
 supabase/migrations/202609070007_inspection_registration_summary.sql
+supabase/migrations/202609080001_retire_mixed_source_restriction.sql
 ```
 
 `202609050001_certificate_print_status.sql` まで実行済みの場合は、`202609050003_year_prefixed_lot_numbers.sql` 以降を順番に実行してください。委任状一覧からは従来どおり生産者詳細を開き、検査記録の一覧は生産者詳細で追加した単位を登録No.順に表示します。年度、仕入日、検査日、検査場所、銘柄、数量、水分、等級、理由は各行で直接編集できます。紙袋は合計袋数を変えずに2行へ分割できます。検査証明書はExcelを起動せず、ブラウザ内でA5横の複数ページPDFとして作成します。新しいQRは西暦4桁＋委任状№4桁＋フレコン№3桁の11桁です。
