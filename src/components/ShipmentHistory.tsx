@@ -39,6 +39,7 @@ type ShipmentTableRow = {
 
 type DestinationSummaryRow = {
   destination: string
+  productName: string
   flexconQuantity: number
   paperBagQuantity: number
 }
@@ -322,20 +323,28 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
     }>()
 
     displayedTableRows.forEach((row) => {
-      const summary = summaries.get(row.destination) ?? {
+      const key = `${row.destination}\u001f${row.productName}`
+      const summary = summaries.get(key) ?? {
         flexconQuantity: 0,
         paperBagQuantity: 0,
       }
       summary.flexconQuantity += row.flexconQuantity
       summary.paperBagQuantity += row.paperBagQuantity
-      summaries.set(row.destination, summary)
+      summaries.set(key, summary)
     })
 
-    return Array.from(summaries, ([destination, summary]): DestinationSummaryRow => ({
-      destination,
-      flexconQuantity: summary.flexconQuantity,
-      paperBagQuantity: summary.paperBagQuantity,
-    })).sort((a, b) => a.destination.localeCompare(b.destination, 'ja', { numeric: true }))
+    return Array.from(summaries, ([key, summary]): DestinationSummaryRow => {
+      const [destination, productName] = key.split('\u001f')
+      return {
+        destination,
+        productName,
+        flexconQuantity: summary.flexconQuantity,
+        paperBagQuantity: summary.paperBagQuantity,
+      }
+    }).sort((a, b) => {
+      const destinationOrder = a.destination.localeCompare(b.destination, 'ja', { numeric: true })
+      return destinationOrder || a.productName.localeCompare(b.productName, 'ja', { numeric: true })
+    })
   }, [displayedTableRows])
 
   const changeSort = (key: TableColumn) => {
@@ -564,11 +573,12 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
             <div className="section-title"><div><h2 id="destination-summary-title">納品先別集計</h2><span>{destinationSummaryRows.length}件</span></div></div>
             <div className="shipment-summary-table-wrap">
               <table className="shipment-summary-table">
-                <thead><tr><th>納品先</th><th>フレコン本数</th><th>紙袋数</th></tr></thead>
+                <thead><tr><th>納品先</th><th>品名</th><th>フレコン本数</th><th>紙袋数</th></tr></thead>
                 <tbody>
                   {destinationSummaryRows.map((row) => (
-                    <tr key={row.destination}>
+                    <tr key={`${row.destination}-${row.productName}`}>
                       <td>{row.destination}</td>
+                      <td>{row.productName}</td>
                       <td>{row.flexconQuantity ? `${row.flexconQuantity}本` : ''}</td>
                       <td>{row.paperBagQuantity ? `${row.paperBagQuantity}袋` : ''}</td>
                     </tr>

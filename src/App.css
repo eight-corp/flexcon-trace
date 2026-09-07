@@ -169,7 +169,7 @@
 .shipment-summary-table th { position: sticky; top: 0; z-index: 2; background: #edf4ef; color: #274532; white-space: nowrap; }
 .shipment-summary-table tbody tr:nth-child(even) { background: #f8faf8; }
 .shipment-summary-table td:first-child { font-weight: 700; white-space: nowrap; }
-.shipment-summary-table td:nth-child(2), .shipment-summary-table td:nth-child(3) { text-align: right; white-space: nowrap; }
+.shipment-summary-table td:nth-child(3), .shipment-summary-table td:nth-child(4) { text-align: right; white-space: nowrap; }
 .shipment-table { width: 100%; min-width: 1630px; border-collapse: separate; border-spacing: 0; font-size: 13px; }
 .shipment-table th, .shipment-table td { padding: 8px 10px; border-right: 1px solid #e2e6e3; border-bottom: 1px solid #e2e6e3; text-align: left; vertical-align: middle; white-space: nowrap; }
 .shipment-table th { position: sticky; top: 0; z-index: 4; padding: 0; background: #edf4ef; color: #274532; }
