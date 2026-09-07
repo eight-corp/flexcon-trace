@@ -26,14 +26,18 @@ function optionsFor(
   prefecture: string,
   shipmentProducts: InspectionOption[],
 ) {
-  const optionType = kind === 'other_rice'
-    ? 'shipment_product'
-    : prefecture === '青森県'
-      ? 'brand_aomori'
-      : prefecture === '岩手県'
-        ? 'brand_iwate'
-        : ''
-  return shipmentProducts.filter((item) => item.option_type === optionType)
+  const regionalBrandType = prefecture === '青森県'
+    ? 'brand_aomori'
+    : prefecture === '岩手県'
+      ? 'brand_iwate'
+      : ''
+  const optionTypes = kind === 'paper_bag'
+    ? [regionalBrandType, 'shipment_product']
+    : ['shipment_product']
+
+  return shipmentProducts.filter((item, index, allItems) =>
+    optionTypes.includes(item.option_type)
+    && allItems.findIndex((candidate) => optionTypes.includes(candidate.option_type) && candidate.name === item.name) === index)
 }
 
 export function ManualShipmentItemsEditor({ kind, items, onChange, shipmentProducts, disabled = false }: Props) {

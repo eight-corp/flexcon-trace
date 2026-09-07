@@ -348,6 +348,10 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
   const registrationProduct = manualShipmentKind
     ? manualItems.map((item) => `${item.productName} ${item.quantityCount}${registrationUnit}`).join('、') || '明細未登録'
     : shipmentBrandCounts.map(([brand, count]) => `${brand} ${count}本`).join('、')
+  const registrationOrigin = [...new Set((manualShipmentKind
+    ? manualItems.map((item) => item.originPrefecture)
+    : lots.map((lot) => inspectionLotDetails[lot]?.origin)
+  ).filter((origin): origin is string => Boolean(origin)))].join('、') || '産地未登録'
 
   return (
     <div>
@@ -416,6 +420,7 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
 
             <div className="shipment-registration-summary" aria-label="出荷内容">
               <div><span>{manualShipmentKind === 'paper_bag' ? '紙袋数' : '出荷本数'}</span><strong>{registrationCount}{registrationUnit}</strong></div>
+              <div><span>産地</span><strong>{registrationOrigin}</strong></div>
               <div><span>{manualShipmentKind ? '種類' : '銘柄'}</span><strong>{registrationProduct}</strong></div>
             </div>
 
