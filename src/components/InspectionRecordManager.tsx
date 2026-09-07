@@ -485,9 +485,8 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
     })
     setBusy(false)
     if (error) return setNotice({ type: 'error', text: error.message })
-    setAddGroupForm((current) => ({ ...current, brand: '', flexcon_count: '', paper_bag_count: '', bulk_quantity_kg: '' }))
-    setNotice({ type: 'success', text: `${addAuthorization.full_name}に${addGroupForm.brand}を追加しました。` })
-    setVersion((value) => value + 1)
+    onSelectedRecordTargetChange(null)
+    onSelectedAuthorizationChange(addAuthorization.id)
   }
 
   const detailDraft = (item: FlexconInspection | PaperBagInspection): InlineDetailDraft => detailDrafts[item.id] ?? {
