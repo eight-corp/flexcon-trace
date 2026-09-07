@@ -148,7 +148,7 @@ function createOverlayCanvas() {
   canvas.width = Math.round(PAGE_WIDTH * CANVAS_SCALE)
   canvas.height = Math.round(PAGE_HEIGHT * CANVAS_SCALE)
   const context = canvas.getContext('2d')
-  if (!context) throw new Error('格付結果通知書の描画領域を作成できませんでした。')
+  if (!context) throw new Error('格付結果通知票の描画領域を作成できませんでした。')
   context.scale(CANVAS_SCALE, CANVAS_SCALE)
   context.fillStyle = '#000'
   return { canvas, context }
@@ -191,7 +191,7 @@ function drawGradingNoticeOverlay(page: GradingNoticePage) {
 function canvasToPng(canvas: HTMLCanvasElement) {
   return new Promise<ArrayBuffer>((resolve, reject) => {
     canvas.toBlob(async (blob) => {
-      if (!blob) return reject(new Error('格付結果通知書の画像を作成できませんでした。'))
+      if (!blob) return reject(new Error('格付結果通知票の画像を作成できませんでした。'))
       resolve(await blob.arrayBuffer())
     }, 'image/png')
   })
@@ -199,14 +199,14 @@ function canvasToPng(canvas: HTMLCanvasElement) {
 
 export async function generateGradingNoticePdf(records: GradingNoticeRecord[]) {
   const pages = aggregateGradingNoticeRecords(records)
-  if (pages.length === 0) throw new Error('格付結果通知書に出力できる検査記録がありません。')
+  if (pages.length === 0) throw new Error('格付結果通知票に出力できる検査記録がありません。')
 
   const [standardTemplateResponse, feedTemplateResponse] = await Promise.all([
     fetch(`${import.meta.env.BASE_URL}grading-notice-template.pdf`),
     fetch(`${import.meta.env.BASE_URL}grading-notice-feed-template.pdf`),
   ])
   if (!standardTemplateResponse.ok || !feedTemplateResponse.ok) {
-    throw new Error('格付結果通知書のひな型を読み込めませんでした。')
+    throw new Error('格付結果通知票のひな型を読み込めませんでした。')
   }
   const [standardTemplateBytes, feedTemplateBytes] = await Promise.all([
     standardTemplateResponse.arrayBuffer(),
@@ -227,7 +227,7 @@ export async function generateGradingNoticePdf(records: GradingNoticeRecord[]) {
     page.drawImage(overlay, { x: 0, y: 0, width: PAGE_WIDTH, height: PAGE_HEIGHT })
   }
 
-  pdf.setTitle('格付結果通知書')
+  pdf.setTitle('格付結果通知票')
   pdf.setSubject('検査格付結果通知票')
   pdf.setCreator('(株)エイト 米穀出荷管理')
   const savedBytes = await pdf.save()

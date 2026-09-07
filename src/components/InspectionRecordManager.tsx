@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, CircleAlert, ExternalLink, FileText, Plus, Printer, Search, TableRowsSplit, Trash2, X } from 'lucide-react'
+import { ArrowLeft, CircleAlert, ClipboardList, ExternalLink, FileText, Plus, Printer, Search, TableRowsSplit, Trash2, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import type { AuthorizationRecord, FlexconInspection, InspectionOption, InspectionWeight, PaperBagInspection } from '../types'
 
@@ -126,6 +126,13 @@ function gradingNoticeFailureFor(items: Array<FlexconInspection | PaperBagInspec
       : ['検査記録の入力内容を確認してください。'],
   }
 }
+function inspectionLedgerFailureFor(items: Array<FlexconInspection | PaperBagInspection>): GradingNoticeFailure {
+  const failure = gradingNoticeFailureFor(items)
+  return {
+    summary: failure.summary.replaceAll('格付結果通知票', '検査請求者別検査台帳'),
+    reasons: failure.reasons,
+  }
+}
 function displayDate(value: string | null | undefined) { return value ? value.replaceAll('-', '/') : '' }
 function brandTypeForPrefecture(prefecture: string | null): 'brand_aomori' | 'brand_iwate' | null {
   const normalized = (prefecture ?? '').trim().replace(/県$/, '')
@@ -154,6 +161,8 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
   const [generatedCertificate, setGeneratedCertificate] = useState<GeneratedCertificate | null>(null)
   const [gradingNoticeBusy, setGradingNoticeBusy] = useState(false)
   const [gradingNoticeFailure, setGradingNoticeFailure] = useState<GradingNoticeFailure | null>(null)
+  const [inspectionLedgerBusy, setInspectionLedgerBusy] = useState(false)
+  const [inspectionLedgerFailure, setInspectionLedgerFailure] = useState<GradingNoticeFailure | null>(null)
   const detailSaveChains = useRef(new Map<string, Promise<void>>())
 
   useEffect(() => {
@@ -546,6 +555,81 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
     closeCertificateDialog()
   }
 
+  const createInspectionLedgerPdf = async () => {
+    if (!selectedAuthorization || inspectionLedgerBusy) return
+    setInspectionLedgerFailure(null)
+    const targetFlexcons = selectedFlexcons.filter(isInspectionResultComplete)
+    const targetPaperBags = selectedPaperBags.filter(isInspectionResultComplete)
+    if (targetFlexcons.length === 0 && targetPaperBags.length === 0) {
+      setInspectionLedgerFailure(inspectionLedgerFailureFor([...selectedFlexcons, ...selectedPaperBags]))
+      return
+    }
+
+    const pdfWindow = window.open('', '_blank')
+    if (pdfWindow) {
+      pdfWindow.document.title = '検査請求者別検査台帳を作成中'
+      pdfWindow.document.body.textContent = '検査請求者別検査台帳PDFを作成しています...'
+    }
+    setInspectionLedgerBusy(true)
+    setNotice(null)
+    try {
+      const { generateInspectionLedgerPdf } = await import('../lib/inspectionLedgerPdf')
+      const commonRecord = (item: FlexconInspection | PaperBagInspection) => ({
+        fiscalYear: item.fiscal_year,
+        purchaseDate: item.purchase_date,
+        inspectionDate: item.inspection_date ?? '',
+        inspectorName: item.inspector_name ?? '',
+        inspectionLocation: item.inspection_location ?? '',
+        origin: selectedAuthorization.prefecture ?? '',
+        brand: item.brand ?? '',
+        grade: item.grade ?? '',
+        reason: item.reason ?? '',
+        moisture: item.moisture,
+      })
+      const records = [
+        ...targetFlexcons.map((item) => ({
+          ...commonRecord(item),
+          kind: 'flexcon' as const,
+          quantityCount: 1,
+          weightKg: item.quantity_kg,
+        })),
+        ...targetPaperBags.map((item) => ({
+          ...commonRecord(item),
+          kind: 'paper_bag' as const,
+          quantityCount: item.bag_count,
+          weightKg: 30,
+        })),
+      ]
+      const { blob, pageCount } = await generateInspectionLedgerPdf({
+        authorization: {
+          authorizationNo: selectedAuthorization.authorization_no,
+          fullName: selectedAuthorization.full_name,
+          address: selectedAuthorization.address ?? '',
+        },
+        records,
+      })
+      const url = URL.createObjectURL(blob)
+      if (pdfWindow) {
+        pdfWindow.location.href = url
+      } else {
+        const anchor = document.createElement('a')
+        anchor.href = url
+        anchor.download = `検査請求者別検査台帳_${selectedAuthorization.authorization_no}_${today().replaceAll('-', '')}.pdf`
+        anchor.click()
+      }
+      window.setTimeout(() => URL.revokeObjectURL(url), 300_000)
+      setNotice({ type: 'success', text: `${pageCount}ページの検査請求者別検査台帳PDFを作成しました。PDF画面で印刷するページを指定できます。` })
+    } catch (error) {
+      if (pdfWindow) pdfWindow.close()
+      setInspectionLedgerFailure({
+        summary: '検査請求者別検査台帳を作成できませんでした。',
+        reasons: [error instanceof Error ? error.message : 'PDFの作成中に不明なエラーが発生しました。'],
+      })
+    } finally {
+      setInspectionLedgerBusy(false)
+    }
+  }
+
   const createGradingNoticePdf = async () => {
     if (!selectedAuthorization || gradingNoticeBusy) return
     setGradingNoticeFailure(null)
@@ -561,8 +645,8 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
 
     const pdfWindow = window.open('', '_blank')
     if (pdfWindow) {
-      pdfWindow.document.title = '格付結果通知書を作成中'
-      pdfWindow.document.body.textContent = '格付結果通知書PDFを作成しています...'
+      pdfWindow.document.title = '格付結果通知票を作成中'
+      pdfWindow.document.body.textContent = '格付結果通知票PDFを作成しています...'
     }
     setGradingNoticeBusy(true)
     setNotice(null)
@@ -612,11 +696,11 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
       } else {
         const anchor = document.createElement('a')
         anchor.href = url
-        anchor.download = `格付結果通知書_${selectedAuthorization.authorization_no}_${today().replaceAll('-', '')}.pdf`
+        anchor.download = `格付結果通知票_${selectedAuthorization.authorization_no}_${today().replaceAll('-', '')}.pdf`
         anchor.click()
       }
       window.setTimeout(() => URL.revokeObjectURL(url), 300_000)
-      setNotice({ type: 'success', text: `${pageCount}ページの格付結果通知書PDFを作成しました。PDF画面で印刷するページを指定できます。` })
+      setNotice({ type: 'success', text: `${pageCount}ページの格付結果通知票PDFを作成しました。PDF画面で印刷するページを指定できます。` })
     } catch (error) {
       if (pdfWindow) pdfWindow.close()
       setGradingNoticeFailure({
@@ -646,7 +730,10 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
     <div className="producer-inspection-heading">
       <button className="icon-button" type="button" title="集計へ戻る" aria-label="集計へ戻る" onClick={() => onSelectedAuthorizationChange(null)}><ArrowLeft size={21} /></button>
       <div><h1>{selectedAuthorization.full_name}</h1><p>委任状№ {selectedAuthorization.authorization_no}　{[selectedAuthorization.prefecture, selectedAuthorization.municipality].filter(Boolean).join(' ')}</p></div>
-      <button className="secondary-button grading-notice-button" type="button" onClick={() => void createGradingNoticePdf()} disabled={gradingNoticeBusy}><FileText size={18} />{gradingNoticeBusy ? 'PDF作成中...' : '格付結果通知書'}</button>
+      <div className="producer-inspection-actions">
+        <button className="secondary-button" type="button" onClick={() => void createInspectionLedgerPdf()} disabled={inspectionLedgerBusy || gradingNoticeBusy}><ClipboardList size={18} />{inspectionLedgerBusy ? 'PDF作成中...' : '検査請求者別検査台帳'}</button>
+        <button className="secondary-button" type="button" onClick={() => void createGradingNoticePdf()} disabled={gradingNoticeBusy || inspectionLedgerBusy}><FileText size={18} />{gradingNoticeBusy ? 'PDF作成中...' : '格付結果通知票'}</button>
+      </div>
     </div>
     <form className="inspection-group-add section-band" onSubmit={(event) => void addInspectionGroup(event)}>
       <label>年度<input type="number" min="1" max="99" value={addGroupForm.fiscal_year} onChange={(event) => setAddGroupForm((current) => ({ ...current, fiscal_year: event.target.value }))} required /></label>
@@ -706,6 +793,12 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, onS
       <p id="grading-notice-failure-description">{gradingNoticeFailure.summary}</p>
       <ul>{gradingNoticeFailure.reasons.map((reason) => <li key={reason}>{reason}</li>)}</ul>
       <div className="modal-actions"><button className="primary-button" type="button" autoFocus onClick={() => setGradingNoticeFailure(null)}>閉じる</button></div>
+    </section></div>}
+    {inspectionLedgerFailure && <div className="modal-backdrop"><section className="registration-modal grading-notice-failure-modal" role="alertdialog" aria-modal="true" aria-labelledby="inspection-ledger-failure-title" aria-describedby="inspection-ledger-failure-description">
+      <div className="modal-header"><div><h2 id="inspection-ledger-failure-title"><CircleAlert size={22} />検査請求者別検査台帳を作成できません</h2></div><button className="icon-button" type="button" title="閉じる" aria-label="閉じる" onClick={() => setInspectionLedgerFailure(null)}><X size={20} /></button></div>
+      <p id="inspection-ledger-failure-description">{inspectionLedgerFailure.summary}</p>
+      <ul>{inspectionLedgerFailure.reasons.map((reason) => <li key={reason}>{reason}</li>)}</ul>
+      <div className="modal-actions"><button className="primary-button" type="button" autoFocus onClick={() => setInspectionLedgerFailure(null)}>閉じる</button></div>
     </section></div>}
     {notice && <div className={`notice operation-log ${notice.type}`}>{notice.text}</div>}
   </div>
