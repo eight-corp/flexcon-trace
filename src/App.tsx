@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Blend, ClipboardList, FileSignature, History, LogOut, ScanLine, Settings2, Wheat } from 'lucide-react'
 import { AuthScreen } from './components/AuthScreen'
 import { AuthorizationManager } from './components/AuthorizationManager'
-import { InspectionRecordManager } from './components/InspectionRecordManager'
+import { InspectionRecordManager, type InspectionRecordTarget } from './components/InspectionRecordManager'
 import { InspectionOptionManager } from './components/InspectionOptionManager'
 import { MixedFlexconManager } from './components/MixedFlexconManager'
 import { ShipmentHistory } from './components/ShipmentHistory'
@@ -20,6 +20,7 @@ function App() {
   const [tab, setTab] = useState<Tab>('scan')
   const [historyVersion, setHistoryVersion] = useState(0)
   const [inspectionAuthorizationId, setInspectionAuthorizationId] = useState<string | null>(null)
+  const [inspectionRecordTarget, setInspectionRecordTarget] = useState<InspectionRecordTarget | null>(null)
   const [inspectionView, setInspectionView] = useState<InspectionView>('single')
 
   useEffect(() => {
@@ -80,6 +81,7 @@ function App() {
             workerId={worker.worker_id}
             onOpenInspections={(authorizationId) => {
               setInspectionAuthorizationId(authorizationId)
+              setInspectionRecordTarget(null)
               setInspectionView('single')
               setTab('inspections')
             }}
@@ -89,7 +91,7 @@ function App() {
           <div className="inspection-workspace">
             <div className="inspection-record-tabs" role="tablist" aria-label="検査記録の種類">
               <button type="button" role="tab" aria-selected={inspectionView === 'single'} className={inspectionView === 'single' ? 'active' : ''} onClick={() => setInspectionView('single')}><ClipboardList size={18} />単一フレコン</button>
-              <button type="button" role="tab" aria-selected={inspectionView === 'mixed'} className={inspectionView === 'mixed' ? 'active' : ''} onClick={() => setInspectionView('mixed')}><Blend size={18} />混在フレコン</button>
+              <button type="button" role="tab" aria-selected={inspectionView === 'mixed'} className={inspectionView === 'mixed' ? 'active' : ''} onClick={() => { setInspectionRecordTarget(null); setInspectionView('mixed') }}><Blend size={18} />混在フレコン</button>
             </div>
             <div className="inspection-workspace-content">
               {inspectionView === 'single' ? (
@@ -97,7 +99,9 @@ function App() {
                   key={inspectionAuthorizationId ?? 'inspection-summary'}
                   workerId={worker.worker_id}
                   selectedAuthorizationId={inspectionAuthorizationId}
+                  selectedRecordTarget={inspectionRecordTarget}
                   onSelectedAuthorizationChange={setInspectionAuthorizationId}
+                  onSelectedRecordTargetChange={setInspectionRecordTarget}
                 />
               ) : <MixedFlexconManager workerId={worker.worker_id} />}
             </div>
@@ -116,7 +120,7 @@ function App() {
         <button className={tab === 'authorizations' ? 'active' : ''} onClick={() => setTab('authorizations')}>
           <FileSignature size={22} /><span>委任状一覧</span>
         </button>
-        <button className={tab === 'inspections' ? 'active' : ''} onClick={() => { setInspectionAuthorizationId(null); setInspectionView('single'); setTab('inspections') }}>
+        <button className={tab === 'inspections' ? 'active' : ''} onClick={() => { setInspectionAuthorizationId(null); setInspectionRecordTarget(null); setInspectionView('single'); setTab('inspections') }}>
           <ClipboardList size={22} /><span>検査記録</span>
         </button>
         <button className={tab === 'master' ? 'active' : ''} onClick={() => setTab('master')}>
