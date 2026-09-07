@@ -18,6 +18,7 @@
 - 委任状情報の一覧・検索・追加・編集・削除
 - 複数生産者の重量内訳を持つ混在フレコンの登録・検索・検査記録
 - 5001番以降を使用する混在フレコン用11桁QRと検査証明書PDF作成
+- 混在フレコンQRの出荷登録、履歴表示、検索、CSV出力
 - `検査記録.xlsm` の「委任状一覧」シートから確認付き一括取込
 - 委任状と連携した生産者別の検査入力
 - フレコン1本ごとの銘柄、数量、等級、水分、理由の直接入力
@@ -72,6 +73,7 @@ supabase/migrations/202609070002_mixed_flexcons.sql
 supabase/migrations/202609070003_mixed_flexcon_source_records.sql
 supabase/migrations/202609070004_mixed_flexcon_edit_delete_usage.sql
 supabase/migrations/202609070005_mixed_dates_and_bulk_flexcon.sql
+supabase/migrations/202609070006_mixed_flexcon_shipping.sql
 ```
 
 `202609050001_certificate_print_status.sql` まで実行済みの場合は、`202609050003_year_prefixed_lot_numbers.sql` の全内容だけを実行してください。前回の7桁化SQLを実行済みでも未実行でも使用できます。委任状№ごとに全仕入日のフレコン・紙袋を一覧表示し、年度、仕入日、検査日、検査場所、銘柄、数量、水分、等級、理由は各行で直接編集します。紙袋は合計袋数を変えずに2行へ分割できます。検査証明書はExcelを起動せず、ブラウザ内でA5横の複数ページPDFとして作成します。新しいQRは西暦4桁＋委任状№4桁＋フレコン№3桁の11桁です。

@@ -14,6 +14,7 @@ type Props = {
 type Notice = { type: 'success' | 'error'; text: string } | null
 type ViewMode = 'cards' | 'table'
 type SortDirection = 'asc' | 'desc'
+type MixedShipmentInfo = { mixedNo: number; producerLabel: string }
 type TableColumn = 'shippedAt' | 'destination' | 'origin' | 'productName' | 'flexconQuantity' | 'paperBagQuantity' | 'carrier' | 'driver' | 'vehicle' | 'worker' | 'note'
 type ShipmentTableRow = {
   id: string
@@ -33,6 +34,7 @@ type ShipmentTableRow = {
   vehicle: string
   worker: string
   note: string
+  searchText: string
 }
 
 type DestinationSummaryRow = {
@@ -171,6 +173,7 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
   const [destinations, setDestinations] = useState<Destination[]>([])
   const [transportProfiles, setTransportProfiles] = useState<TransportProfile[]>([])
   const [shipmentProducts, setShipmentProducts] = useState<InspectionOption[]>([])
+  const [mixedShipmentByLot, setMixedShipmentByLot] = useState<Record<string, MixedShipmentInfo>>({})
   const [search, setSearch] = useState('')
   const [notice, setNotice] = useState<Notice>(null)
   const [localVersion, setLocalVersion] = useState(0)
@@ -189,10 +192,30 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
   const [columnFilters, setColumnFilters] = useState<Partial<Record<TableColumn, string[]>>>({})
 
   useEffect(() => {
-    void supabase.from('flexcon_shipments').select('id, destination_id, transport_profile_id, shipped_at, carrier_name, driver_name, vehicle_no, note, shipment_kind, origin_prefecture, product_name, quantity_count, purchase_price_per_bale, flexcon_destinations(name), flexcon_shipment_items(lot_number, origin_prefecture, product_name), flexcon_manual_shipment_items(id, origin_prefecture, product_name, quantity_count, sort_order), workers(worker_name)').order('shipped_at', { ascending: false }).limit(200)
-      .then(({ data, error }) => {
-        if (error) setNotice({ type: 'error', text: error.message })
-        else setShipments((data ?? []) as unknown as Shipment[])
+    void Promise.all([
+      supabase.from('flexcon_shipments').select('id, destination_id, transport_profile_id, shipped_at, carrier_name, driver_name, vehicle_no, note, shipment_kind, origin_prefecture, product_name, quantity_count, purchase_price_per_bale, flexcon_destinations(name), flexcon_shipment_items(lot_number, origin_prefecture, product_name), flexcon_manual_shipment_items(id, origin_prefecture, product_name, quantity_count, sort_order), workers(worker_name)').order('shipped_at', { ascending: false }).limit(200),
+      supabase.from('flexcon_mixed_flexcons').select('mixed_no, lot_number, flexcon_mixed_flexcon_members(sort_order, flexcon_authorizations(full_name))'),
+    ]).then(([shipmentResult, mixedResult]) => {
+      if (shipmentResult.error) setNotice({ type: 'error', text: shipmentResult.error.message })
+      else setShipments((shipmentResult.data ?? []) as unknown as Shipment[])
+
+      if (mixedResult.error) {
+        setNotice({ type: 'error', text: '混在フレコン情報を取得できません。追加SQLを実行してください。' })
+      } else {
+        const mixedByLot: Record<string, MixedShipmentInfo> = {}
+        for (const mixed of mixedResult.data ?? []) {
+          const members = [...(mixed.flexcon_mixed_flexcon_members ?? [])].sort((left, right) => left.sort_order - right.sort_order)
+          const firstAuthorization = Array.isArray(members[0]?.flexcon_authorizations)
+            ? members[0]?.flexcon_authorizations[0]
+            : members[0]?.flexcon_authorizations
+          const firstName = firstAuthorization?.full_name
+          mixedByLot[mixed.lot_number] = {
+            mixedNo: mixed.mixed_no,
+            producerLabel: firstName ? (members.length > 1 ? `${firstName}＋他${members.length - 1}名` : firstName) : '生産者未登録',
+          }
+        }
+        setMixedShipmentByLot(mixedByLot)
+      }
       })
   }, [refreshKey, localVersion])
 
@@ -222,8 +245,12 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
       || item.product_name?.toLowerCase().includes(term)
       || shipmentProductSummary(item).toLowerCase().includes(term)
       || item.workers?.worker_name.toLowerCase().includes(term)
-      || item.flexcon_shipment_items.some((detail) => detail.lot_number.includes(term)))
-  }, [search, shipments])
+      || item.flexcon_shipment_items.some((detail) => {
+        const mixed = mixedShipmentByLot[detail.lot_number]
+        return detail.lot_number.includes(term)
+          || (mixed ? `混在№${mixed.mixedNo} ${mixed.producerLabel}`.toLowerCase().includes(term) : false)
+      }))
+  }, [mixedShipmentByLot, search, shipments])
 
   const tableRows = useMemo(() => shipments.flatMap((shipment, shipmentIndex) =>
     shipmentProductGroups(shipment).map((group, groupIndex) => ({
@@ -244,7 +271,11 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
       vehicle: shipment.vehicle_no ?? '',
       worker: shipment.workers?.worker_name ?? '',
       note: shipment.note ?? '',
-    }))), [shipments])
+      searchText: shipment.flexcon_shipment_items.map((item) => {
+        const mixed = mixedShipmentByLot[item.lot_number]
+        return `${item.lot_number} ${mixed ? `混在№${mixed.mixedNo} ${mixed.producerLabel}` : ''}`
+      }).join(' ').toLowerCase(),
+    }))), [mixedShipmentByLot, shipments])
 
   const filterValues = useMemo(() => Object.fromEntries(TABLE_COLUMNS.map((column) => [
     column.key,
@@ -254,7 +285,7 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
   const displayedTableRows = useMemo(() => {
     const term = search.trim().toLowerCase()
     const rows = tableRows.filter((row) => {
-      if (term && !TABLE_COLUMNS.some((column) => tableFilterValue(row, column.key).toLowerCase().includes(term))) return false
+      if (term && !TABLE_COLUMNS.some((column) => tableFilterValue(row, column.key).toLowerCase().includes(term)) && !row.searchText.includes(term)) return false
       return TABLE_COLUMNS.every((column) => {
         const selected = columnFilters[column.key]
         return selected === undefined || selected.includes(tableFilterValue(row, column.key))
@@ -429,7 +460,7 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
   }
 
   const exportCsv = () => {
-    const rows = [['出荷日時', '納品先', '担当者', '運送会社名', 'ドライバー名', '車両番号', '出荷区分', '産地', '品名', '種類別数量', 'QRコード', '数量', '単位', '仕入値（1俵当たり）', '備考']]
+    const rows = [['出荷日時', '納品先', '担当者', '運送会社名', 'ドライバー名', '車両番号', '出荷区分', '産地', '品名', '種類別数量', 'QRコード', '混在フレコン情報', '数量', '単位', '仕入値（1俵当たり）', '備考']]
     filtered.forEach((shipment) => {
       const details = shipment.shipment_kind === 'qr_flexcon'
         ? shipment.flexcon_shipment_items.map((item) => ({
@@ -458,11 +489,12 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
         shipment.carrier_name ?? '',
         shipment.driver_name ?? '',
         shipment.vehicle_no ?? '',
-        shipment.shipment_kind === 'paper_bag' ? '紙袋' : shipment.shipment_kind === 'other_rice' ? '銘柄米以外' : 'QRフレコン',
+        shipment.shipment_kind === 'paper_bag' ? '紙袋' : shipment.shipment_kind === 'other_rice' ? '銘柄米以外' : mixedShipmentByLot[item.lotNumber] ? '混在フレコン' : 'QRフレコン',
         item.originPrefecture,
         item.productName,
         shipmentProductSummary(shipment),
         item.lotNumber,
+        mixedShipmentByLot[item.lotNumber] ? `混在№${mixedShipmentByLot[item.lotNumber].mixedNo} ${mixedShipmentByLot[item.lotNumber].producerLabel}` : '',
         String(item.quantityCount),
         shipment.shipment_kind === 'paper_bag' ? '袋' : '本',
         shipment.purchase_price_per_bale == null ? '' : String(shipment.purchase_price_per_bale),
@@ -481,7 +513,7 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
 
   return (
     <div>
-      <div className="page-heading"><h1>出荷履歴</h1><p>納品先、担当者、運送会社、ドライバー、車両番号、ロット番号で検索できます。</p></div>
+      <div className="page-heading"><h1>出荷履歴</h1><p>納品先、担当者、運送会社、ドライバー、車両番号、ロット番号、混在№、生産者名で検索できます。</p></div>
       {notice && <div className={`notice ${notice.type}`}>{notice.text}</div>}
       <div className="search-row">
         <div style={{ position: 'relative', flex: 1 }}><Search size={18} style={{ position: 'absolute', left: 12, top: 13, color: '#6b756d' }} /><input style={{ paddingLeft: 38 }} value={search} onChange={(e) => setSearch(e.target.value)} placeholder="検索" /></div>
@@ -517,7 +549,10 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
                   )}
                 </div>
               </div>
-              {shipment.flexcon_shipment_items.length > 0 && <div className="lot-tags">{shipment.flexcon_shipment_items.map((item) => <span className="lot-tag" key={item.lot_number}>{item.lot_number}</span>)}</div>}
+              {shipment.flexcon_shipment_items.length > 0 && <div className="lot-tags">{shipment.flexcon_shipment_items.map((item) => {
+                const mixed = mixedShipmentByLot[item.lot_number]
+                return <span className={`lot-tag ${mixed ? 'mixed-lot-tag' : ''}`} key={item.lot_number}>{mixed ? <><strong>混在№{mixed.mixedNo}</strong><span>{mixed.producerLabel}</span><code>{item.lot_number}</code></> : item.lot_number}</span>
+              })}</div>}
               {shipment.note && <p className="shipment-note">{shipment.note}</p>}
             </article>
           ))}
@@ -602,6 +637,11 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
             </div>
 
             {notice?.type === 'error' && <div className="notice error">{notice.text}</div>}
+
+            {editing.flexcon_shipment_items.length > 0 && <div className="lot-tags history-edit-lots">{editing.flexcon_shipment_items.map((item) => {
+              const mixed = mixedShipmentByLot[item.lot_number]
+              return <span className={`lot-tag ${mixed ? 'mixed-lot-tag' : ''}`} key={item.lot_number}>{mixed ? <><strong>混在№{mixed.mixedNo}</strong><span>{mixed.producerLabel}</span><code>{item.lot_number}</code></> : item.lot_number}</span>
+            })}</div>}
 
             <form className="form-grid" onSubmit={(event) => void saveEdit(event)}>
               {editing.shipment_kind !== 'qr_flexcon' && <ManualShipmentItemsEditor key={editing.id} kind={editing.shipment_kind} items={manualItems} onChange={setManualItems} shipmentProducts={shipmentProducts} disabled={busy} />}

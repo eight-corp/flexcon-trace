@@ -134,6 +134,11 @@
 .shipment-count { background: var(--blue-soft); color: var(--blue); border-radius: 5px; padding: 4px 8px; font-weight: 700; white-space: nowrap; }
 .lot-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
 .lot-tag { font-family: Consolas, monospace; background: #eef1ee; border: 1px solid #d5dad6; border-radius: 4px; padding: 3px 7px; font-size: 13px; }
+.mixed-lot-tag { display: inline-grid; grid-template-columns: auto auto; align-items: center; gap: 2px 8px; border-color: #9eb8a4; background: #f2f8f3; font-family: inherit; }
+.mixed-lot-tag strong { color: #245b34; }
+.mixed-lot-tag span { color: #38443b; }
+.mixed-lot-tag code { grid-column: 1 / -1; color: #59635c; font-size: 12px; }
+.history-edit-lots { margin: 0 0 14px; }
 .shipment-note { margin: 10px 0 0; color: #667068; font-size: 13px; }
 .empty-state { text-align: center; color: var(--muted); padding: 30px 16px; }
 .auth-page { min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; background: #edf1ed; }
