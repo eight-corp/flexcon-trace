@@ -64,6 +64,12 @@ function toLocalDateTime(value: string) {
   return date.toISOString().slice(0, 16)
 }
 
+function formatShipmentDateTime(value: string) {
+  const date = new Date(value)
+  const pad = (part: number) => String(part).padStart(2, '0')
+  return `${date.getFullYear()}/${pad(date.getMonth() + 1)}/${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
 function shipmentProductSummary(shipment: Shipment) {
   return shipmentProductGroups(shipment)
     .map((group) => `${group.origin ? `${group.origin} ` : ''}${group.name} ${group.count}${group.unit}`)
@@ -129,7 +135,7 @@ function ShipmentColumnHeader({
           <span>{column.label}</span>
           {sort?.key === column.key && (sort.direction === 'asc' ? <ArrowUp size={14} /> : <ArrowDown size={14} />)}
         </button>
-        <details className={`shipment-column-filter ${selectedValues === undefined ? '' : 'active'}`}>
+        <details className={`shipment-column-filter ${column.key === 'shippedAt' ? 'open-right' : ''} ${selectedValues === undefined ? '' : 'active'}`}>
           <summary title={`${column.label}を絞り込む`} aria-label={`${column.label}を絞り込む`}><Filter size={14} /></summary>
           <div className="shipment-filter-menu">
             <strong>{column.label}</strong>
@@ -258,7 +264,7 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
       id: `${shipment.id}-${groupIndex}-${group.name}`,
       shipment,
       originalOrder: shipmentIndex * 100 + groupIndex,
-      shippedAt: new Date(shipment.shipped_at).toLocaleString('ja-JP'),
+      shippedAt: formatShipmentDateTime(shipment.shipped_at),
       shippedAtValue: new Date(shipment.shipped_at).getTime(),
       destination: shipment.flexcon_destinations?.name ?? '納品先不明',
       origin: group.origin,
@@ -492,7 +498,7 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
             quantityCount: shipment.quantity_count ?? 0,
           }]
       details.forEach((item) => rows.push([
-        new Date(shipment.shipped_at).toLocaleString('ja-JP'),
+        formatShipmentDateTime(shipment.shipped_at),
         shipment.flexcon_destinations?.name ?? '',
         shipment.workers?.worker_name ?? '',
         shipment.carrier_name ?? '',
@@ -542,7 +548,7 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
                     <strong>{shipment.flexcon_destinations?.name ?? '納品先不明'}</strong>
                     <span>{shipmentProductSummary(shipment)}</span>
                   </div>
-                  <small>{new Date(shipment.shipped_at).toLocaleString('ja-JP')}</small>
+                  <small>{formatShipmentDateTime(shipment.shipped_at)}</small>
                   <small><UserRound size={13} className="inline-icon" />担当：{shipment.workers?.worker_name ?? '不明'}</small>
                   {shipment.carrier_name && <small><Building2 size={13} className="inline-icon" />{shipment.carrier_name} / {shipment.driver_name ?? 'ドライバー不明'}</small>}
                   {shipment.vehicle_no && <small><Truck size={13} className="inline-icon" />{shipment.vehicle_no}</small>}
@@ -656,7 +662,7 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
             <form className="form-grid" onSubmit={(event) => void saveEdit(event)}>
               {editing.shipment_kind !== 'qr_flexcon' && <ManualShipmentItemsEditor key={editing.id} kind={editing.shipment_kind} items={manualItems} onChange={setManualItems} shipmentProducts={shipmentProducts} disabled={busy} />}
               <div className="form-grid two">
-                <label>出荷日時<input type="datetime-local" value={shippedAt} onChange={(e) => setShippedAt(e.target.value)} required /></label>
+                <label>出荷日時<input type="datetime-local" step={60} value={shippedAt} onChange={(e) => setShippedAt(e.target.value)} required /></label>
                 <label>納品先
                   <select value={destinationId} onChange={(e) => setDestinationId(e.target.value)} required>
                     <option value="">選択してください</option>

@@ -504,7 +504,7 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
                 <span className="worker-summary-label"><UserRound size={18} />担当者</span>
                 <strong>{workerName}</strong>
               </div>
-              <label className="shipment-form-row"><span>出荷日時</span><input type="datetime-local" value={shippedAt} onChange={(e) => setShippedAt(e.target.value)} required /></label>
+              <label className="shipment-form-row"><span>出荷日時</span><input type="datetime-local" step={60} value={shippedAt} onChange={(e) => setShippedAt(e.target.value)} required /></label>
               <label className="shipment-form-row"><span>納品先</span>
                 <select value={destinationId} onChange={(e) => setDestinationId(e.target.value)} required>
                   <option value="">選択してください</option>

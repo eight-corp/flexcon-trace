@@ -188,6 +188,7 @@
 .shipment-column-filter > summary::-webkit-details-marker { display: none; }
 .shipment-column-filter > summary:hover, .shipment-column-filter.active > summary { background: #d8e8dd; color: var(--green); }
 .shipment-filter-menu { position: absolute; top: calc(100% + 2px); right: 0; z-index: 20; width: 230px; padding: 10px; border: 1px solid #aebbb2; border-radius: 6px; background: #fff; box-shadow: 0 10px 24px rgba(23, 45, 31, .18); color: #26372c; }
+.shipment-column-filter.open-right .shipment-filter-menu { right: auto; left: 0; }
 .shipment-filter-menu > strong { display: block; margin-bottom: 8px; }
 .shipment-filter-menu label { min-height: 30px; display: flex; align-items: center; gap: 8px; font-weight: 500; }
 .shipment-filter-menu input { width: 16px; height: 16px; margin: 0; }
