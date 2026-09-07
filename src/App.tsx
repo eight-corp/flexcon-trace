@@ -18,6 +18,7 @@ function App() {
   const [tab, setTab] = useState<Tab>('scan')
   const [historyVersion, setHistoryVersion] = useState(0)
   const [inspectionAuthorizationId, setInspectionAuthorizationId] = useState<string | null>(null)
+  const [inspectionRegistrationId, setInspectionRegistrationId] = useState<string | null>(null)
   const [inspectionRecordTarget, setInspectionRecordTarget] = useState<InspectionRecordTarget | null>(null)
   const [inspectionReadOnly, setInspectionReadOnly] = useState(false)
 
@@ -79,6 +80,7 @@ function App() {
             workerId={worker.worker_id}
             onOpenInspections={(authorizationId) => {
               setInspectionAuthorizationId(authorizationId)
+              setInspectionRegistrationId(null)
               setInspectionRecordTarget(null)
               setInspectionReadOnly(true)
               setTab('inspections')
@@ -89,15 +91,18 @@ function App() {
           <div className="inspection-workspace">
             <div className="inspection-workspace-content">
               <InspectionRecordManager
-                key={`${inspectionReadOnly ? 'readonly' : 'editable'}-${inspectionAuthorizationId ?? 'inspection-summary'}`}
+                key={`${inspectionReadOnly ? 'readonly' : 'editable'}-${inspectionAuthorizationId ?? 'inspection-summary'}-${inspectionRegistrationId ?? 'all'}`}
                 workerId={worker.worker_id}
                 readOnly={inspectionReadOnly}
                 selectedAuthorizationId={inspectionAuthorizationId}
+                selectedRegistrationId={inspectionRegistrationId}
                 selectedRecordTarget={inspectionRecordTarget}
                 onSelectedAuthorizationChange={setInspectionAuthorizationId}
+                onSelectedRegistrationChange={setInspectionRegistrationId}
                 onSelectedRecordTargetChange={setInspectionRecordTarget}
                 onBack={() => {
                   setInspectionAuthorizationId(null)
+                  setInspectionRegistrationId(null)
                   setInspectionRecordTarget(null)
                   if (inspectionReadOnly) setTab('authorizations')
                 }}
@@ -118,7 +123,7 @@ function App() {
         <button className={tab === 'authorizations' ? 'active' : ''} onClick={() => setTab('authorizations')}>
           <FileSignature size={22} /><span>委任状一覧</span>
         </button>
-        <button className={tab === 'inspections' ? 'active' : ''} onClick={() => { setInspectionAuthorizationId(null); setInspectionRecordTarget(null); setInspectionReadOnly(false); setTab('inspections') }}>
+        <button className={tab === 'inspections' ? 'active' : ''} onClick={() => { setInspectionAuthorizationId(null); setInspectionRegistrationId(null); setInspectionRecordTarget(null); setInspectionReadOnly(false); setTab('inspections') }}>
           <ClipboardList size={22} /><span>検査記録</span>
         </button>
         <button className={tab === 'master' ? 'active' : ''} onClick={() => setTab('master')}>

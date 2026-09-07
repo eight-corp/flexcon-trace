@@ -8,8 +8,10 @@ type Props = {
   workerId: string
   readOnly: boolean
   selectedAuthorizationId: string | null
+  selectedRegistrationId: string | null
   selectedRecordTarget: InspectionRecordTarget | null
   onSelectedAuthorizationChange: (authorizationId: string | null) => void
+  onSelectedRegistrationChange: (registrationId: string | null) => void
   onSelectedRecordTargetChange: (target: InspectionRecordTarget | null) => void
   onBack: () => void
 }
@@ -59,6 +61,7 @@ type InspectionProgressRow = {
 }
 type InspectionDetailRow = {
   id: string
+  registrationId: string
   authorizationId: string
   fiscalYear: number
   origin: string
@@ -200,7 +203,7 @@ function brandTypeForPrefecture(prefecture: string | null): 'brand_aomori' | 'br
   if (normalized === '岩手') return 'brand_iwate'
   return null
 }
-export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizationId, selectedRecordTarget, onSelectedAuthorizationChange, onSelectedRecordTargetChange, onBack }: Props) {
+export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizationId, selectedRegistrationId, selectedRecordTarget, onSelectedAuthorizationChange, onSelectedRegistrationChange, onSelectedRecordTargetChange, onBack }: Props) {
   const [authorizations, setAuthorizations] = useState<AuthorizationRecord[]>([])
   const [registrations, setRegistrations] = useState<InspectionRegistration[]>([])
   const [flexcons, setFlexcons] = useState<FlexconInspection[]>([])
@@ -296,12 +299,13 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
     ].some((value) => String(value ?? '').toLowerCase().includes(term))).slice(0, 20)
   }, [addGroupForm.producer_name, authorizations])
   const selectedFlexcons = flexcons
-    .filter((item) => item.authorization_id === selectedAuthorizationId)
+    .filter((item) => item.authorization_id === selectedAuthorizationId && (readOnly || !selectedRegistrationId || item.registration_id === selectedRegistrationId))
     .sort((left, right) => left.flexcon_no - right.flexcon_no)
   const certificateEligibleFlexcons = selectedFlexcons.filter((item) => (
     isFeedRiceBrand(item.brand ?? '') || item.quantity_kg === weights.branded_rice
   ))
-  const selectedPaperBags = paperBags.filter((item) => item.authorization_id === selectedAuthorizationId)
+  const selectedPaperBags = paperBags.filter((item) => item.authorization_id === selectedAuthorizationId && (readOnly || !selectedRegistrationId || item.registration_id === selectedRegistrationId))
+  const selectedRegistration = registrations.find((item) => item.id === selectedRegistrationId) ?? null
 
   const summaryRows = useMemo(() => {
     const authorizationById = new Map(authorizations.map((item) => [item.id, item]))
@@ -398,6 +402,7 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
       const authorization = authorizationById.get(item.authorization_id)
       return {
         id: item.id,
+        registrationId: item.registration_id,
         authorizationId: item.authorization_id,
         fiscalYear: item.fiscal_year,
         origin: formatPrefectureName(authorization?.prefecture) || '産地未登録',
@@ -470,7 +475,7 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
     if (flexconCount <= 0 && paperBagCount <= 0 && bulkQuantityKg <= 0) return setNotice({ type: 'error', text: 'フレコン本数、紙袋数、バラのいずれかを入力してください。' })
     const flexconQuantity = addGroupForm.brand === '飼料用玄米' ? weights.feed_rice : weights.branded_rice
     setBusy(true); setNotice(null)
-    const { error } = await supabase.rpc('flexcon_add_inspection_group', {
+    const { data, error } = await supabase.rpc('flexcon_add_inspection_group', {
       p_worker_id: workerId,
       p_authorization_id: addAuthorization.id,
       p_fiscal_year: Number(addGroupForm.fiscal_year),
@@ -485,7 +490,23 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
     })
     setBusy(false)
     if (error) return setNotice({ type: 'error', text: error.message })
+    const registrationNo = Number((data as { registration_no?: unknown } | null)?.registration_no)
+    let registrationId: string | null = null
+    if (Number.isFinite(registrationNo)) {
+      const { data: registrationData } = await supabase
+        .from('flexcon_inspection_registrations')
+        .select('id')
+        .eq('registration_no', registrationNo)
+        .maybeSingle()
+      registrationId = registrationData?.id ?? null
+    }
+    if (!registrationId) {
+      setNotice({ type: 'error', text: '登録は完了しましたが、編集する登録行を取得できませんでした。一覧を更新して対象行を選択してください。' })
+      setVersion((value) => value + 1)
+      return
+    }
     onSelectedRecordTargetChange(null)
+    onSelectedRegistrationChange(registrationId)
     onSelectedAuthorizationChange(addAuthorization.id)
   }
 
@@ -967,6 +988,7 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
 
   const openInspectionDetail = (row: InspectionDetailRow) => {
     onSelectedRecordTargetChange({ kind: row.kind, id: row.id })
+    onSelectedRegistrationChange(row.registrationId)
     onSelectedAuthorizationChange(row.authorizationId)
   }
   const renderInspectionDetailList = (title: string, rows: InspectionDetailRow[], tone: 'inspected' | 'uninspected') => {
@@ -1025,7 +1047,7 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
       </section>
       <div className="inspection-summary-wrap"><table className="inspection-summary-table">
         <thead><tr><th>登録No.</th><th>仕入日</th><th>検査日</th><th>氏名</th><th>産地</th><th>市町村名</th><th>検査場所</th><th>委任状No.</th><th>銘柄</th><th>推フレ数</th><th>紙袋数</th><th>バラ数量</th><th>検査済み数量</th><th>未検査数量</th></tr></thead>
-        <tbody>{filteredSummary.map((row) => <tr key={row.registrationId} tabIndex={0} onClick={() => { onSelectedRecordTargetChange(null); onSelectedAuthorizationChange(row.authorizationId) }} onKeyDown={(event) => { if (event.key === 'Enter') { onSelectedRecordTargetChange(null); onSelectedAuthorizationChange(row.authorizationId) } }}>
+        <tbody>{filteredSummary.map((row) => <tr key={row.registrationId} tabIndex={0} onClick={() => { onSelectedRecordTargetChange(null); onSelectedRegistrationChange(row.registrationId); onSelectedAuthorizationChange(row.authorizationId) }} onKeyDown={(event) => { if (event.key === 'Enter') { onSelectedRecordTargetChange(null); onSelectedRegistrationChange(row.registrationId); onSelectedAuthorizationChange(row.authorizationId) } }}>
           <td>{row.registrationNo}</td><td>{row.purchaseDates}</td><td>{row.inspectionDates}</td><td><strong>{row.fullName}</strong></td><td>{row.origin}</td><td>{row.municipality}</td><td>{row.inspectionLocations}</td><td>{row.authorizationNo}</td><td>{row.brands}</td><td>{row.flexconCount}本</td><td>{row.paperBagCount}袋</td><td>{row.bulkQuantity.toLocaleString()}kg</td><td className="inspection-progress-inspected">{row.inspectedQuantity.toLocaleString()}kg</td><td className="inspection-progress-uninspected">{row.uninspectedQuantity.toLocaleString()}kg</td>
         </tr>)}
         {filteredSummary.length === 0 && <tr><td colSpan={14} className="empty-state">該当する検査記録はありません</td></tr>}</tbody>
@@ -1037,7 +1059,7 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
   return <div className="producer-inspection-page">
     <div className="producer-inspection-heading">
       <button className="icon-button" type="button" title={readOnly ? '委任状一覧へ戻る' : '検査記録へ戻る'} aria-label={readOnly ? '委任状一覧へ戻る' : '検査記録へ戻る'} onClick={onBack}><ArrowLeft size={21} /></button>
-      <div><h1>{selectedAuthorization.full_name}</h1><p>委任状№ {selectedAuthorization.authorization_no}　{[selectedAuthorization.prefecture, selectedAuthorization.municipality].filter(Boolean).join(' ')}</p></div>
+      <div><h1>{selectedAuthorization.full_name}</h1><p>委任状№ {selectedAuthorization.authorization_no}　{[selectedAuthorization.prefecture, selectedAuthorization.municipality].filter(Boolean).join(' ')}{!readOnly && selectedRegistration ? `　登録No. ${selectedRegistration.registration_no}` : ''}</p></div>
       {readOnly && <div className="producer-inspection-actions">
         <button className="secondary-button" type="button" onClick={() => void createInspectionLedgerPdf()} disabled={inspectionLedgerBusy || gradingNoticeBusy}><ClipboardList size={18} />{inspectionLedgerBusy ? 'PDF作成中...' : '検査請求者別検査台帳'}</button>
         <button className="secondary-button" type="button" onClick={() => void createGradingNoticePdf()} disabled={gradingNoticeBusy || inspectionLedgerBusy}><FileText size={18} />{gradingNoticeBusy ? 'PDF作成中...' : '格付結果通知票'}</button>
