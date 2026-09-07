@@ -99,6 +99,7 @@ export type InspectionRecord = {
 
 export type FlexconInspection = {
   id: string
+  registration_id: string
   authorization_id: string
   fiscal_year: number
   purchase_date: string
@@ -124,6 +125,7 @@ export type FlexconInspection = {
 
 export type PaperBagInspection = {
   id: string
+  registration_id: string
   authorization_id: string
   fiscal_year: number
   purchase_date: string
@@ -140,6 +142,14 @@ export type PaperBagInspection = {
   updated_by_worker_id: string
   created_at: string
   updated_at: string
+}
+
+export type InspectionRegistration = {
+  id: string
+  registration_no: number
+  authorization_id: string
+  created_by_worker_id: string
+  created_at: string
 }
 
 export type InspectionWeight = {

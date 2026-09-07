@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft, ChevronDown, CircleAlert, ClipboardList, ExternalLink, FileText, Plus, Printer, Search, TableRowsSplit, Trash2, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { formatPrefectureName } from '../lib/prefecture'
-import type { AuthorizationRecord, FlexconInspection, InspectionOption, InspectionWeight, PaperBagInspection } from '../types'
+import type { AuthorizationRecord, FlexconInspection, InspectionOption, InspectionRegistration, InspectionWeight, PaperBagInspection } from '../types'
 
 type Props = {
   workerId: string
@@ -72,6 +72,24 @@ type InspectionDetailRow = {
   grade: string | null
   missingFields: string[]
   complete: boolean
+}
+type InspectionRegistrationSummaryRow = {
+  registrationId: string
+  registrationNo: number
+  authorizationId: string
+  purchaseDates: string
+  inspectionDates: string
+  fullName: string
+  origin: string
+  municipality: string
+  inspectionLocations: string
+  authorizationNo: string
+  brands: string
+  flexconCount: number
+  paperBagCount: number
+  bulkQuantity: number
+  inspectedQuantity: number
+  uninspectedQuantity: number
 }
 
 const DEFAULT_BRANDED_RICE_WEIGHT = 1020
@@ -167,6 +185,9 @@ function inspectionLedgerFailureFor(items: Array<FlexconInspection | PaperBagIns
   }
 }
 function displayDate(value: string | null | undefined) { return value ? value.replaceAll('-', '/') : '' }
+function joinDistinct(values: Array<string | null | undefined>, formatter: (value: string) => string = (value) => value) {
+  return [...new Set(values.map((value) => value?.trim()).filter((value): value is string => Boolean(value)).map(formatter))].join('、')
+}
 function displayCropYear(value: number) { return value >= 2000 ? `${value}年産` : `令和${value}年産` }
 function brandTypeForPrefecture(prefecture: string | null): 'brand_aomori' | 'brand_iwate' | null {
   const normalized = (prefecture ?? '').trim().replace(/県$/, '')
@@ -176,6 +197,7 @@ function brandTypeForPrefecture(prefecture: string | null): 'brand_aomori' | 'br
 }
 export function InspectionRecordManager({ workerId, selectedAuthorizationId, selectedRecordTarget, onSelectedAuthorizationChange, onSelectedRecordTargetChange }: Props) {
   const [authorizations, setAuthorizations] = useState<AuthorizationRecord[]>([])
+  const [registrations, setRegistrations] = useState<InspectionRegistration[]>([])
   const [flexcons, setFlexcons] = useState<FlexconInspection[]>([])
   const [paperBags, setPaperBags] = useState<PaperBagInspection[]>([])
   const [inspectionOptions, setInspectionOptions] = useState<InspectionOption[]>([])
@@ -203,16 +225,17 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, sel
 
   useEffect(() => {
     const load = async () => {
-      const [authorizationResult, flexconResult, paperResult, optionResult, weightResult, mixedUsageResult] = await Promise.all([
+      const [authorizationResult, registrationResult, flexconResult, paperResult, optionResult, weightResult, mixedUsageResult] = await Promise.all([
         supabase.from('flexcon_authorizations').select('*').order('authorization_no'),
+        supabase.from('flexcon_inspection_registrations').select('*').order('registration_no'),
         supabase.from('flexcon_inspection_flexcons').select('*').order('purchase_date', { ascending: false }).order('flexcon_no'),
         supabase.from('flexcon_inspection_paper_bags').select('*').order('purchase_date', { ascending: false }).order('created_at'),
         supabase.from('flexcon_inspection_options').select('*').eq('active', true).order('sort_order').order('name'),
         supabase.from('flexcon_inspection_weights').select('*'),
         supabase.from('flexcon_mixed_flexcon_members').select('source_flexcon_id, quantity_kg, flexcon_mixed_flexcons(mixed_no)').not('source_flexcon_id', 'is', null),
       ])
-      if (flexconResult.error || paperResult.error) {
-        setNotice({ type: 'error', text: '委任状単位の検査記録用SQLを実行してください。' })
+      if (registrationResult.error || flexconResult.error || paperResult.error) {
+        setNotice({ type: 'error', text: '登録No.対応の検査記録用SQLを実行してください。' })
         return
       }
       if (authorizationResult.error) {
@@ -222,6 +245,7 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, sel
       setAuthorizations(((authorizationResult.data ?? []) as AuthorizationRecord[]).sort((left, right) => (
         AUTHORIZATION_NO_COLLATOR.compare(left.authorization_no, right.authorization_no)
       )))
+      setRegistrations((registrationResult.data ?? []) as InspectionRegistration[])
       setFlexcons((flexconResult.data ?? []) as FlexconInspection[])
       setPaperBags((paperResult.data ?? []) as PaperBagInspection[])
       if (!optionResult.error) setInspectionOptions((optionResult.data ?? []) as InspectionOption[])
@@ -276,23 +300,60 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, sel
   ))
   const selectedPaperBags = paperBags.filter((item) => item.authorization_id === selectedAuthorizationId)
 
-  const summaryRows = useMemo(() => authorizations.map((authorization) => {
-    const producerFlexcons = flexcons.filter((item) => item.authorization_id === authorization.id)
-    const producerPaperBags = paperBags.filter((item) => item.authorization_id === authorization.id)
-    const purchaseDates = [...producerFlexcons, ...producerPaperBags].map((item) => item.purchase_date).filter(Boolean).sort().reverse()
+  const summaryRows = useMemo(() => {
+    const authorizationById = new Map(authorizations.map((item) => [item.id, item]))
+    const flexconsByRegistration = new Map<string, FlexconInspection[]>()
+    const paperBagsByRegistration = new Map<string, PaperBagInspection[]>()
+    flexcons.forEach((item) => {
+      const rows = flexconsByRegistration.get(item.registration_id) ?? []
+      rows.push(item)
+      flexconsByRegistration.set(item.registration_id, rows)
+    })
+    paperBags.forEach((item) => {
+      const rows = paperBagsByRegistration.get(item.registration_id) ?? []
+      rows.push(item)
+      paperBagsByRegistration.set(item.registration_id, rows)
+    })
+    return registrations.map((registration): InspectionRegistrationSummaryRow | null => {
+    const authorization = authorizationById.get(registration.authorization_id)
+    if (!authorization) return null
+    const registeredFlexcons = flexconsByRegistration.get(registration.id) ?? []
+    const registeredPaperBags = paperBagsByRegistration.get(registration.id) ?? []
+    const records: Array<FlexconInspection | PaperBagInspection> = [...registeredFlexcons, ...registeredPaperBags]
+    if (records.length === 0) return null
+    const standardFlexcons = registeredFlexcons.filter((item) => {
+      const standardWeight = isFeedRiceBrand(item.brand ?? '') ? weights.feed_rice : weights.branded_rice
+      return item.quantity_kg === standardWeight
+    })
+    const bulkFlexcons = registeredFlexcons.filter((item) => !standardFlexcons.includes(item))
+    const quantityFor = (item: FlexconInspection | PaperBagInspection) => (
+      'quantity_kg' in item ? item.quantity_kg : item.bag_count * 30
+    )
     return {
-      authorization,
-      lastPurchaseDate: purchaseDates[0] ?? null,
-      brands: [...new Set([...producerFlexcons.map((item) => item.brand), ...producerPaperBags.map((item) => item.brand)].filter(Boolean))].join('、'),
-      flexconCount: producerFlexcons.length,
-      paperBagCount: producerPaperBags.reduce((total, item) => total + item.bag_count, 0),
-      totalQuantity: producerFlexcons.reduce((total, item) => total + item.quantity_kg, 0) + producerPaperBags.reduce((total, item) => total + item.bag_count * 30, 0),
+      registrationId: registration.id,
+      registrationNo: registration.registration_no,
+      authorizationId: authorization.id,
+      purchaseDates: joinDistinct(records.map((item) => item.purchase_date), displayDate),
+      inspectionDates: joinDistinct(records.map((item) => item.inspection_date), displayDate),
+      fullName: authorization.full_name,
+      origin: formatPrefectureName(authorization.prefecture),
+      municipality: authorization.municipality ?? '',
+      inspectionLocations: joinDistinct(records.map((item) => item.inspection_location)),
+      authorizationNo: authorization.authorization_no,
+      brands: joinDistinct(records.map((item) => item.brand)),
+      flexconCount: standardFlexcons.length,
+      paperBagCount: registeredPaperBags.reduce((total, item) => total + item.bag_count, 0),
+      bulkQuantity: bulkFlexcons.reduce((total, item) => total + item.quantity_kg, 0),
+      inspectedQuantity: records.filter(isInspectionResultComplete).reduce((total, item) => total + quantityFor(item), 0),
+      uninspectedQuantity: records.filter((item) => !isInspectionResultComplete(item)).reduce((total, item) => total + quantityFor(item), 0),
     }
-  }).filter((row) => row.flexconCount > 0 || row.paperBagCount > 0), [authorizations, flexcons, paperBags])
+    }).filter((row): row is InspectionRegistrationSummaryRow => row !== null)
+      .sort((left, right) => left.registrationNo - right.registrationNo)
+  }, [authorizations, flexcons, paperBags, registrations, weights])
   const filteredSummary = useMemo(() => {
     const term = search.trim().toLowerCase()
     if (!term) return summaryRows
-    return summaryRows.filter(({ authorization, brands }) => [authorization.authorization_no, authorization.full_name, authorization.prefecture, authorization.municipality, brands].some((value) => String(value ?? '').toLowerCase().includes(term)))
+    return summaryRows.filter((row) => Object.values(row).some((value) => String(value ?? '').toLowerCase().includes(term)))
   }, [search, summaryRows])
   const inspectionProgressRows = useMemo(() => {
     const authorizationById = new Map(authorizations.map((authorization) => [authorization.id, authorization]))
@@ -903,8 +964,8 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, sel
 
   if (!selectedAuthorization) {
     return <div className="inspection-page">
-      <div className="page-heading inspection-heading"><div><h1>検査記録</h1><p>生産者ごとの検査数量を集計表示します。</p></div></div>
-      <div className="search-row"><div className="search-input-wrap"><Search size={18} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="委任状№・氏名・産地・銘柄で検索" /></div></div>
+      <div className="page-heading inspection-heading"><div><h1>検査記録</h1><p>生産者詳細で追加した順番に検査記録を表示します。</p></div></div>
+      <div className="search-row"><div className="search-input-wrap"><Search size={18} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="登録No.・氏名・産地・銘柄などで検索" /></div></div>
       <section className="inspection-progress-section section-band">
         <div className="section-title">
           <div><h2>検査数量</h2><span>産年・産地・銘柄別</span></div>
@@ -923,10 +984,11 @@ export function InspectionRecordManager({ workerId, selectedAuthorizationId, sel
         </div>
       </section>
       <div className="inspection-summary-wrap"><table className="inspection-summary-table">
-        <thead><tr><th>委任状№</th><th>氏名</th><th>産地</th><th>最終仕入日</th><th>銘柄</th><th>フレコン</th><th>紙袋</th><th>総数量</th></tr></thead>
-        <tbody>{filteredSummary.map((row) => <tr key={row.authorization.id} tabIndex={0} onClick={() => onSelectedAuthorizationChange(row.authorization.id)} onKeyDown={(event) => { if (event.key === 'Enter') onSelectedAuthorizationChange(row.authorization.id) }}>
-          <td>{row.authorization.authorization_no}</td><td><strong>{row.authorization.full_name}</strong></td><td>{[row.authorization.prefecture, row.authorization.municipality].filter(Boolean).join(' ')}</td><td>{displayDate(row.lastPurchaseDate)}</td><td>{row.brands}</td><td>{row.flexconCount}本</td><td>{row.paperBagCount}袋</td><td>{row.totalQuantity.toLocaleString()}kg</td>
-        </tr>)}</tbody>
+        <thead><tr><th>登録No.</th><th>仕入日</th><th>検査日</th><th>氏名</th><th>産地</th><th>市町村名</th><th>検査場所</th><th>委任状No.</th><th>銘柄</th><th>推フレ数</th><th>紙袋数</th><th>バラ数量</th><th>検査済み数量</th><th>未検査数量</th></tr></thead>
+        <tbody>{filteredSummary.map((row) => <tr key={row.registrationId} tabIndex={0} onClick={() => { onSelectedRecordTargetChange(null); onSelectedAuthorizationChange(row.authorizationId) }} onKeyDown={(event) => { if (event.key === 'Enter') { onSelectedRecordTargetChange(null); onSelectedAuthorizationChange(row.authorizationId) } }}>
+          <td>{row.registrationNo}</td><td>{row.purchaseDates}</td><td>{row.inspectionDates}</td><td><strong>{row.fullName}</strong></td><td>{row.origin}</td><td>{row.municipality}</td><td>{row.inspectionLocations}</td><td>{row.authorizationNo}</td><td>{row.brands}</td><td>{row.flexconCount}本</td><td>{row.paperBagCount}袋</td><td>{row.bulkQuantity.toLocaleString()}kg</td><td className="inspection-progress-inspected">{row.inspectedQuantity.toLocaleString()}kg</td><td className="inspection-progress-uninspected">{row.uninspectedQuantity.toLocaleString()}kg</td>
+        </tr>)}
+        {filteredSummary.length === 0 && <tr><td colSpan={14} className="empty-state">該当する検査記録はありません</td></tr>}</tbody>
       </table></div>
       {notice && <div className={`notice operation-log ${notice.type}`}>{notice.text}</div>}
     </div>
