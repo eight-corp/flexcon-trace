@@ -158,3 +158,38 @@ export type InspectionOption = {
   created_at: string
   updated_at: string
 }
+
+export type MixedFlexconMember = {
+  id: string
+  mixed_flexcon_id: string
+  authorization_id: string
+  quantity_kg: number
+  sort_order: number
+  flexcon_authorizations: AuthorizationRecord | null
+}
+
+export type MixedFlexcon = {
+  id: string
+  mixed_no: number
+  fiscal_year: number
+  origin_prefecture: string
+  brand: string
+  quantity_kg: number
+  lot_number: string
+  purchase_date: string | null
+  inspection_date: string | null
+  inspector_name: string | null
+  inspection_location: string | null
+  grade: string | null
+  reason: string | null
+  moisture: number | null
+  notes: string | null
+  certificate_print_count: number
+  certificate_last_printed_at: string | null
+  certificate_last_printed_by_worker_id: string | null
+  created_by_worker_id: string
+  updated_by_worker_id: string
+  created_at: string
+  updated_at: string
+  flexcon_mixed_flexcon_members: MixedFlexconMember[]
+}

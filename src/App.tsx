@@ -1,16 +1,17 @@
 import { useEffect, useState } from 'react'
-import { ClipboardList, FileSignature, History, LogOut, ScanLine, Settings2, Wheat } from 'lucide-react'
+import { Blend, ClipboardList, FileSignature, History, LogOut, ScanLine, Settings2, Wheat } from 'lucide-react'
 import { AuthScreen } from './components/AuthScreen'
 import { AuthorizationManager } from './components/AuthorizationManager'
 import { InspectionRecordManager } from './components/InspectionRecordManager'
 import { InspectionOptionManager } from './components/InspectionOptionManager'
+import { MixedFlexconManager } from './components/MixedFlexconManager'
 import { ShipmentHistory } from './components/ShipmentHistory'
 import { ShipmentScanner } from './components/ShipmentScanner'
 import { clearWorkerSession, restoreWorkerSession } from './lib/workerAuth'
 import type { Worker } from './types'
 import './App.css'
 
-type Tab = 'scan' | 'history' | 'authorizations' | 'inspections' | 'master'
+type Tab = 'scan' | 'history' | 'authorizations' | 'mixed' | 'inspections' | 'master'
 
 function App() {
   const [worker, setWorker] = useState<Worker | null>(null)
@@ -62,7 +63,7 @@ function App() {
         </button>
       </header>
 
-      <main className={`app-main ${tab === 'history' || tab === 'authorizations' || tab === 'inspections' ? 'app-main-wide' : ''}`}>
+      <main className={`app-main ${tab === 'history' || tab === 'authorizations' || tab === 'mixed' || tab === 'inspections' ? 'app-main-wide' : ''}`}>
         {tab === 'scan' && (
           <ShipmentScanner
             key={worker.worker_id}
@@ -89,6 +90,7 @@ function App() {
             onSelectedAuthorizationChange={setInspectionAuthorizationId}
           />
         )}
+        {tab === 'mixed' && <MixedFlexconManager workerId={worker.worker_id} />}
         {tab === 'master' && <InspectionOptionManager workerId={worker.worker_id} />}
       </main>
 
@@ -101,6 +103,9 @@ function App() {
         </button>
         <button className={tab === 'authorizations' ? 'active' : ''} onClick={() => setTab('authorizations')}>
           <FileSignature size={22} /><span>委任状一覧</span>
+        </button>
+        <button className={tab === 'mixed' ? 'active' : ''} onClick={() => setTab('mixed')}>
+          <Blend size={22} /><span>混在フレコン</span>
         </button>
         <button className={tab === 'inspections' ? 'active' : ''} onClick={() => { setInspectionAuthorizationId(null); setTab('inspections') }}>
           <ClipboardList size={22} /><span>検査記録</span>

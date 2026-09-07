@@ -107,6 +107,7 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
   const [transportProfiles, setTransportProfiles] = useState<TransportProfile[]>([])
   const [shipmentProducts, setShipmentProducts] = useState<InspectionOption[]>([])
   const [authorizationNames, setAuthorizationNames] = useState<Record<string, string>>({})
+  const [lotProducerNames, setLotProducerNames] = useState<Record<string, string>>({})
   const [inspectionLotDetails, setInspectionLotDetails] = useState<Record<string, InspectionLotDetails>>({})
   const [shippedAt, setShippedAt] = useState(initialDraft.shippedAt)
   const [destinationId, setDestinationId] = useState(initialDraft.destinationId)
@@ -137,8 +138,9 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
       supabase.from('flexcon_transport_profiles').select('*').eq('active', true).order('company_name'),
       supabase.from('flexcon_authorizations').select('id, authorization_no, full_name, prefecture'),
       supabase.from('flexcon_inspection_flexcons').select('authorization_id, lot_number, brand'),
+      supabase.from('flexcon_mixed_flexcons').select('lot_number, origin_prefecture, brand, flexcon_mixed_flexcon_members(sort_order, flexcon_authorizations(full_name))'),
       supabase.from('flexcon_inspection_options').select('*').in('option_type', ['shipment_product', 'brand_aomori', 'brand_iwate']).eq('active', true).order('sort_order').order('name'),
-    ]).then(([destinationResult, transportResult, authorizationResult, flexconResult, productResult]) => {
+    ]).then(([destinationResult, transportResult, authorizationResult, flexconResult, mixedResult, productResult]) => {
       if (destinationResult.error) setNotice({ type: 'error', text: '納品先を取得できません。SupabaseのSQL設定を確認してください。' })
       else setDestinations((destinationResult.data ?? []) as Destination[])
       if (transportResult.error) setNotice({ type: 'error', text: '運送会社を取得できません。追加SQLを実行してください。' })
@@ -173,6 +175,22 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
           } else if (/^0\d{6}$/.test(flexcon.lot_number)) {
             details[flexcon.lot_number.slice(1)] = detail
           }
+        }
+        if (!mixedResult.error) {
+          const mixedNames: Record<string, string> = {}
+          for (const mixed of mixedResult.data ?? []) {
+            const members = [...(mixed.flexcon_mixed_flexcon_members ?? [])].sort((left, right) => left.sort_order - right.sort_order)
+            const firstAuthorization = Array.isArray(members[0]?.flexcon_authorizations)
+              ? members[0]?.flexcon_authorizations[0]
+              : members[0]?.flexcon_authorizations
+            const firstName = firstAuthorization?.full_name
+            mixedNames[mixed.lot_number] = firstName ? (members.length > 1 ? `${firstName}＋他${members.length - 1}名` : firstName) : '生産者未登録'
+            details[mixed.lot_number] = {
+              origin: formatPrefectureName(mixed.origin_prefecture) || '産地未登録',
+              brand: String(mixed.brand ?? '').trim() || '銘柄未登録',
+            }
+          }
+          setLotProducerNames(mixedNames)
         }
         setInspectionLotDetails(details)
       }
@@ -378,8 +396,8 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
             {lots.map((lot, index) => (
               <li key={lot}>
                 <span className="sequence">№{index + 1}</span>
-                <span className={`lot-producer-name ${authorizationNames[authorizationNoFromLot(lot)] ? '' : 'unknown'}`} title="名前">
-                  {authorizationNames[authorizationNoFromLot(lot)] ?? '委任状未登録'}
+                <span className={`lot-producer-name ${lotProducerNames[lot] || authorizationNames[authorizationNoFromLot(lot)] ? '' : 'unknown'}`} title="名前">
+                  {lotProducerNames[lot] ?? authorizationNames[authorizationNoFromLot(lot)] ?? '委任状未登録'}
                 </span>
                 <span className={`lot-origin ${inspectionLotDetails[lot] ? '' : 'unknown'}`} title="産地">
                   {inspectionLotDetails[lot]?.origin ?? '検査記録未登録'}
