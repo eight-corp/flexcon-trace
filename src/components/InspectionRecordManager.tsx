@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, ChevronDown, CircleAlert, ClipboardList, ExternalLink, FileText, Plus, Printer, Search, TableRowsSplit, Trash2, X } from 'lucide-react'
+import { ArrowLeft, BarChart3, ChevronDown, CircleAlert, ClipboardList, ExternalLink, FileText, List, Plus, Printer, Search, TableRowsSplit, Trash2, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { formatPrefectureName } from '../lib/prefecture'
 import type { AuthorizationRecord, FlexconInspection, InspectionOption, InspectionRegistration, InspectionWeight, PaperBagInspection } from '../types'
@@ -215,6 +215,7 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
   const [detailDrafts, setDetailDrafts] = useState<Record<string, InlineDetailDraft>>({})
   const [splitPaper, setSplitPaper] = useState<PaperBagInspection | null>(null)
   const [splitCounts, setSplitCounts] = useState({ first: '', second: '' })
+  const [summaryView, setSummaryView] = useState<'list' | 'aggregate'>('list')
   const [search, setSearch] = useState('')
   const [notice, setNotice] = useState<Notice>(null)
   const [version, setVersion] = useState(0)
@@ -443,16 +444,8 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
       || left.purchaseDate.localeCompare(right.purchaseDate)
     ))
   }, [authorizations, flexcons, paperBags])
-  const filteredInspectionDetailRows = useMemo(() => {
-    const term = search.trim().toLowerCase()
-    if (!term) return inspectionDetailRows
-    return inspectionDetailRows.filter((row) => [
-      row.authorizationNo, row.fullName, row.origin, row.brand,
-      row.kind === 'flexcon' ? 'フレコン' : '紙袋', row.recordNo,
-    ].some((value) => String(value ?? '').toLowerCase().includes(term)))
-  }, [inspectionDetailRows, search])
-  const inspectedDetailRows = filteredInspectionDetailRows.filter((row) => row.complete)
-  const uninspectedDetailRows = filteredInspectionDetailRows.filter((row) => !row.complete)
+  const inspectedDetailRows = inspectionDetailRows.filter((row) => row.complete)
+  const uninspectedDetailRows = inspectionDetailRows.filter((row) => !row.complete)
 
   const locationOptions = inspectionOptions.filter((item) => item.option_type === 'location')
   const inspectorOptions = inspectionOptions.filter((item) => item.option_type === 'inspector')
@@ -1008,6 +1001,11 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
   if (!selectedAuthorization) {
     return <div className="inspection-page">
       <div className="page-heading inspection-heading"><div><h1>検査記録</h1><p>生産者詳細で追加した順番に検査記録を表示します。</p></div></div>
+      <div className="inspection-record-tabs inspection-summary-tabs" role="tablist" aria-label="検査記録の表示">
+        <button type="button" role="tab" aria-selected={summaryView === 'list'} className={summaryView === 'list' ? 'active' : ''} onClick={() => setSummaryView('list')}><List size={18} />一覧</button>
+        <button type="button" role="tab" aria-selected={summaryView === 'aggregate'} className={summaryView === 'aggregate' ? 'active' : ''} onClick={() => { setProducerPickerOpen(false); setSummaryView('aggregate') }}><BarChart3 size={18} />集計</button>
+      </div>
+      {summaryView === 'list' && <>
       <div className="search-row"><div className="search-input-wrap"><Search size={18} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="登録No.・氏名・産地・銘柄などで検索" /></div></div>
       {!readOnly && <form className="inspection-group-add inspection-summary-add section-band" onSubmit={(event) => void addInspectionGroup(event)}>
         <div className="inspection-producer-picker" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setProducerPickerOpen(false) }}>
@@ -1028,7 +1026,8 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
         <label>バラ（kg）<input type="number" min="0" step="1" value={addGroupForm.bulk_quantity_kg} onChange={(event) => setAddGroupForm((current) => ({ ...current, bulk_quantity_kg: event.target.value }))} placeholder="0" /></label>
         <button className="primary-button" type="submit" disabled={busy}><Plus size={18} />{busy ? '追加中...' : '追加'}</button>
       </form>}
-      <section className="inspection-progress-section section-band">
+      </>}
+      {summaryView === 'aggregate' && <section className="inspection-progress-section inspection-summary-aggregate section-band">
         <div className="section-title">
           <div><h2>検査数量</h2><span>産年・産地・銘柄別</span></div>
           <div className="inspection-progress-totals"><span>検査済み <strong>{inspectionProgressTotals.inspected.toLocaleString()}kg</strong></span><span>未検査 <strong>{inspectionProgressTotals.uninspected.toLocaleString()}kg</strong></span></div>
@@ -1044,14 +1043,14 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
           {renderInspectionDetailList('検査済み詳細一覧', inspectedDetailRows, 'inspected')}
           {renderInspectionDetailList('未検査詳細一覧', uninspectedDetailRows, 'uninspected')}
         </div>
-      </section>
-      <div className="inspection-summary-wrap"><table className="inspection-summary-table">
+      </section>}
+      {summaryView === 'list' && <div className="inspection-summary-wrap"><table className="inspection-summary-table">
         <thead><tr><th>登録No.</th><th>仕入日</th><th>検査日</th><th>氏名</th><th>産地</th><th>市町村名</th><th>検査場所</th><th>委任状No.</th><th>銘柄</th><th>推フレ数</th><th>紙袋数</th><th>バラ数量</th><th>検査済み数量</th><th>未検査数量</th></tr></thead>
         <tbody>{filteredSummary.map((row) => <tr key={row.registrationId} tabIndex={0} onClick={() => { onSelectedRecordTargetChange(null); onSelectedRegistrationChange(row.registrationId); onSelectedAuthorizationChange(row.authorizationId) }} onKeyDown={(event) => { if (event.key === 'Enter') { onSelectedRecordTargetChange(null); onSelectedRegistrationChange(row.registrationId); onSelectedAuthorizationChange(row.authorizationId) } }}>
           <td>{row.registrationNo}</td><td>{row.purchaseDates}</td><td>{row.inspectionDates}</td><td><strong>{row.fullName}</strong></td><td>{row.origin}</td><td>{row.municipality}</td><td>{row.inspectionLocations}</td><td>{row.authorizationNo}</td><td>{row.brands}</td><td>{row.flexconCount}本</td><td>{row.paperBagCount}袋</td><td>{row.bulkQuantity.toLocaleString()}kg</td><td className="inspection-progress-inspected">{row.inspectedQuantity.toLocaleString()}kg</td><td className="inspection-progress-uninspected">{row.uninspectedQuantity.toLocaleString()}kg</td>
         </tr>)}
         {filteredSummary.length === 0 && <tr><td colSpan={14} className="empty-state">該当する検査記録はありません</td></tr>}</tbody>
-      </table></div>
+      </table></div>}
       {notice && <div className={`notice operation-log ${notice.type}`}>{notice.text}</div>}
     </div>
   }

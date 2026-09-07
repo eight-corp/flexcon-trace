@@ -249,6 +249,8 @@
 .inspection-record-tabs button { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 9px 16px; border: 0; border-bottom: 3px solid transparent; background: transparent; color: #667168; font-weight: 700; }
 .inspection-record-tabs button.active { border-bottom-color: var(--green); color: var(--green-dark); }
 .inspection-record-tabs button:hover { background: var(--green-soft); }
+.inspection-summary-tabs { margin-bottom: 14px; }
+.inspection-summary-aggregate { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 .inspection-workspace-content { flex: 1; min-height: 0; }
 .inspection-workspace-content > .inspection-page, .inspection-workspace-content > .producer-inspection-page, .inspection-workspace-content > .mixed-page, .inspection-workspace-content > .mixed-detail-page { height: 100%; }
 .inspection-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
