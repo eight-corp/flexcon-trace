@@ -30,51 +30,19 @@ alter table public.flexcon_inspection_flexcons
   add constraint flexcon_inspection_flexcons_record_kind_check
   check (record_kind in ('standard', 'bulk'));
 
-drop table if exists public.flexcon_number_changes_migration;
-create table public.flexcon_number_changes_migration (
-  flexcon_id uuid primary key,
-  old_lot_number text not null unique,
-  new_flexcon_no integer not null,
-  new_lot_number text not null unique
-);
-
-insert into public.flexcon_number_changes_migration (
-  flexcon_id,
-  old_lot_number,
-  new_flexcon_no,
-  new_lot_number
-)
-select
-  numbered.id,
-  numbered.lot_number,
-  numbered.new_flexcon_no,
-  case
-    when numbered.record_kind = 'bulk' then
-      '0000' || lpad(numbered.authorization_no, 4, '0') || lpad(numbered.new_flexcon_no::text, 3, '0')
-    else
-      lpad((numbered.fiscal_year + 2018)::text, 4, '0')
-        || lpad(numbered.authorization_no, 4, '0')
-        || lpad(numbered.new_flexcon_no::text, 3, '0')
-  end
-from (
-  select
-    flexcon.id,
-    flexcon.lot_number,
-    flexcon.record_kind,
-    flexcon.fiscal_year,
-    auth_record.authorization_no,
-    row_number() over (
-      partition by flexcon.authorization_id, flexcon.record_kind
-      order by flexcon.flexcon_no, flexcon.created_at, flexcon.id
-    )::integer as new_flexcon_no
-  from public.flexcon_inspection_flexcons as flexcon
-  join public.flexcon_authorizations as auth_record
-    on auth_record.id = flexcon.authorization_id
-) as numbered;
-
 do $$
 begin
-  if exists (select 1 from public.flexcon_number_changes_migration where new_flexcon_no > 999) then
+  if exists (
+    select 1
+    from (
+      select row_number() over (
+        partition by flexcon.authorization_id, flexcon.record_kind
+        order by flexcon.flexcon_no, flexcon.created_at, flexcon.id
+      ) as new_flexcon_no
+      from public.flexcon_inspection_flexcons as flexcon
+    ) as numbered
+    where numbered.new_flexcon_no > 999
+  ) then
     raise exception '推フレまたはバラが999件を超える生産者がいるため、別採番へ変更できません。';
   end if;
 end;
@@ -87,20 +55,99 @@ alter table public.flexcon_flexcons
 alter table public.flexcon_shipment_items
   drop constraint if exists flexcon_shipment_items_lot_number_key;
 
+with number_changes as (
+  select
+    numbered.lot_number as old_lot_number,
+    case
+      when numbered.record_kind = 'bulk' then
+        '0000' || lpad(numbered.authorization_no, 4, '0') || lpad(numbered.new_flexcon_no::text, 3, '0')
+      else
+        lpad((numbered.fiscal_year + 2018)::text, 4, '0')
+          || lpad(numbered.authorization_no, 4, '0')
+          || lpad(numbered.new_flexcon_no::text, 3, '0')
+    end as new_lot_number
+  from (
+    select
+      flexcon.lot_number,
+      flexcon.record_kind,
+      flexcon.fiscal_year,
+      auth_record.authorization_no,
+      row_number() over (
+        partition by flexcon.authorization_id, flexcon.record_kind
+        order by flexcon.flexcon_no, flexcon.created_at, flexcon.id
+      )::integer as new_flexcon_no
+    from public.flexcon_inspection_flexcons as flexcon
+    join public.flexcon_authorizations as auth_record
+      on auth_record.id = flexcon.authorization_id
+  ) as numbered
+)
 update public.flexcon_shipment_items as shipment_item
 set lot_number = number_change.new_lot_number
-from public.flexcon_number_changes_migration as number_change
+from number_changes as number_change
 where shipment_item.lot_number = number_change.old_lot_number;
 
+with number_changes as (
+  select
+    numbered.lot_number as old_lot_number,
+    case
+      when numbered.record_kind = 'bulk' then
+        '0000' || lpad(numbered.authorization_no, 4, '0') || lpad(numbered.new_flexcon_no::text, 3, '0')
+      else
+        lpad((numbered.fiscal_year + 2018)::text, 4, '0')
+          || lpad(numbered.authorization_no, 4, '0')
+          || lpad(numbered.new_flexcon_no::text, 3, '0')
+    end as new_lot_number
+  from (
+    select
+      flexcon.lot_number,
+      flexcon.record_kind,
+      flexcon.fiscal_year,
+      auth_record.authorization_no,
+      row_number() over (
+        partition by flexcon.authorization_id, flexcon.record_kind
+        order by flexcon.flexcon_no, flexcon.created_at, flexcon.id
+      )::integer as new_flexcon_no
+    from public.flexcon_inspection_flexcons as flexcon
+    join public.flexcon_authorizations as auth_record
+      on auth_record.id = flexcon.authorization_id
+  ) as numbered
+)
 update public.flexcon_flexcons as shipped_flexcon
 set lot_number = number_change.new_lot_number
-from public.flexcon_number_changes_migration as number_change
+from number_changes as number_change
 where shipped_flexcon.lot_number = number_change.old_lot_number;
 
+with number_changes as (
+  select
+    numbered.id as flexcon_id,
+    numbered.new_flexcon_no,
+    case
+      when numbered.record_kind = 'bulk' then
+        '0000' || lpad(numbered.authorization_no, 4, '0') || lpad(numbered.new_flexcon_no::text, 3, '0')
+      else
+        lpad((numbered.fiscal_year + 2018)::text, 4, '0')
+          || lpad(numbered.authorization_no, 4, '0')
+          || lpad(numbered.new_flexcon_no::text, 3, '0')
+    end as new_lot_number
+  from (
+    select
+      flexcon.id,
+      flexcon.record_kind,
+      flexcon.fiscal_year,
+      auth_record.authorization_no,
+      row_number() over (
+        partition by flexcon.authorization_id, flexcon.record_kind
+        order by flexcon.flexcon_no, flexcon.created_at, flexcon.id
+      )::integer as new_flexcon_no
+    from public.flexcon_inspection_flexcons as flexcon
+    join public.flexcon_authorizations as auth_record
+      on auth_record.id = flexcon.authorization_id
+  ) as numbered
+)
 update public.flexcon_inspection_flexcons as flexcon
 set flexcon_no = number_change.new_flexcon_no,
     lot_number = number_change.new_lot_number
-from public.flexcon_number_changes_migration as number_change
+from number_changes as number_change
 where flexcon.id = number_change.flexcon_id;
 
 alter table public.flexcon_inspection_flexcons
@@ -353,7 +400,5 @@ revoke all on function public.flexcon_save_inspection_flexcon(
 grant execute on function public.flexcon_save_inspection_flexcon(
   text, uuid, uuid, integer, date, date, text, text, integer, text, integer, text, text, numeric
 ) to anon, authenticated;
-
-drop table if exists public.flexcon_number_changes_migration;
 
 commit;
