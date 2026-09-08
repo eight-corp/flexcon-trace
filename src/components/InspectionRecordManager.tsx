@@ -489,6 +489,28 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
       return next
     })
   }
+
+  const deleteInspectionRegistration = async (row: InspectionRegistrationSummaryRow) => {
+    const details = [
+      `推フレ ${row.flexconCount}本`,
+      `紙袋 ${row.paperBagCount}袋`,
+      `バラ ${row.bulkQuantity.toLocaleString()}kg`,
+    ].join('、')
+    if (!window.confirm(`登録No. ${row.registrationNo}（${row.fullName}）を削除しますか？\n${details}\n\nこの操作は取り消せません。`)) return
+
+    setBusy(true)
+    setNotice(null)
+    const { error } = await supabase.rpc('flexcon_delete_inspection_registration', {
+      p_worker_id: workerId,
+      p_registration_id: row.registrationId,
+    })
+    setBusy(false)
+    if (error) return setNotice({ type: 'error', text: error.message })
+
+    setNotice({ type: 'success', text: `登録No. ${row.registrationNo}を削除しました。` })
+    setVersion((value) => value + 1)
+  }
+
   const inspectionProgressRows = useMemo(() => {
     const authorizationById = new Map(authorizations.map((authorization) => [authorization.id, authorization]))
     const grouped = new Map<string, InspectionProgressRow>()
@@ -1187,11 +1209,12 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
         </div>
       </section>}
       {summaryView === 'list' && <div className="inspection-summary-wrap"><table className="inspection-summary-table">
-        <thead><tr>{SUMMARY_COLUMNS.map((column) => <InspectionSummaryColumnHeader key={column.key} column={column} sort={summarySort} values={summaryFilterValues[column.key]} selectedValues={summaryColumnFilters[column.key]} onSort={changeSummarySort} onFilterChange={changeSummaryColumnFilter} />)}</tr></thead>
-        <tbody>{displayedSummary.map((row) => <tr key={row.registrationId} tabIndex={0} onClick={() => { onSelectedRecordTargetChange(null); onSelectedRegistrationChange(row.registrationId); onSelectedAuthorizationChange(row.authorizationId) }} onKeyDown={(event) => { if (event.key === 'Enter') { onSelectedRecordTargetChange(null); onSelectedRegistrationChange(row.registrationId); onSelectedAuthorizationChange(row.authorizationId) } }}>
+        <thead><tr>{SUMMARY_COLUMNS.map((column) => <InspectionSummaryColumnHeader key={column.key} column={column} sort={summarySort} values={summaryFilterValues[column.key]} selectedValues={summaryColumnFilters[column.key]} onSort={changeSummarySort} onFilterChange={changeSummaryColumnFilter} />)}{!readOnly && <th className="inspection-summary-actions-heading">操作</th>}</tr></thead>
+        <tbody>{displayedSummary.map((row) => <tr key={row.registrationId} tabIndex={0} onClick={() => { onSelectedRecordTargetChange(null); onSelectedRegistrationChange(row.registrationId); onSelectedAuthorizationChange(row.authorizationId) }} onKeyDown={(event) => { if (event.key === 'Enter' && event.target === event.currentTarget) { onSelectedRecordTargetChange(null); onSelectedRegistrationChange(row.registrationId); onSelectedAuthorizationChange(row.authorizationId) } }}>
           <td>{row.registrationNo}</td><td>{row.purchaseDates}</td><td>{row.inspectionDates}</td><td><strong>{row.fullName}</strong></td><td>{row.origin}</td><td>{row.municipality}</td><td>{row.inspectionLocations}</td><td>{row.authorizationNo}</td><td>{row.brands}</td><td>{row.flexconCount}本</td><td>{row.paperBagCount}袋</td><td>{row.bulkQuantity.toLocaleString()}kg</td><td className="inspection-progress-inspected">{row.inspectedQuantity.toLocaleString()}kg</td><td className="inspection-progress-uninspected">{row.uninspectedQuantity.toLocaleString()}kg</td>
+          {!readOnly && <td className="inspection-summary-actions"><button className="icon-button delete-icon" type="button" title="この登録行を削除" aria-label={`登録No. ${row.registrationNo}を削除`} disabled={busy} onClick={(event) => { event.stopPropagation(); void deleteInspectionRegistration(row) }}><Trash2 size={17} /></button></td>}
         </tr>)}
-        {displayedSummary.length === 0 && <tr><td colSpan={14} className="empty-state">該当する検査記録はありません</td></tr>}</tbody>
+        {displayedSummary.length === 0 && <tr><td colSpan={readOnly ? 14 : 15} className="empty-state">該当する検査記録はありません</td></tr>}</tbody>
       </table></div>}
       {notice && <div className={`notice operation-log ${notice.type}`}>{notice.text}</div>}
     </div>

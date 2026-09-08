@@ -329,7 +329,7 @@
 .inspection-weight-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)) auto; align-items: end; gap: 10px; }
 .inspection-weight-form label { margin: 0; }
 .inspection-summary-wrap { flex: 1; min-height: 0; max-width: 100%; overflow: auto; border: 1px solid var(--line); border-radius: 7px; background: #fff; }
-.inspection-summary-table { width: 100%; min-width: 1680px; border-collapse: separate; border-spacing: 0; font-size: 13px; }
+.inspection-summary-table { width: 100%; min-width: 1740px; border-collapse: separate; border-spacing: 0; font-size: 13px; }
 .inspection-summary-table th, .inspection-summary-table td { height: 44px; padding: 9px 11px; border-right: 1px solid #e5e8e5; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
 .inspection-summary-table thead { position: sticky; top: 0; z-index: 4; }
 .inspection-summary-table th { background: #eef2ee; box-shadow: 0 2px 0 #c8cec9; color: #3d4840; }
@@ -338,6 +338,9 @@
 .inspection-summary-table tbody tr { cursor: pointer; }
 .inspection-summary-table tbody tr:hover, .inspection-summary-table tbody tr:focus { background: var(--green-soft); outline: none; }
 .inspection-summary-table th:last-child, .inspection-summary-table td:last-child { border-right: 0; }
+.inspection-summary-table th.inspection-summary-actions-heading { min-width: 62px; padding: 8px; text-align: center; }
+.inspection-summary-actions { width: 62px; padding: 4px 8px !important; text-align: center !important; }
+.inspection-summary-actions .icon-button { width: 36px; height: 36px; margin: 0 auto; }
 .inspection-progress-section { flex: 0 0 auto; padding: 13px 14px; }
 .inspection-progress-section .section-title { margin-bottom: 10px; }
 .inspection-progress-section .section-title > div:first-child { display: flex; align-items: baseline; gap: 9px; }
