@@ -881,6 +881,7 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
   }
   const openCertificateDialog = (kind: CertificateKind) => {
     const candidates = certificateFlexconsFor(kind)
+    const registeredCount = kind === 'bulk' ? selectedBulkFlexcons.length : selectedStandardFlexcons.length
     if (candidates.length === 0) return
     if (generatedCertificate) URL.revokeObjectURL(generatedCertificate.url)
     setGeneratedCertificate(null)
@@ -888,7 +889,7 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
     setCertificateKind(kind)
     setCertificateRange({
       start: String(candidates[0].flexcon_no),
-      count: String(candidates.length),
+      count: String(registeredCount),
     })
     setCertificateDialogOpen(true)
   }
