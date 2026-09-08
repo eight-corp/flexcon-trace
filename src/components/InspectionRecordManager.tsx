@@ -45,6 +45,7 @@ type BatchInspectionMetadata = {
   inspection_date: string
   inspector_name: string
   inspection_location: string
+  grade: string
 }
 type GeneratedCertificate = {
   url: string
@@ -313,7 +314,7 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
   const [addGroupFormOpen, setAddGroupFormOpen] = useState(false)
   const [producerPickerOpen, setProducerPickerOpen] = useState(false)
   const [detailDrafts, setDetailDrafts] = useState<Record<string, InlineDetailDraft>>({})
-  const [batchMetadataDraft, setBatchMetadataDraft] = useState<BatchInspectionMetadata>({ registration_id: null, inspection_date: '', inspector_name: '', inspection_location: '' })
+  const [batchMetadataDraft, setBatchMetadataDraft] = useState<BatchInspectionMetadata>({ registration_id: null, inspection_date: '', inspector_name: '', inspection_location: '', grade: '' })
   const [batchMetadataBusy, setBatchMetadataBusy] = useState(false)
   const [splitPaper, setSplitPaper] = useState<PaperBagInspection | null>(null)
   const [splitCounts, setSplitCounts] = useState({ first: '', second: '' })
@@ -425,6 +426,7 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
     inspection_date: commonRegistrationValue(selectedRegistrationRecords.map((item) => item.inspection_date)),
     inspector_name: commonRegistrationValue(selectedRegistrationRecords.map((item) => item.inspector_name)),
     inspection_location: commonRegistrationValue(selectedRegistrationRecords.map((item) => item.inspection_location)),
+    grade: commonRegistrationValue(selectedRegistrationRecords.map((item) => item.grade)),
   }
   const changeBatchMetadata = (values: Partial<BatchInspectionMetadata>) => {
     setBatchMetadataDraft({ ...batchMetadata, registration_id: selectedRegistrationId, ...values })
@@ -657,6 +659,7 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
   const locationOptions = inspectionOptions.filter((item) => item.option_type === 'location')
   const inspectorOptions = inspectionOptions.filter((item) => item.option_type === 'inspector')
   const gradeOptions = inspectionOptions.filter((item) => item.option_type === 'grade')
+  const batchGradeOptions = gradeOptions.filter((option) => selectedRegistrationRecords.every((item) => isGradeAllowedForBrand(item.brand ?? '', option.name)))
   const reasonOptions = inspectionOptions.filter((item) => item.option_type === 'grade_reason')
   const selectedBrandType = brandTypeForPrefecture(selectedAuthorization?.prefecture ?? null)
   const brandOptions = inspectionOptions.filter((item) => item.option_type === selectedBrandType || item.option_type === 'brand')
@@ -719,6 +722,8 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
     if (!batchMetadata.inspection_date) return setNotice({ type: 'error', text: '一括設定する検査日を入力してください。' })
     if (!batchMetadata.inspector_name) return setNotice({ type: 'error', text: '一括設定する検査員を選択してください。' })
     if (!batchMetadata.inspection_location) return setNotice({ type: 'error', text: '一括設定する検査場所を選択してください。' })
+    if (!batchMetadata.grade) return setNotice({ type: 'error', text: '一括設定する等級を選択してください。' })
+    if (!selectedRegistrationRecords.every((item) => isGradeAllowedForBrand(item.brand ?? '', batchMetadata.grade))) return setNotice({ type: 'error', text: '対象の銘柄に設定できない等級が選択されています。' })
 
     setBatchMetadataBusy(true)
     setNotice(null)
@@ -728,12 +733,13 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
       p_inspection_date: batchMetadata.inspection_date,
       p_inspector_name: batchMetadata.inspector_name,
       p_inspection_location: batchMetadata.inspection_location,
+      p_grade: batchMetadata.grade,
     })
     setBatchMetadataBusy(false)
     if (error) return setNotice({ type: 'error', text: error.message })
 
     setDetailDrafts({})
-    setNotice({ type: 'success', text: `登録No. ${selectedRegistration.registration_no}の検査日・検査員・検査場所を一括設定しました。` })
+    setNotice({ type: 'success', text: `登録No. ${selectedRegistration.registration_no}の検査日・検査員・検査場所・等級を一括設定しました。` })
     setVersion((value) => value + 1)
   }
 
@@ -1319,6 +1325,7 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
         <label>検査日<input className={!batchMetadata.inspection_date ? 'inspection-missing' : ''} type="date" value={batchMetadata.inspection_date} disabled={batchMetadataBusy} onChange={(event) => changeBatchMetadata({ inspection_date: event.target.value })} required /></label>
         <label>検査員<select className={!batchMetadata.inspector_name ? 'inspection-missing' : ''} value={batchMetadata.inspector_name} disabled={batchMetadataBusy} onChange={(event) => changeBatchMetadata({ inspector_name: event.target.value })} required><option value="">未選択</option>{inspectorOptions.map((option) => <option key={option.id} value={option.name}>{option.name}</option>)}</select></label>
         <label>検査場所<select className={!batchMetadata.inspection_location ? 'inspection-missing' : ''} value={batchMetadata.inspection_location} disabled={batchMetadataBusy} onChange={(event) => changeBatchMetadata({ inspection_location: event.target.value })} required><option value="">未選択</option>{locationOptions.map((option) => <option key={option.id} value={option.name}>{option.name}</option>)}</select></label>
+        <label>等級<select className={!batchMetadata.grade ? 'inspection-missing' : ''} value={batchMetadata.grade} disabled={batchMetadataBusy} onChange={(event) => changeBatchMetadata({ grade: event.target.value })} required><option value="">未選択</option>{batchGradeOptions.map((option) => <option key={option.id} value={option.name}>{option.name}</option>)}</select></label>
         <button className="primary-button" type="submit" disabled={batchMetadataBusy}><Save size={18} />{batchMetadataBusy ? '設定中...' : 'まとめて反映'}</button>
       </form>
     </section>}
