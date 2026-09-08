@@ -380,6 +380,7 @@
 .inspection-summary-column-inspectedQuantity .shipment-column-sort,
 .inspection-summary-column-uninspectedQuantity .shipment-column-sort { justify-content: flex-end; text-align: right; }
 .inspection-summary-table tbody tr { cursor: pointer; }
+.inspection-summary-table tbody tr.inspection-summary-registration-start td { border-top: 3px solid #87948b; }
 .inspection-summary-table tbody tr:hover, .inspection-summary-table tbody tr:focus { background: var(--green-soft); outline: none; }
 .inspection-summary-table th:last-child, .inspection-summary-table td:last-child { border-right: 0; }
 .inspection-summary-table th.inspection-summary-actions-heading { min-width: 54px; padding: 5px; text-align: center; }
@@ -396,12 +397,13 @@
 .inspection-progress-totals span:first-child strong, .inspection-progress-inspected { color: var(--green-dark); }
 .inspection-progress-totals span:last-child strong, .inspection-progress-uninspected { color: #a44134; }
 .inspection-progress-table-wrap { max-height: 220px; overflow: auto; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
-.inspection-progress-table { width: 100%; min-width: 620px; border-collapse: separate; border-spacing: 0; font-size: 13px; }
+.inspection-progress-table { width: 100%; min-width: 820px; border-collapse: separate; border-spacing: 0; font-size: 13px; }
 .inspection-progress-table th, .inspection-progress-table td { height: 34px; padding: 4px 8px; border-right: 1px solid #e5e8e5; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
 .inspection-progress-table thead { position: sticky; top: 0; z-index: 3; }
 .inspection-progress-table th { background: #eef2ee; box-shadow: 0 2px 0 #c8cec9; color: #3d4840; }
-.inspection-progress-table th:nth-child(4), .inspection-progress-table th:nth-child(5), .inspection-progress-table td:nth-child(4), .inspection-progress-table td:nth-child(5) { text-align: right; }
-.inspection-progress-table td:nth-child(4), .inspection-progress-table td:nth-child(5) { font-weight: 700; }
+.inspection-progress-table .numeric-cell { text-align: right; }
+.inspection-progress-table td.inspection-progress-inspected, .inspection-progress-table td.inspection-progress-uninspected { font-weight: 700; }
+.inspection-progress-grade { color: #405148; }
 .inspection-progress-table th:last-child, .inspection-progress-table td:last-child { border-right: 0; }
 .inspection-progress-table tbody tr:last-child td { border-bottom: 0; }
 .inspection-record-detail-lists { display: grid; grid-template-columns: 1fr; align-items: start; gap: 8px; margin-top: 10px; }

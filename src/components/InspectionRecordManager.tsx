@@ -57,6 +57,7 @@ type InspectionProgressRow = {
   fiscalYear: number
   origin: string
   brand: string
+  inspectedByGrade: Record<string, number>
   inspectedQuantity: number
   uninspectedQuantity: number
 }
@@ -545,11 +546,14 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
         fiscalYear: item.fiscal_year,
         origin,
         brand,
+        inspectedByGrade: {},
         inspectedQuantity: 0,
         uninspectedQuantity: 0,
       }
       if (isInspectionResultComplete(item)) {
+        const grade = item.grade?.trim()
         row.inspectedQuantity += quantity
+        if (grade) row.inspectedByGrade[grade] = (row.inspectedByGrade[grade] ?? 0) + quantity
       } else {
         row.uninspectedQuantity += quantity
       }
@@ -563,6 +567,17 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
       || left.brand.localeCompare(right.brand, 'ja', { numeric: true })
     ))
   }, [authorizations, flexcons, paperBags])
+  const inspectionAggregateGrades = useMemo(() => {
+    const masterGrades = inspectionOptions
+      .filter((item) => item.option_type === 'grade')
+      .map((item) => item.name.trim())
+      .filter(Boolean)
+    const usedGrades = [...flexcons, ...paperBags]
+      .filter(isInspectionResultComplete)
+      .map((item) => item.grade?.trim() ?? '')
+      .filter(Boolean)
+    return [...new Set([...masterGrades, ...usedGrades])]
+  }, [flexcons, inspectionOptions, paperBags])
   const inspectionProgressTotals = useMemo(() => inspectionProgressRows.reduce((totals, row) => ({
     inspected: totals.inspected + row.inspectedQuantity,
     uninspected: totals.uninspected + row.uninspectedQuantity,
@@ -1219,11 +1234,11 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
           <div className="inspection-progress-totals"><span>検査済み <strong>{inspectionProgressTotals.inspected.toLocaleString()}kg</strong></span><span>未検査 <strong>{inspectionProgressTotals.uninspected.toLocaleString()}kg</strong></span></div>
         </div>
         <div className="inspection-progress-table-wrap"><table className="inspection-progress-table">
-          <thead><tr><th>産年</th><th>産地</th><th>銘柄</th><th>検査済み数量</th><th>未検査数量</th></tr></thead>
+          <thead><tr><th>産年</th><th>産地</th><th>銘柄</th>{inspectionAggregateGrades.map((grade) => <th className="numeric-cell" key={grade}>{grade}</th>)}<th className="numeric-cell">検査済み合計</th><th className="numeric-cell">未検査数量</th></tr></thead>
           <tbody>{inspectionProgressRows.map((row) => <tr key={`${row.fiscalYear}-${row.origin}-${row.brand}`}>
-            <td>{displayCropYear(row.fiscalYear)}</td><td>{row.origin}</td><td>{row.brand}</td><td className="inspection-progress-inspected">{row.inspectedQuantity.toLocaleString()}kg</td><td className="inspection-progress-uninspected">{row.uninspectedQuantity.toLocaleString()}kg</td>
+            <td>{displayCropYear(row.fiscalYear)}</td><td>{row.origin}</td><td>{row.brand}</td>{inspectionAggregateGrades.map((grade) => <td className="inspection-progress-grade numeric-cell" key={grade}>{row.inspectedByGrade[grade] ? `${row.inspectedByGrade[grade].toLocaleString()}kg` : ''}</td>)}<td className="inspection-progress-inspected numeric-cell">{row.inspectedQuantity.toLocaleString()}kg</td><td className="inspection-progress-uninspected numeric-cell">{row.uninspectedQuantity.toLocaleString()}kg</td>
           </tr>)}
-          {inspectionProgressRows.length === 0 && <tr><td colSpan={5} className="empty-state">検査記録は登録されていません</td></tr>}</tbody>
+          {inspectionProgressRows.length === 0 && <tr><td colSpan={inspectionAggregateGrades.length + 5} className="empty-state">検査記録は登録されていません</td></tr>}</tbody>
         </table></div>
         <div className="inspection-record-detail-lists">
           {renderInspectionDetailList('検査済み詳細一覧', inspectedDetailRows, 'inspected')}
@@ -1232,7 +1247,7 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
       </section>}
       {summaryView === 'list' && <div className="inspection-summary-wrap"><table className="inspection-summary-table">
         <thead><tr>{SUMMARY_COLUMNS.map((column) => <InspectionSummaryColumnHeader key={column.key} column={column} sort={summarySort} values={summaryFilterValues[column.key]} selectedValues={summaryColumnFilters[column.key]} onSort={changeSummarySort} onFilterChange={changeSummaryColumnFilter} />)}{!readOnly && <th className="inspection-summary-actions-heading">操作</th>}</tr></thead>
-        <tbody>{displayedSummary.map((row) => <tr key={`${row.registrationId}-${row.grade}`} tabIndex={0} onClick={() => { onSelectedRecordTargetChange(null); onSelectedRegistrationChange(row.registrationId); onSelectedAuthorizationChange(row.authorizationId) }} onKeyDown={(event) => { if (event.key === 'Enter' && event.target === event.currentTarget) { onSelectedRecordTargetChange(null); onSelectedRegistrationChange(row.registrationId); onSelectedAuthorizationChange(row.authorizationId) } }}>
+        <tbody>{displayedSummary.map((row, index) => <tr className={index > 0 && displayedSummary[index - 1].registrationId !== row.registrationId ? 'inspection-summary-registration-start' : undefined} key={`${row.registrationId}-${row.grade}`} tabIndex={0} onClick={() => { onSelectedRecordTargetChange(null); onSelectedRegistrationChange(row.registrationId); onSelectedAuthorizationChange(row.authorizationId) }} onKeyDown={(event) => { if (event.key === 'Enter' && event.target === event.currentTarget) { onSelectedRecordTargetChange(null); onSelectedRegistrationChange(row.registrationId); onSelectedAuthorizationChange(row.authorizationId) } }}>
           <td className="numeric-cell">{row.registrationNo}</td><td>{row.purchaseDates}</td><td>{row.inspectionDates}</td><td><strong>{row.fullName}</strong></td><td>{row.origin}</td><td>{row.municipality}</td><td>{row.inspectionLocations}</td><td className="numeric-cell">{row.authorizationNo}</td><td>{row.brands}</td><td>{row.grade}</td><td className="numeric-cell">{row.flexconCount}本</td><td className="numeric-cell">{row.paperBagCount}袋</td><td className="numeric-cell">{row.bulkQuantity.toLocaleString()}kg</td><td className="inspection-progress-inspected numeric-cell">{row.inspectedQuantity.toLocaleString()}kg</td><td className="inspection-progress-uninspected numeric-cell">{row.uninspectedQuantity.toLocaleString()}kg</td>
           {!readOnly && <td className="inspection-summary-actions"><button className="icon-button delete-icon" type="button" title="この登録行を削除" aria-label={`登録No. ${row.registrationNo}を削除`} disabled={busy} onClick={(event) => { event.stopPropagation(); void deleteInspectionRegistration(row) }}><Trash2 size={17} /></button></td>}
         </tr>)}
