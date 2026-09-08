@@ -1083,6 +1083,7 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
       </div>}
     </div>
     {renderFlexconSection('推フレ', selectedStandardFlexcons, 'standard')}
+    {renderFlexconSection('バラ', selectedBulkFlexcons, 'bulk')}
     <section className="section-band inspection-detail-section">
       <div className="section-title"><div><h2>紙袋</h2><span>{selectedPaperBags.length}件</span></div></div>
       <div className="inspection-detail-table-wrap"><table className="inspection-detail-table paper-detail-table">
@@ -1091,7 +1092,6 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
         {selectedPaperBags.length === 0 && <tr><td colSpan={readOnly ? 12 : 13} className="empty-state">紙袋は登録されていません</td></tr>}</tbody>
       </table></div>
     </section>
-    {renderFlexconSection('バラ', selectedBulkFlexcons, 'bulk')}
     {!readOnly && certificateDialogOpen && <div className="modal-backdrop"><section className="registration-modal certificate-modal" role="dialog" aria-modal="true" aria-labelledby="certificate-dialog-title">
       <div className="modal-header"><div><h2 id="certificate-dialog-title">検査証明書作成</h2><p>{certificateKind === 'bulk' ? 'バラ' : '推フレ'}　{selectedAuthorization.full_name}　委任状№ {selectedAuthorization.authorization_no}</p></div><button className="icon-button" type="button" title="閉じる" aria-label="閉じる" onClick={closeCertificateDialog} disabled={certificateBusy}><X size={20} /></button></div>
       {!generatedCertificate ? <form className="certificate-range-form" onSubmit={(event) => void createCertificatePdf(event)}>
