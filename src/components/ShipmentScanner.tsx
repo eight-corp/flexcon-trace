@@ -31,6 +31,7 @@ type ManualShipmentKind = 'paper_bag' | 'other_rice'
 type InspectionLotDetails = {
   origin: string
   brand: string
+  grade: string
 }
 
 function currentLocalDateTime() {
@@ -140,7 +141,7 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
       supabase.from('flexcon_transport_profiles').select('*').eq('active', true).order('company_name'),
       supabase.from('flexcon_authorizations').select('id, authorization_no, full_name, prefecture'),
       supabase.from('flexcon_inspection_flexcons').select('*'),
-      supabase.from('flexcon_mixed_flexcons').select('mixed_no, lot_number, origin_prefecture, brand, flexcon_mixed_flexcon_members(sort_order, flexcon_authorizations(full_name))'),
+      supabase.from('flexcon_mixed_flexcons').select('mixed_no, lot_number, origin_prefecture, brand, grade, flexcon_mixed_flexcon_members(sort_order, flexcon_authorizations(full_name))'),
       supabase.from('flexcon_inspection_options').select('*').in('option_type', ['shipment_product', 'brand_aomori', 'brand_iwate', 'grade', 'grade_reason']).eq('active', true).order('sort_order').order('name'),
     ]).then(([destinationResult, transportResult, authorizationResult, flexconResult, mixedResult, productResult]) => {
       if (destinationResult.error) setNotice({ type: 'error', text: '納品先を取得できません。SupabaseのSQL設定を確認してください。' })
@@ -169,6 +170,7 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
           const detail = {
             origin: origin || '産地未登録',
             brand: String(flexcon.brand ?? '').trim() || '銘柄未登録',
+            grade: String(flexcon.grade ?? '').trim(),
           }
           details[flexcon.lot_number] = detail
           if (/^\d{11}$/.test(flexcon.lot_number)) {
@@ -192,6 +194,7 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
             details[mixed.lot_number] = {
               origin: formatPrefectureName(mixed.origin_prefecture) || '産地未登録',
               brand: String(mixed.brand ?? '').trim() || '銘柄未登録',
+              grade: String(mixed.grade ?? '').trim(),
             }
           }
           setLotProducerNames(mixedNames)
@@ -267,6 +270,18 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
       return
     }
 
+    const inspectionDetail = inspectionLotDetails[value]
+    if (!inspectionDetail) {
+      setNotice({ type: 'warning', text: `${value} の検査記録を確認できません。一覧には追加しませんでした。` })
+      navigator.vibrate?.([220, 100, 220])
+      return
+    }
+    if (!inspectionDetail.grade) {
+      setNotice({ type: 'warning', text: `${value} は検査記録の等級が未入力です。一覧には追加しませんでした。` })
+      navigator.vibrate?.([220, 100, 220])
+      return
+    }
+
     setLots((current) => {
       if (current.length >= plannedCount) return current
       if (current.includes(value)) {
@@ -290,7 +305,7 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
       }
       return next
     })
-  }, [plannedCount])
+  }, [inspectionLotDetails, plannedCount])
 
   const addManual = () => {
     addLot(manualLot)
