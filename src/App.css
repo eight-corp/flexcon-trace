@@ -451,6 +451,15 @@
 .producer-inspection-heading h1 { margin: 0; }
 .producer-inspection-heading p { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
 .producer-inspection-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; justify-self: end; gap: 8px; }
+.inspection-batch-metadata { padding: 10px 12px; border-color: #9dbca7; background: #f6fbf7; }
+.inspection-batch-metadata .section-title { margin-bottom: 8px; }
+.inspection-batch-metadata .section-title > div { display: flex; align-items: baseline; gap: 9px; }
+.inspection-batch-metadata .section-title h2 { margin: 0; font-size: 17px; }
+.inspection-batch-metadata .section-title span { color: var(--muted); font-size: 12px; }
+.inspection-batch-metadata-form { display: grid; grid-template-columns: 150px minmax(150px, 1fr) minmax(170px, 1fr) auto; align-items: end; gap: 8px; }
+.inspection-batch-metadata-form label { min-width: 0; margin: 0; font-size: 12px; }
+.inspection-batch-metadata-form input, .inspection-batch-metadata-form select { width: 100%; min-width: 0; height: 34px; min-height: 34px; }
+.inspection-batch-metadata-form .primary-button { height: 34px; min-height: 34px; white-space: nowrap; }
 .inspection-group-add { display: grid; grid-template-columns: 82px minmax(135px, .8fr) minmax(135px, .8fr) minmax(145px, .9fr) minmax(110px, .7fr) minmax(170px, 1.2fr) 104px 104px 110px auto; align-items: end; gap: 10px; border-color: #9dbca7; background: #f6fbf7; }
 .inspection-summary-add { position: relative; z-index: 5; overflow: visible; grid-template-columns: minmax(190px, 1.3fr) 82px minmax(135px, .85fr) minmax(135px, .85fr) minmax(145px, .9fr) minmax(105px, .65fr) minmax(165px, 1.1fr) 96px 96px 105px auto; margin-bottom: 14px; }
 .inspection-group-add label { min-width: 0; margin: 0; }
@@ -667,6 +676,9 @@ table thead th { text-align: center !important; }
   .producer-inspection-heading { grid-template-columns: 42px minmax(0, 1fr); }
   .producer-inspection-actions { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr; width: 100%; justify-self: stretch; }
   .producer-inspection-actions > button { width: 100%; }
+  .inspection-batch-metadata .section-title > div { align-items: flex-start; flex-direction: column; gap: 2px; }
+  .inspection-batch-metadata-form { grid-template-columns: 1fr; }
+  .inspection-batch-metadata-form .primary-button { width: 100%; }
   .inspection-group-add { grid-template-columns: 1fr; }
   .inspection-detail-section .section-title { align-items: stretch; flex-direction: column; }
   .inspection-detail-section .section-title .button-row > * { flex: 1; }
