@@ -512,20 +512,23 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
 
         {lots.length === 0 ? <div className="empty-state">まだ読み取られていません</div> : (
           <ul className="scan-list">
-            {lots.map((lot, index) => (
+            {lots.map((lot) => (
               <li key={lot}>
-                <span className="sequence">№{index + 1}</span>
+                <span className="sequence" title="№">№{Number(lot.slice(-3))}</span>
                 <span className={`lot-producer-name ${lotProducerNames[lot] || authorizationNames[authorizationNoFromLot(lot)] ? '' : 'unknown'}`} title="名前">
                   {lotProducerNames[lot] ?? authorizationNames[authorizationNoFromLot(lot)] ?? '委任状未登録'}
                 </span>
+                <span className="lot-number" title="ロット№">{lot}</span>
                 <span className={`lot-origin ${inspectionLotDetails[lot] ? '' : 'unknown'}`} title="産地">
                   {inspectionLotDetails[lot]?.origin ?? '検査記録未登録'}
                 </span>
                 <span className={`lot-brand ${inspectionLotDetails[lot] ? '' : 'unknown'}`} title="銘柄">
                   {inspectionLotDetails[lot]?.brand ?? '検査記録未登録'}
                 </span>
-                <span className="lot-number" title="ロットナンバー">{lot}</span>
-                <button className="icon-button scan-cancel-button" type="button" title="読み取りを取り消す" aria-label={`№${index + 1}、ロットナンバー${lot}の読み取りを取り消す`} onClick={() => setLots((current) => current.filter((item) => item !== lot))}><X size={18} /></button>
+                <span className={`lot-grade ${inspectionLotDetails[lot]?.grade ? '' : 'unknown'}`} title="等級">
+                  {inspectionLotDetails[lot]?.grade || '等級未入力'}
+                </span>
+                <button className="icon-button scan-cancel-button" type="button" title="読み取りを取り消す" aria-label={`№${Number(lot.slice(-3))}、ロット№${lot}の読み取りを取り消す`} onClick={() => setLots((current) => current.filter((item) => item !== lot))}><X size={18} /></button>
               </li>
             ))}
           </ul>
