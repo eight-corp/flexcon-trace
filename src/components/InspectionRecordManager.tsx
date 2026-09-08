@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, BarChart3, ChevronDown, CircleAlert, ClipboardList, ExternalLink, FileText, List, Plus, Printer, Search, TableRowsSplit, Trash2, X } from 'lucide-react'
+import { ArrowDown, ArrowLeft, ArrowUp, BarChart3, ChevronDown, CircleAlert, ClipboardList, ExternalLink, FileText, Filter, List, Plus, Printer, Search, TableRowsSplit, Trash2, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { formatPrefectureName } from '../lib/prefecture'
 import type { AuthorizationRecord, FlexconInspection, InspectionOption, InspectionRegistration, InspectionWeight, PaperBagInspection } from '../types'
@@ -98,6 +98,25 @@ type InspectionRegistrationSummaryRow = {
   inspectedQuantity: number
   uninspectedQuantity: number
 }
+type SummarySortDirection = 'asc' | 'desc'
+type SummaryColumn = 'registrationNo' | 'purchaseDates' | 'inspectionDates' | 'fullName' | 'origin' | 'municipality' | 'inspectionLocations' | 'authorizationNo' | 'brands' | 'flexconCount' | 'paperBagCount' | 'bulkQuantity' | 'inspectedQuantity' | 'uninspectedQuantity'
+
+const SUMMARY_COLUMNS: Array<{ key: SummaryColumn; label: string }> = [
+  { key: 'registrationNo', label: '登録No.' },
+  { key: 'purchaseDates', label: '仕入日' },
+  { key: 'inspectionDates', label: '検査日' },
+  { key: 'fullName', label: '氏名' },
+  { key: 'origin', label: '産地' },
+  { key: 'municipality', label: '市町村名' },
+  { key: 'inspectionLocations', label: '検査場所' },
+  { key: 'authorizationNo', label: '委任状No.' },
+  { key: 'brands', label: '銘柄' },
+  { key: 'flexconCount', label: '推フレ数' },
+  { key: 'paperBagCount', label: '紙袋数' },
+  { key: 'bulkQuantity', label: 'バラ数量' },
+  { key: 'inspectedQuantity', label: '検査済み数量' },
+  { key: 'uninspectedQuantity', label: '未検査数量' },
+]
 
 const DEFAULT_BRANDED_RICE_WEIGHT = 1020
 const DEFAULT_FEED_RICE_WEIGHT = 1000
@@ -202,6 +221,72 @@ function displayDate(value: string | null | undefined) { return value ? value.re
 function joinDistinct(values: Array<string | null | undefined>, formatter: (value: string) => string = (value) => value) {
   return [...new Set(values.map((value) => value?.trim()).filter((value): value is string => Boolean(value)).map(formatter))].join('、')
 }
+function summaryDisplayValue(row: InspectionRegistrationSummaryRow, key: SummaryColumn) {
+  if (key === 'flexconCount') return `${row.flexconCount}本`
+  if (key === 'paperBagCount') return `${row.paperBagCount}袋`
+  if (key === 'bulkQuantity' || key === 'inspectedQuantity' || key === 'uninspectedQuantity') return `${row[key].toLocaleString()}kg`
+  return String(row[key] ?? '')
+}
+function summarySortValue(row: InspectionRegistrationSummaryRow, key: SummaryColumn) {
+  if (key === 'registrationNo' || key === 'flexconCount' || key === 'paperBagCount' || key === 'bulkQuantity' || key === 'inspectedQuantity' || key === 'uninspectedQuantity') return row[key]
+  return String(row[key] ?? '')
+}
+function InspectionSummaryColumnHeader({
+  column,
+  sort,
+  values,
+  selectedValues,
+  onSort,
+  onFilterChange,
+}: {
+  column: { key: SummaryColumn; label: string }
+  sort: { key: SummaryColumn; direction: SummarySortDirection } | null
+  values: string[]
+  selectedValues: string[] | undefined
+  onSort: (key: SummaryColumn) => void
+  onFilterChange: (key: SummaryColumn, values: string[] | undefined) => void
+}) {
+  const allSelected = selectedValues === undefined || selectedValues.length === values.length
+  const filterRef = useRef<HTMLDetailsElement>(null)
+
+  useEffect(() => {
+    const closeOnOutsideClick = (event: PointerEvent) => {
+      const filter = filterRef.current
+      if (filter?.open && event.target instanceof Node && !filter.contains(event.target)) filter.open = false
+    }
+    document.addEventListener('pointerdown', closeOnOutsideClick)
+    return () => document.removeEventListener('pointerdown', closeOnOutsideClick)
+  }, [])
+
+  return <th className="inspection-summary-column-heading">
+    <div className="shipment-column-heading">
+      <button type="button" className="shipment-column-sort" onClick={() => onSort(column.key)}>
+        <span>{column.label}</span>
+        {sort?.key === column.key && (sort.direction === 'asc' ? <ArrowUp size={14} /> : <ArrowDown size={14} />)}
+      </button>
+      <details ref={filterRef} className={`shipment-column-filter ${column.key === 'registrationNo' ? 'open-right' : ''} ${selectedValues === undefined ? '' : 'active'}`}>
+        <summary title={`${column.label}を絞り込む`} aria-label={`${column.label}を絞り込む`}><Filter size={14} /></summary>
+        <div className="shipment-filter-menu">
+          <strong>{column.label}</strong>
+          <label><input type="checkbox" checked={allSelected} onChange={() => onFilterChange(column.key, allSelected ? [] : undefined)} />すべて</label>
+          <div className="shipment-filter-values">
+            {values.map((value) => {
+              const checked = selectedValues === undefined || selectedValues.includes(value)
+              return <label key={value}>
+                <input type="checkbox" checked={checked} onChange={() => {
+                  const current = selectedValues ?? values
+                  const next = checked ? current.filter((item) => item !== value) : [...current, value]
+                  onFilterChange(column.key, next.length === values.length ? undefined : next)
+                }} />
+                {value || '（空白）'}
+              </label>
+            })}
+          </div>
+        </div>
+      </details>
+    </div>
+  </th>
+}
 function displayCropYear(value: number) { return value >= 2000 ? `${value}年産` : `令和${value}年産` }
 function brandTypeForPrefecture(prefecture: string | null): 'brand_aomori' | 'brand_iwate' | null {
   const normalized = (prefecture ?? '').trim().replace(/県$/, '')
@@ -223,6 +308,8 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
   const [splitCounts, setSplitCounts] = useState({ first: '', second: '' })
   const [summaryView, setSummaryView] = useState<'list' | 'aggregate'>('list')
   const [search, setSearch] = useState('')
+  const [summarySort, setSummarySort] = useState<{ key: SummaryColumn; direction: SummarySortDirection } | null>(null)
+  const [summaryColumnFilters, setSummaryColumnFilters] = useState<Partial<Record<SummaryColumn, string[]>>>({})
   const [notice, setNotice] = useState<Notice>(null)
   const [version, setVersion] = useState(0)
   const [busy, setBusy] = useState(false)
@@ -363,11 +450,44 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
     }).filter((row): row is InspectionRegistrationSummaryRow => row !== null)
       .sort((left, right) => left.registrationNo - right.registrationNo)
   }, [authorizations, flexcons, paperBags, registrations, weights])
-  const filteredSummary = useMemo(() => {
+  const summaryFilterValues = useMemo(() => Object.fromEntries(SUMMARY_COLUMNS.map((column) => [
+    column.key,
+    Array.from(new Set(summaryRows.map((row) => summaryDisplayValue(row, column.key)))).sort((left, right) => left.localeCompare(right, 'ja', { numeric: true })),
+  ])) as Record<SummaryColumn, string[]>, [summaryRows])
+  const displayedSummary = useMemo(() => {
     const term = search.trim().toLowerCase()
-    if (!term) return summaryRows
-    return summaryRows.filter((row) => Object.values(row).some((value) => String(value ?? '').toLowerCase().includes(term)))
-  }, [search, summaryRows])
+    const rows = summaryRows.filter((row) => {
+      if (term && !SUMMARY_COLUMNS.some((column) => summaryDisplayValue(row, column.key).toLowerCase().includes(term))) return false
+      return SUMMARY_COLUMNS.every((column) => {
+        const selected = summaryColumnFilters[column.key]
+        return selected === undefined || selected.includes(summaryDisplayValue(row, column.key))
+      })
+    })
+    if (!summarySort) return rows
+    return rows.sort((left, right) => {
+      const leftValue = summarySortValue(left, summarySort.key)
+      const rightValue = summarySortValue(right, summarySort.key)
+      const comparison = typeof leftValue === 'number' && typeof rightValue === 'number'
+        ? leftValue - rightValue
+        : String(leftValue).localeCompare(String(rightValue), 'ja', { numeric: true })
+      return summarySort.direction === 'asc' ? comparison : -comparison
+    })
+  }, [search, summaryColumnFilters, summaryRows, summarySort])
+  const changeSummarySort = (key: SummaryColumn) => {
+    setSummarySort((current) => {
+      if (!current || current.key !== key) return { key, direction: 'asc' }
+      if (current.direction === 'asc') return { key, direction: 'desc' }
+      return null
+    })
+  }
+  const changeSummaryColumnFilter = (key: SummaryColumn, values: string[] | undefined) => {
+    setSummaryColumnFilters((current) => {
+      const next = { ...current }
+      if (values === undefined) delete next[key]
+      else next[key] = values
+      return next
+    })
+  }
   const inspectionProgressRows = useMemo(() => {
     const authorizationById = new Map(authorizations.map((authorization) => [authorization.id, authorization]))
     const grouped = new Map<string, InspectionProgressRow>()
@@ -1063,11 +1183,11 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
         </div>
       </section>}
       {summaryView === 'list' && <div className="inspection-summary-wrap"><table className="inspection-summary-table">
-        <thead><tr><th>登録No.</th><th>仕入日</th><th>検査日</th><th>氏名</th><th>産地</th><th>市町村名</th><th>検査場所</th><th>委任状No.</th><th>銘柄</th><th>推フレ数</th><th>紙袋数</th><th>バラ数量</th><th>検査済み数量</th><th>未検査数量</th></tr></thead>
-        <tbody>{filteredSummary.map((row) => <tr key={row.registrationId} tabIndex={0} onClick={() => { onSelectedRecordTargetChange(null); onSelectedRegistrationChange(row.registrationId); onSelectedAuthorizationChange(row.authorizationId) }} onKeyDown={(event) => { if (event.key === 'Enter') { onSelectedRecordTargetChange(null); onSelectedRegistrationChange(row.registrationId); onSelectedAuthorizationChange(row.authorizationId) } }}>
+        <thead><tr>{SUMMARY_COLUMNS.map((column) => <InspectionSummaryColumnHeader key={column.key} column={column} sort={summarySort} values={summaryFilterValues[column.key]} selectedValues={summaryColumnFilters[column.key]} onSort={changeSummarySort} onFilterChange={changeSummaryColumnFilter} />)}</tr></thead>
+        <tbody>{displayedSummary.map((row) => <tr key={row.registrationId} tabIndex={0} onClick={() => { onSelectedRecordTargetChange(null); onSelectedRegistrationChange(row.registrationId); onSelectedAuthorizationChange(row.authorizationId) }} onKeyDown={(event) => { if (event.key === 'Enter') { onSelectedRecordTargetChange(null); onSelectedRegistrationChange(row.registrationId); onSelectedAuthorizationChange(row.authorizationId) } }}>
           <td>{row.registrationNo}</td><td>{row.purchaseDates}</td><td>{row.inspectionDates}</td><td><strong>{row.fullName}</strong></td><td>{row.origin}</td><td>{row.municipality}</td><td>{row.inspectionLocations}</td><td>{row.authorizationNo}</td><td>{row.brands}</td><td>{row.flexconCount}本</td><td>{row.paperBagCount}袋</td><td>{row.bulkQuantity.toLocaleString()}kg</td><td className="inspection-progress-inspected">{row.inspectedQuantity.toLocaleString()}kg</td><td className="inspection-progress-uninspected">{row.uninspectedQuantity.toLocaleString()}kg</td>
         </tr>)}
-        {filteredSummary.length === 0 && <tr><td colSpan={14} className="empty-state">該当する検査記録はありません</td></tr>}</tbody>
+        {displayedSummary.length === 0 && <tr><td colSpan={14} className="empty-state">該当する検査記録はありません</td></tr>}</tbody>
       </table></div>}
       {notice && <div className={`notice operation-log ${notice.type}`}>{notice.text}</div>}
     </div>

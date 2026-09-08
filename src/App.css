@@ -331,6 +331,8 @@
 .inspection-summary-table th, .inspection-summary-table td { height: 44px; padding: 9px 11px; border-right: 1px solid #e5e8e5; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
 .inspection-summary-table thead { position: sticky; top: 0; z-index: 4; }
 .inspection-summary-table th { background: #eef2ee; box-shadow: 0 2px 0 #c8cec9; color: #3d4840; }
+.inspection-summary-table th.inspection-summary-column-heading { height: auto; padding: 0; }
+.inspection-summary-table .shipment-column-heading { min-height: 44px; }
 .inspection-summary-table tbody tr { cursor: pointer; }
 .inspection-summary-table tbody tr:hover, .inspection-summary-table tbody tr:focus { background: var(--green-soft); outline: none; }
 .inspection-summary-table th:last-child, .inspection-summary-table td:last-child { border-right: 0; }
