@@ -117,6 +117,9 @@
 .manual-items-editor { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 6px; background: #f7f9f7; }
 .manual-item-add { display: grid; grid-template-columns: minmax(0, 1fr) 112px auto; align-items: end; gap: 8px; }
 .manual-item-add.paper { grid-template-columns: 104px minmax(0, 1fr) 112px auto; }
+.manual-item-add.paper .manual-paper-moisture { grid-column: 1; }
+.manual-item-add.paper .manual-paper-grade { grid-column: 2; }
+.manual-item-add.paper .manual-paper-reason { grid-column: 3; }
 .manual-item-add label { min-width: 0; margin: 0; font-size: 12px; }
 .manual-item-add select, .manual-item-add input { width: 100%; min-width: 0; }
 .manual-item-add .secondary-button { min-height: 42px; padding-inline: 12px; }
@@ -124,6 +127,8 @@
 .manual-item-list { display: grid; gap: 7px; }
 .manual-item-row { min-height: 44px; display: grid; grid-template-columns: minmax(0, 1fr) 118px 42px; align-items: center; gap: 8px; padding: 6px; border: 1px solid #d6ddd8; border-radius: 5px; background: #fff; }
 .manual-item-row.paper { grid-template-columns: 104px minmax(0, 1fr) 118px 42px; }
+.manual-item-inspection-row { grid-column: 1 / -1; display: grid; grid-template-columns: 104px 120px minmax(140px, 1fr); gap: 8px; }
+.manual-item-inspection-row label { min-width: 0; margin: 0; color: #4b574f; font-size: 11px; }
 .manual-item-row select, .manual-item-row input { width: 100%; min-width: 0; height: 36px; padding: 5px 7px; }
 .manual-item-quantity { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 5px; }
 .manual-item-quantity span { color: var(--muted); font-size: 13px; }
@@ -142,10 +147,17 @@
 .shipment-count { background: var(--blue-soft); color: var(--blue); border-radius: 5px; padding: 4px 8px; font-weight: 700; white-space: nowrap; }
 .lot-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
 .lot-tag { font-family: Consolas, monospace; background: #eef1ee; border: 1px solid #d5dad6; border-radius: 4px; padding: 3px 7px; font-size: 13px; }
+.shipment-result-tag { display: inline-grid; gap: 2px; font-family: inherit; }
+.shipment-result-tag code { color: #4d5a51; font-size: 12px; }
+.shipment-result-tag small { color: #34483a; font-size: 12px; }
+.shipment-manual-results { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.shipment-manual-results > span { display: grid; gap: 2px; padding: 5px 8px; border: 1px solid #ccd8cf; border-radius: 4px; background: #f3f7f4; font-size: 12px; }
+.shipment-manual-results small { color: #59645c; }
 .mixed-lot-tag { display: inline-grid; grid-template-columns: auto auto; align-items: center; gap: 2px 8px; border-color: #9eb8a4; background: #f2f8f3; font-family: inherit; }
 .mixed-lot-tag strong { color: #245b34; }
 .mixed-lot-tag span { color: #38443b; }
 .mixed-lot-tag code { grid-column: 1 / -1; color: #59635c; font-size: 12px; }
+.mixed-lot-tag.shipment-result-tag small { grid-column: 1 / -1; }
 .history-edit-lots { margin: 0 0 14px; }
 .shipment-note { margin: 10px 0 0; color: #667068; font-size: 13px; }
 .empty-state { text-align: center; color: var(--muted); padding: 30px 16px; }
@@ -166,13 +178,13 @@
 .shipment-destination-summary .section-title { margin-bottom: 8px; }
 .shipment-destination-summary .section-title h2 { font-size: 17px; }
 .shipment-summary-table-wrap { width: 100%; max-height: 240px; overflow: auto; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
-.shipment-summary-table { width: 100%; min-width: 520px; border-collapse: separate; border-spacing: 0; font-size: 13px; }
+.shipment-summary-table { width: 100%; min-width: 620px; border-collapse: separate; border-spacing: 0; font-size: 13px; }
 .shipment-summary-table th, .shipment-summary-table td { height: 34px; padding: 5px 8px; border-right: 1px solid #e2e6e3; border-bottom: 1px solid #e2e6e3; text-align: left; vertical-align: middle; }
 .shipment-summary-table th { position: sticky; top: 0; z-index: 2; background: #edf4ef; color: #274532; white-space: nowrap; }
 .shipment-summary-table tbody tr:nth-child(even) { background: #f8faf8; }
 .shipment-summary-table td:first-child { font-weight: 700; white-space: nowrap; }
-.shipment-summary-table th:nth-child(3), .shipment-summary-table th:nth-child(4), .shipment-summary-table td:nth-child(3), .shipment-summary-table td:nth-child(4) { text-align: right; white-space: nowrap; }
-.shipment-table { width: 100%; min-width: 1300px; border-collapse: separate; border-spacing: 0; font-size: 13px; }
+.shipment-summary-table td:nth-child(4), .shipment-summary-table td:nth-child(5) { text-align: right; white-space: nowrap; }
+.shipment-table { width: 100%; min-width: 1530px; border-collapse: separate; border-spacing: 0; font-size: 13px; }
 .shipment-table th, .shipment-table td { height: 36px; padding: 5px 8px; border-right: 1px solid #e2e6e3; border-bottom: 1px solid #e2e6e3; text-align: left; vertical-align: middle; white-space: nowrap; }
 .shipment-table th { position: sticky; top: 0; z-index: 4; padding: 0; background: #edf4ef; color: #274532; }
 .shipment-table tbody tr:nth-child(even) { background: #f8faf8; }
@@ -182,6 +194,9 @@
 .shipment-table th.shipment-column-destination { width: 115px; }
 .shipment-table th.shipment-column-origin { width: 76px; }
 .shipment-table th.shipment-column-productName { width: 135px; }
+.shipment-table th.shipment-column-grade { width: 74px; }
+.shipment-table th.shipment-column-moisture { width: 78px; }
+.shipment-table th.shipment-column-reason { width: 118px; }
 .shipment-table th.shipment-column-flexconQuantity { width: 96px; }
 .shipment-table th.shipment-column-paperBagQuantity { width: 82px; }
 .shipment-table th.shipment-column-carrier { width: 115px; }
@@ -626,8 +641,10 @@ table thead th { text-align: center !important; }
   .shipment-form-row, .shipment-registration-form .worker-summary { grid-template-columns: 96px minmax(0, 1fr); gap: 8px; }
   .shipment-form-row > span:first-child { font-size: 13px; }
   .manual-item-add, .manual-item-add.paper { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .manual-item-add.paper .manual-paper-moisture, .manual-item-add.paper .manual-paper-grade, .manual-item-add.paper .manual-paper-reason { grid-column: auto; }
   .manual-item-add .secondary-button { align-self: end; }
   .manual-item-row.paper { grid-template-columns: 86px minmax(112px, 1fr) 90px 38px; gap: 5px; }
+  .manual-item-inspection-row { grid-template-columns: 86px 100px minmax(120px, 1fr); gap: 5px; }
   .manual-item-row { grid-template-columns: minmax(112px, 1fr) 90px 38px; gap: 5px; }
   .manual-items-editor { padding: 9px; overflow-x: auto; }
   .authorization-heading { align-items: stretch; flex-direction: column; }

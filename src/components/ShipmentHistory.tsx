@@ -15,7 +15,16 @@ type Notice = { type: 'success' | 'error'; text: string } | null
 type ViewMode = 'cards' | 'table'
 type SortDirection = 'asc' | 'desc'
 type MixedShipmentInfo = { mixedNo: number; producerLabel: string }
-type TableColumn = 'shippedAt' | 'destination' | 'origin' | 'productName' | 'flexconQuantity' | 'paperBagQuantity' | 'carrier' | 'driver' | 'vehicle' | 'worker' | 'note'
+type TableColumn = 'shippedAt' | 'destination' | 'origin' | 'productName' | 'grade' | 'moisture' | 'reason' | 'flexconQuantity' | 'paperBagQuantity' | 'carrier' | 'driver' | 'vehicle' | 'worker' | 'note'
+type ShipmentProductGroup = {
+  origin: string
+  name: string
+  count: number
+  unit: string
+  grade: string
+  moisture: number | null
+  reason: string
+}
 type ShipmentTableRow = {
   id: string
   shipment: Shipment
@@ -25,6 +34,9 @@ type ShipmentTableRow = {
   destination: string
   origin: string
   productName: string
+  grade: string
+  moisture: string
+  reason: string
   flexconQuantity: number
   flexconQuantityText: string
   paperBagQuantity: number
@@ -40,6 +52,7 @@ type ShipmentTableRow = {
 type DestinationSummaryRow = {
   destination: string
   productName: string
+  grade: string
   flexconQuantity: number
   paperBagQuantity: number
 }
@@ -49,6 +62,9 @@ const TABLE_COLUMNS: Array<{ key: TableColumn; label: string }> = [
   { key: 'destination', label: '納品先' },
   { key: 'origin', label: '産地' },
   { key: 'productName', label: '品名' },
+  { key: 'grade', label: '等級' },
+  { key: 'moisture', label: '水分' },
+  { key: 'reason', label: '理由' },
   { key: 'flexconQuantity', label: 'フレコン本数' },
   { key: 'paperBagQuantity', label: '紙袋数' },
   { key: 'carrier', label: '運送会社' },
@@ -72,11 +88,11 @@ function formatShipmentDateTime(value: string) {
 
 function shipmentProductSummary(shipment: Shipment) {
   return shipmentProductGroups(shipment)
-    .map((group) => `${group.origin ? `${group.origin} ` : ''}${group.name} ${group.count}${group.unit}`)
+    .map((group) => `${group.origin ? `${group.origin} ` : ''}${group.name}${shipment.shipment_kind === 'other_rice' ? '' : ` ${group.grade || '等級未入力'}`} ${group.count}${group.unit}`)
     .join('、')
 }
 
-function shipmentProductGroups(shipment: Shipment) {
+function shipmentProductGroups(shipment: Shipment): ShipmentProductGroup[] {
   if (shipment.shipment_kind !== 'qr_flexcon') {
     if (shipment.flexcon_manual_shipment_items.length > 0) {
       return [...shipment.flexcon_manual_shipment_items].sort((a, b) => a.sort_order - b.sort_order).map((item) => ({
@@ -84,6 +100,9 @@ function shipmentProductGroups(shipment: Shipment) {
         name: item.product_name,
         count: item.quantity_count,
         unit: shipment.shipment_kind === 'paper_bag' ? '袋' : '本',
+        grade: item.grade ?? '',
+        moisture: item.moisture,
+        reason: item.reason ?? '',
       }))
     }
     return [{
@@ -91,18 +110,43 @@ function shipmentProductGroups(shipment: Shipment) {
       name: shipment.product_name?.trim() || '品名未登録',
       count: shipment.quantity_count ?? 0,
       unit: shipment.shipment_kind === 'paper_bag' ? '袋' : '本',
+      grade: '',
+      moisture: null,
+      reason: '',
     }]
   }
 
-  const groups = new Map<string, { origin: string; name: string; count: number; unit: string }>()
+  const groups = new Map<string, ShipmentProductGroup & { moistureTotal: number; moistureCount: number; reasons: Set<string> }>()
   shipment.flexcon_shipment_items.forEach((item) => {
     const origin = formatPrefectureName(item.origin_prefecture ?? shipment.origin_prefecture) || '産地未登録'
     const name = item.product_name?.trim() || shipment.product_name?.trim() || '品名未登録'
-    const key = `${origin}\u001f${name}`
+    const grade = item.grade?.trim() || ''
+    const key = `${origin}\u001f${name}\u001f${grade}`
     const current = groups.get(key)
-    groups.set(key, { origin, name, count: (current?.count ?? 0) + 1, unit: '本' })
+    const reasons = current?.reasons ?? new Set<string>()
+    if (item.reason?.trim()) reasons.add(item.reason.trim())
+    groups.set(key, {
+      origin,
+      name,
+      grade,
+      count: (current?.count ?? 0) + 1,
+      unit: '本',
+      moisture: null,
+      reason: '',
+      moistureTotal: (current?.moistureTotal ?? 0) + (item.moisture ?? 0),
+      moistureCount: (current?.moistureCount ?? 0) + (item.moisture === null ? 0 : 1),
+      reasons,
+    })
   })
-  return [...groups.values()]
+  return [...groups.values()].map((group) => ({
+    origin: group.origin,
+    name: group.name,
+    grade: group.grade,
+    count: group.count,
+    unit: group.unit,
+    moisture: group.moistureCount ? Math.round((group.moistureTotal / group.moistureCount) * 10) / 10 : null,
+    reason: [...group.reasons].join('、'),
+  }))
 }
 
 function tableFilterValue(row: ShipmentTableRow, key: TableColumn) {
@@ -213,7 +257,7 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
 
   useEffect(() => {
     void Promise.all([
-      supabase.from('flexcon_shipments').select('id, destination_id, transport_profile_id, shipped_at, carrier_name, driver_name, vehicle_no, note, shipment_kind, origin_prefecture, product_name, quantity_count, purchase_price_per_bale, flexcon_destinations(name), flexcon_shipment_items(lot_number, origin_prefecture, product_name), flexcon_manual_shipment_items(id, origin_prefecture, product_name, quantity_count, sort_order), workers(worker_name)').order('shipped_at', { ascending: false }).limit(200),
+      supabase.from('flexcon_shipments').select('id, destination_id, transport_profile_id, shipped_at, carrier_name, driver_name, vehicle_no, note, shipment_kind, origin_prefecture, product_name, quantity_count, purchase_price_per_bale, flexcon_destinations(name), flexcon_shipment_items(lot_number, origin_prefecture, product_name, grade, moisture, reason), flexcon_manual_shipment_items(id, origin_prefecture, product_name, quantity_count, grade, moisture, reason, sort_order), workers(worker_name)').order('shipped_at', { ascending: false }).limit(200),
       supabase.from('flexcon_mixed_flexcons').select('mixed_no, lot_number, flexcon_mixed_flexcon_members(sort_order, flexcon_authorizations(full_name))'),
     ]).then(([shipmentResult, mixedResult]) => {
       if (shipmentResult.error) setNotice({ type: 'error', text: shipmentResult.error.message })
@@ -244,7 +288,7 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
     void Promise.all([
       supabase.from('flexcon_destinations').select('*').order('active', { ascending: false }).order('name'),
       supabase.from('flexcon_transport_profiles').select('*').order('active', { ascending: false }).order('company_name'),
-      supabase.from('flexcon_inspection_options').select('*').in('option_type', ['shipment_product', 'brand_aomori', 'brand_iwate']).order('sort_order').order('name'),
+      supabase.from('flexcon_inspection_options').select('*').in('option_type', ['shipment_product', 'brand_aomori', 'brand_iwate', 'grade', 'grade_reason']).order('sort_order').order('name'),
     ]).then(([destinationResult, transportResult, productResult]) => {
       if (destinationResult.error) setNotice({ type: 'error', text: destinationResult.error.message })
       else setDestinations((destinationResult.data ?? []) as Destination[])
@@ -282,6 +326,9 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
       destination: shipment.flexcon_destinations?.name ?? '納品先不明',
       origin: group.origin,
       productName: group.name,
+      grade: shipment.shipment_kind === 'other_rice' ? '' : group.grade || '未入力',
+      moisture: group.moisture === null ? '' : `${group.moisture.toFixed(1)}%`,
+      reason: group.reason,
       flexconQuantity: group.unit === '本' ? group.count : 0,
       flexconQuantityText: group.unit === '本' ? `${group.count}本` : '',
       paperBagQuantity: group.unit === '袋' ? group.count : 0,
@@ -342,7 +389,7 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
     }>()
 
     displayedTableRows.forEach((row) => {
-      const key = `${row.destination}\u001f${row.productName}`
+      const key = `${row.destination}\u001f${row.productName}\u001f${row.grade}`
       const summary = summaries.get(key) ?? {
         flexconQuantity: 0,
         paperBagQuantity: 0,
@@ -353,16 +400,19 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
     })
 
     return Array.from(summaries, ([key, summary]): DestinationSummaryRow => {
-      const [destination, productName] = key.split('\u001f')
+      const [destination, productName, grade] = key.split('\u001f')
       return {
         destination,
         productName,
+        grade,
         flexconQuantity: summary.flexconQuantity,
         paperBagQuantity: summary.paperBagQuantity,
       }
     }).sort((a, b) => {
       const destinationOrder = a.destination.localeCompare(b.destination, 'ja', { numeric: true })
-      return destinationOrder || a.productName.localeCompare(b.productName, 'ja', { numeric: true })
+      return destinationOrder
+        || a.productName.localeCompare(b.productName, 'ja', { numeric: true })
+        || a.grade.localeCompare(b.grade, 'ja', { numeric: true })
     })
   }, [displayedTableRows])
 
@@ -403,12 +453,18 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
           originPrefecture: formatPrefectureName(item.origin_prefecture),
           productName: item.product_name,
           quantityCount: String(item.quantity_count),
+          grade: item.grade ?? '',
+          moisture: item.moisture === null ? '' : String(item.moisture),
+          reason: item.reason ?? '',
         }))
         : [{
           key: shipment.id,
           originPrefecture: formatPrefectureName(shipment.origin_prefecture),
           productName: shipment.product_name ?? '',
           quantityCount: String(shipment.quantity_count ?? 1),
+          grade: '',
+          moisture: '',
+          reason: '',
         }]
     ))
     setNotice(null)
@@ -423,9 +479,15 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
       || manualItems.some((item) => !item.productName
         || !item.originPrefecture
         || !Number.isInteger(Number(item.quantityCount))
-        || Number(item.quantityCount) < 1)
+        || Number(item.quantityCount) < 1
+        || (editing.shipment_kind === 'paper_bag' && (!item.grade
+          || item.moisture.trim() === ''
+          || !Number.isFinite(Number(item.moisture))
+          || Number(item.moisture) < 0
+          || Number(item.moisture) > 100
+          || (item.grade !== '1等' && item.grade !== '合格' && !item.reason))))
     )) {
-      setNotice({ type: 'error', text: '明細の種類と本数を確認してください。' })
+      setNotice({ type: 'error', text: '明細の種類、本数、検査結果を確認してください。' })
       setBusy(false)
       return
     }
@@ -453,6 +515,9 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
           origin_prefecture: item.originPrefecture,
           product_name: item.productName,
           quantity_count: Number(item.quantityCount),
+          grade: editing.shipment_kind === 'paper_bag' ? item.grade : null,
+          moisture: editing.shipment_kind === 'paper_bag' ? Number(item.moisture) : null,
+          reason: editing.shipment_kind === 'paper_bag' ? item.reason || null : null,
         })),
       })
     if (error) {
@@ -488,7 +553,7 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
   }
 
   const exportCsv = () => {
-    const rows = [['出荷日時', '納品先', '担当者', '運送会社名', 'ドライバー名', '車両番号', '出荷区分', '産地', '品名', '種類別数量', 'QRコード', '混在フレコン情報', '数量', '単位', '仕入値（1俵当たり）', '備考']]
+    const rows = [['出荷日時', '納品先', '担当者', '運送会社名', 'ドライバー名', '車両番号', '出荷区分', '産地', '品名', '等級', '水分', '理由', '種類別数量', 'QRコード', '混在フレコン情報', '数量', '単位', '仕入値（1俵当たり）', '備考']]
     filtered.forEach((shipment) => {
       const details = shipment.shipment_kind === 'qr_flexcon'
         ? shipment.flexcon_shipment_items.map((item) => ({
@@ -496,6 +561,9 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
           originPrefecture: formatPrefectureName(item.origin_prefecture ?? shipment.origin_prefecture),
           productName: item.product_name ?? shipment.product_name ?? '品名未登録',
           quantityCount: 1,
+          grade: item.grade ?? '',
+          moisture: item.moisture,
+          reason: item.reason ?? '',
         }))
         : shipment.flexcon_manual_shipment_items.length > 0
           ? [...shipment.flexcon_manual_shipment_items].sort((a, b) => a.sort_order - b.sort_order).map((item) => ({
@@ -503,12 +571,18 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
             originPrefecture: formatPrefectureName(item.origin_prefecture),
             productName: item.product_name,
             quantityCount: item.quantity_count,
+            grade: item.grade ?? '',
+            moisture: item.moisture,
+            reason: item.reason ?? '',
           }))
           : [{
             lotNumber: '',
             originPrefecture: formatPrefectureName(shipment.origin_prefecture),
             productName: shipment.product_name ?? '品名未登録',
             quantityCount: shipment.quantity_count ?? 0,
+            grade: '',
+            moisture: null,
+            reason: '',
           }]
       details.forEach((item) => rows.push([
         formatShipmentDateTime(shipment.shipped_at),
@@ -520,6 +594,9 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
         shipment.shipment_kind === 'paper_bag' ? '紙袋' : shipment.shipment_kind === 'other_rice' ? '銘柄米以外' : mixedShipmentByLot[item.lotNumber] ? '混在フレコン' : 'QRフレコン',
         item.originPrefecture,
         item.productName,
+        item.grade,
+        item.moisture === null ? '' : `${Number(item.moisture).toFixed(1)}%`,
+        item.reason,
         shipmentProductSummary(shipment),
         item.lotNumber,
         mixedShipmentByLot[item.lotNumber] ? `混在№${mixedShipmentByLot[item.lotNumber].mixedNo} ${mixedShipmentByLot[item.lotNumber].producerLabel}` : '',
@@ -579,8 +656,9 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
               </div>
               {shipment.flexcon_shipment_items.length > 0 && <div className="lot-tags">{shipment.flexcon_shipment_items.map((item) => {
                 const mixed = mixedShipmentByLot[item.lot_number]
-                return <span className={`lot-tag ${mixed ? 'mixed-lot-tag' : ''}`} key={item.lot_number}>{mixed ? <><strong>混在№{mixed.mixedNo}</strong><span>{mixed.producerLabel}</span><code>{item.lot_number}</code></> : item.lot_number}</span>
+                return <span className={`lot-tag shipment-result-tag ${mixed ? 'mixed-lot-tag' : ''}`} key={item.lot_number}>{mixed ? <><strong>混在№{mixed.mixedNo}</strong><span>{mixed.producerLabel}</span><code>{item.lot_number}</code></> : <code>{item.lot_number}</code>}<small>{item.grade || '等級未入力'}{item.moisture === null ? '' : `　水分 ${item.moisture.toFixed(1)}%`}{item.reason ? `　${item.reason}` : ''}</small></span>
               })}</div>}
+              {shipment.shipment_kind === 'paper_bag' && <div className="shipment-manual-results">{shipmentProductGroups(shipment).map((group, index) => <span key={`${group.name}-${group.grade}-${index}`}><strong>{group.name}　{group.grade || '等級未入力'}</strong><small>{group.moisture === null ? '水分未入力' : `水分 ${group.moisture.toFixed(1)}%`}{group.reason ? `　${group.reason}` : ''}</small></span>)}</div>}
               {shipment.note && <p className="shipment-note">{shipment.note}</p>}
             </article>
           ))}
@@ -592,12 +670,13 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
             <div className="section-title"><div><h2 id="destination-summary-title">納品先別集計</h2><span>{destinationSummaryRows.length}件</span></div></div>
             <div className="shipment-summary-table-wrap">
               <table className="shipment-summary-table">
-                <thead><tr><th>納品先</th><th>品名</th><th>フレコン本数</th><th>紙袋数</th></tr></thead>
+                <thead><tr><th>納品先</th><th>品名</th><th>等級</th><th>フレコン本数</th><th>紙袋数</th></tr></thead>
                 <tbody>
                   {destinationSummaryRows.map((row) => (
-                    <tr key={`${row.destination}-${row.productName}`}>
+                    <tr key={`${row.destination}-${row.productName}-${row.grade}`}>
                       <td>{row.destination}</td>
                       <td>{row.productName}</td>
+                      <td>{row.grade}</td>
                       <td className="numeric-cell">{row.flexconQuantity ? `${row.flexconQuantity}本` : ''}</td>
                       <td className="numeric-cell">{row.paperBagQuantity ? `${row.paperBagQuantity}袋` : ''}</td>
                     </tr>
@@ -633,6 +712,9 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
                     <td>{row.destination}</td>
                     <td>{row.origin}</td>
                     <td>{row.productName}</td>
+                    <td>{row.grade}</td>
+                    <td className="numeric-cell">{row.moisture}</td>
+                    <td>{row.reason}</td>
                     <td className="numeric-cell">{row.flexconQuantityText}</td>
                     <td className="numeric-cell">{row.paperBagQuantityText}</td>
                     <td>{row.carrier}</td>

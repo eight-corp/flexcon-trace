@@ -141,7 +141,7 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
       supabase.from('flexcon_authorizations').select('id, authorization_no, full_name, prefecture'),
       supabase.from('flexcon_inspection_flexcons').select('*'),
       supabase.from('flexcon_mixed_flexcons').select('mixed_no, lot_number, origin_prefecture, brand, flexcon_mixed_flexcon_members(sort_order, flexcon_authorizations(full_name))'),
-      supabase.from('flexcon_inspection_options').select('*').in('option_type', ['shipment_product', 'brand_aomori', 'brand_iwate']).eq('active', true).order('sort_order').order('name'),
+      supabase.from('flexcon_inspection_options').select('*').in('option_type', ['shipment_product', 'brand_aomori', 'brand_iwate', 'grade', 'grade_reason']).eq('active', true).order('sort_order').order('name'),
     ]).then(([destinationResult, transportResult, authorizationResult, flexconResult, mixedResult, productResult]) => {
       if (destinationResult.error) setNotice({ type: 'error', text: '納品先を取得できません。SupabaseのSQL設定を確認してください。' })
       else setDestinations((destinationResult.data ?? []) as Destination[])
@@ -316,8 +316,14 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
       !item.productName
       || !item.originPrefecture
       || !Number.isInteger(Number(item.quantityCount))
-      || Number(item.quantityCount) < 1)) {
-      return setNotice({ type: 'error', text: '明細の種類と本数を確認してください。' })
+      || Number(item.quantityCount) < 1
+      || (manualShipmentKind === 'paper_bag' && (!item.grade
+        || item.moisture.trim() === ''
+        || !Number.isFinite(Number(item.moisture))
+        || Number(item.moisture) < 0
+        || Number(item.moisture) > 100
+        || (item.grade !== '1等' && item.grade !== '合格' && !item.reason))))) {
+      return setNotice({ type: 'error', text: '明細の種類、本数、検査結果を確認してください。' })
     }
     if (!manualShipmentKind && lots.length === 0) {
       return setNotice({ type: 'error', text: 'ロット番号を1本以上読み取ってください。' })
@@ -346,6 +352,9 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
           origin_prefecture: item.originPrefecture,
           product_name: item.productName,
           quantity_count: Number(item.quantityCount),
+          grade: manualShipmentKind === 'paper_bag' ? item.grade : null,
+          moisture: manualShipmentKind === 'paper_bag' ? Number(item.moisture) : null,
+          reason: manualShipmentKind === 'paper_bag' ? item.reason || null : null,
         })),
       })
       : await supabase.rpc('flexcon_register_shipment', {
@@ -400,7 +409,7 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
     : lots.length
   const registrationUnit = manualShipmentKind === 'paper_bag' ? '袋' : '本'
   const registrationProduct = manualShipmentKind
-    ? manualItems.map((item) => `${item.productName} ${item.quantityCount}${registrationUnit}`).join('、') || '明細未登録'
+    ? manualItems.map((item) => `${item.productName}${manualShipmentKind === 'paper_bag' ? ` ${item.grade || '等級未入力'}` : ''} ${item.quantityCount}${registrationUnit}`).join('、') || '明細未登録'
     : shipmentBrandCounts.map(([brand, count]) => `${brand} ${count}本`).join('、')
   const registrationOrigin = [...new Set((manualShipmentKind
     ? manualItems.map((item) => item.originPrefecture)
