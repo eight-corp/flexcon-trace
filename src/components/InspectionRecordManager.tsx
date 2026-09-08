@@ -92,6 +92,7 @@ type InspectionRegistrationSummaryRow = {
   inspectionLocations: string
   authorizationNo: string
   brands: string
+  grade: string
   flexconCount: number
   paperBagCount: number
   bulkQuantity: number
@@ -99,7 +100,7 @@ type InspectionRegistrationSummaryRow = {
   uninspectedQuantity: number
 }
 type SummarySortDirection = 'asc' | 'desc'
-type SummaryColumn = 'registrationNo' | 'purchaseDates' | 'inspectionDates' | 'fullName' | 'origin' | 'municipality' | 'inspectionLocations' | 'authorizationNo' | 'brands' | 'flexconCount' | 'paperBagCount' | 'bulkQuantity' | 'inspectedQuantity' | 'uninspectedQuantity'
+type SummaryColumn = 'registrationNo' | 'purchaseDates' | 'inspectionDates' | 'fullName' | 'origin' | 'municipality' | 'inspectionLocations' | 'authorizationNo' | 'brands' | 'grade' | 'flexconCount' | 'paperBagCount' | 'bulkQuantity' | 'inspectedQuantity' | 'uninspectedQuantity'
 
 const SUMMARY_COLUMNS: Array<{ key: SummaryColumn; label: string }> = [
   { key: 'registrationNo', label: '登録No.' },
@@ -111,6 +112,7 @@ const SUMMARY_COLUMNS: Array<{ key: SummaryColumn; label: string }> = [
   { key: 'inspectionLocations', label: '検査場所' },
   { key: 'authorizationNo', label: '委任状No.' },
   { key: 'brands', label: '銘柄' },
+  { key: 'grade', label: '等級' },
   { key: 'flexconCount', label: '推フレ数' },
   { key: 'paperBagCount', label: '紙袋数' },
   { key: 'bulkQuantity', label: 'バラ数量' },
@@ -121,6 +123,7 @@ const SUMMARY_COLUMNS: Array<{ key: SummaryColumn; label: string }> = [
 const DEFAULT_BRANDED_RICE_WEIGHT = 1020
 const DEFAULT_FEED_RICE_WEIGHT = 1000
 const AUTHORIZATION_NO_COLLATOR = new Intl.Collator('ja', { numeric: true, sensitivity: 'base' })
+const SUMMARY_GRADE_ORDER = ['1等', '2等', '3等', '合格', '未入力']
 
 function currentFiscalYear() { return new Date().getFullYear() - 2018 }
 function westernYear(fiscalYear: number) { return fiscalYear >= 2000 ? fiscalYear : fiscalYear + 2018 }
@@ -418,38 +421,56 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
       rows.push(item)
       paperBagsByRegistration.set(item.registration_id, rows)
     })
-    return registrations.map((registration): InspectionRegistrationSummaryRow | null => {
-    const authorization = authorizationById.get(registration.authorization_id)
-    if (!authorization) return null
-    const registeredFlexcons = flexconsByRegistration.get(registration.id) ?? []
-    const registeredPaperBags = paperBagsByRegistration.get(registration.id) ?? []
-    const records: Array<FlexconInspection | PaperBagInspection> = [...registeredFlexcons, ...registeredPaperBags]
-    if (records.length === 0) return null
-    const standardFlexcons = registeredFlexcons.filter((item) => flexconRecordKind(item, weights) === 'standard')
-    const bulkFlexcons = registeredFlexcons.filter((item) => flexconRecordKind(item, weights) === 'bulk')
-    const quantityFor = (item: FlexconInspection | PaperBagInspection) => (
-      'quantity_kg' in item ? item.quantity_kg : item.bag_count * 30
-    )
-    return {
-      registrationId: registration.id,
-      registrationNo: registration.registration_no,
-      authorizationId: authorization.id,
-      purchaseDates: joinDistinct(records.map((item) => item.purchase_date), displayDate),
-      inspectionDates: joinDistinct(records.map((item) => item.inspection_date), displayDate),
-      fullName: authorization.full_name,
-      origin: formatPrefectureName(authorization.prefecture),
-      municipality: authorization.municipality ?? '',
-      inspectionLocations: joinDistinct(records.map((item) => item.inspection_location)),
-      authorizationNo: authorization.authorization_no,
-      brands: joinDistinct(records.map((item) => item.brand)),
-      flexconCount: standardFlexcons.length,
-      paperBagCount: registeredPaperBags.reduce((total, item) => total + item.bag_count, 0),
-      bulkQuantity: bulkFlexcons.reduce((total, item) => total + item.quantity_kg, 0),
-      inspectedQuantity: records.filter(isInspectionResultComplete).reduce((total, item) => total + quantityFor(item), 0),
-      uninspectedQuantity: records.filter((item) => !isInspectionResultComplete(item)).reduce((total, item) => total + quantityFor(item), 0),
-    }
-    }).filter((row): row is InspectionRegistrationSummaryRow => row !== null)
-      .sort((left, right) => left.registrationNo - right.registrationNo)
+    return registrations.flatMap((registration): InspectionRegistrationSummaryRow[] => {
+      const authorization = authorizationById.get(registration.authorization_id)
+      if (!authorization) return []
+      const registeredFlexcons = flexconsByRegistration.get(registration.id) ?? []
+      const registeredPaperBags = paperBagsByRegistration.get(registration.id) ?? []
+      const records: Array<FlexconInspection | PaperBagInspection> = [...registeredFlexcons, ...registeredPaperBags]
+      if (records.length === 0) return []
+
+      const gradeGroups = new Map<string, Array<FlexconInspection | PaperBagInspection>>()
+      records.forEach((item) => {
+        const grade = item.grade?.trim() || '未入力'
+        gradeGroups.set(grade, [...(gradeGroups.get(grade) ?? []), item])
+      })
+
+      return [...gradeGroups.entries()].map(([grade, gradeRecords]) => {
+        const gradeFlexcons = gradeRecords.filter((item): item is FlexconInspection => 'quantity_kg' in item)
+        const gradePaperBags = gradeRecords.filter((item): item is PaperBagInspection => 'bag_count' in item)
+        const standardFlexcons = gradeFlexcons.filter((item) => flexconRecordKind(item, weights) === 'standard')
+        const bulkFlexcons = gradeFlexcons.filter((item) => flexconRecordKind(item, weights) === 'bulk')
+        const quantityFor = (item: FlexconInspection | PaperBagInspection) => (
+          'quantity_kg' in item ? item.quantity_kg : item.bag_count * 30
+        )
+        return {
+          registrationId: registration.id,
+          registrationNo: registration.registration_no,
+          authorizationId: authorization.id,
+          purchaseDates: joinDistinct(gradeRecords.map((item) => item.purchase_date), displayDate),
+          inspectionDates: joinDistinct(gradeRecords.map((item) => item.inspection_date), displayDate),
+          fullName: authorization.full_name,
+          origin: formatPrefectureName(authorization.prefecture),
+          municipality: authorization.municipality ?? '',
+          inspectionLocations: joinDistinct(gradeRecords.map((item) => item.inspection_location)),
+          authorizationNo: authorization.authorization_no,
+          brands: joinDistinct(gradeRecords.map((item) => item.brand)),
+          grade,
+          flexconCount: standardFlexcons.length,
+          paperBagCount: gradePaperBags.reduce((total, item) => total + item.bag_count, 0),
+          bulkQuantity: bulkFlexcons.reduce((total, item) => total + item.quantity_kg, 0),
+          inspectedQuantity: gradeRecords.filter(isInspectionResultComplete).reduce((total, item) => total + quantityFor(item), 0),
+          uninspectedQuantity: gradeRecords.filter((item) => !isInspectionResultComplete(item)).reduce((total, item) => total + quantityFor(item), 0),
+        }
+      })
+    }).sort((left, right) => {
+      const registrationComparison = left.registrationNo - right.registrationNo
+      if (registrationComparison !== 0) return registrationComparison
+      const leftRank = SUMMARY_GRADE_ORDER.indexOf(left.grade)
+      const rightRank = SUMMARY_GRADE_ORDER.indexOf(right.grade)
+      return (leftRank < 0 ? SUMMARY_GRADE_ORDER.length : leftRank) - (rightRank < 0 ? SUMMARY_GRADE_ORDER.length : rightRank)
+        || left.grade.localeCompare(right.grade, 'ja', { numeric: true })
+    })
   }, [authorizations, flexcons, paperBags, registrations, weights])
   const summaryFilterValues = useMemo(() => Object.fromEntries(SUMMARY_COLUMNS.map((column) => [
     column.key,
@@ -491,12 +512,13 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
   }
 
   const deleteInspectionRegistration = async (row: InspectionRegistrationSummaryRow) => {
+    const registrationRows = summaryRows.filter((item) => item.registrationId === row.registrationId)
     const details = [
-      `推フレ ${row.flexconCount}本`,
-      `紙袋 ${row.paperBagCount}袋`,
-      `バラ ${row.bulkQuantity.toLocaleString()}kg`,
+      `推フレ ${registrationRows.reduce((total, item) => total + item.flexconCount, 0)}本`,
+      `紙袋 ${registrationRows.reduce((total, item) => total + item.paperBagCount, 0)}袋`,
+      `バラ ${registrationRows.reduce((total, item) => total + item.bulkQuantity, 0).toLocaleString()}kg`,
     ].join('、')
-    if (!window.confirm(`登録No. ${row.registrationNo}（${row.fullName}）を削除しますか？\n${details}\n\nこの操作は取り消せません。`)) return
+    if (!window.confirm(`登録No. ${row.registrationNo}（${row.fullName}）の全等級を削除しますか？\n${details}\n\nこの操作は取り消せません。`)) return
 
     setBusy(true)
     setNotice(null)
@@ -1210,11 +1232,11 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
       </section>}
       {summaryView === 'list' && <div className="inspection-summary-wrap"><table className="inspection-summary-table">
         <thead><tr>{SUMMARY_COLUMNS.map((column) => <InspectionSummaryColumnHeader key={column.key} column={column} sort={summarySort} values={summaryFilterValues[column.key]} selectedValues={summaryColumnFilters[column.key]} onSort={changeSummarySort} onFilterChange={changeSummaryColumnFilter} />)}{!readOnly && <th className="inspection-summary-actions-heading">操作</th>}</tr></thead>
-        <tbody>{displayedSummary.map((row) => <tr key={row.registrationId} tabIndex={0} onClick={() => { onSelectedRecordTargetChange(null); onSelectedRegistrationChange(row.registrationId); onSelectedAuthorizationChange(row.authorizationId) }} onKeyDown={(event) => { if (event.key === 'Enter' && event.target === event.currentTarget) { onSelectedRecordTargetChange(null); onSelectedRegistrationChange(row.registrationId); onSelectedAuthorizationChange(row.authorizationId) } }}>
-          <td className="numeric-cell">{row.registrationNo}</td><td>{row.purchaseDates}</td><td>{row.inspectionDates}</td><td><strong>{row.fullName}</strong></td><td>{row.origin}</td><td>{row.municipality}</td><td>{row.inspectionLocations}</td><td className="numeric-cell">{row.authorizationNo}</td><td>{row.brands}</td><td className="numeric-cell">{row.flexconCount}本</td><td className="numeric-cell">{row.paperBagCount}袋</td><td className="numeric-cell">{row.bulkQuantity.toLocaleString()}kg</td><td className="inspection-progress-inspected numeric-cell">{row.inspectedQuantity.toLocaleString()}kg</td><td className="inspection-progress-uninspected numeric-cell">{row.uninspectedQuantity.toLocaleString()}kg</td>
+        <tbody>{displayedSummary.map((row) => <tr key={`${row.registrationId}-${row.grade}`} tabIndex={0} onClick={() => { onSelectedRecordTargetChange(null); onSelectedRegistrationChange(row.registrationId); onSelectedAuthorizationChange(row.authorizationId) }} onKeyDown={(event) => { if (event.key === 'Enter' && event.target === event.currentTarget) { onSelectedRecordTargetChange(null); onSelectedRegistrationChange(row.registrationId); onSelectedAuthorizationChange(row.authorizationId) } }}>
+          <td className="numeric-cell">{row.registrationNo}</td><td>{row.purchaseDates}</td><td>{row.inspectionDates}</td><td><strong>{row.fullName}</strong></td><td>{row.origin}</td><td>{row.municipality}</td><td>{row.inspectionLocations}</td><td className="numeric-cell">{row.authorizationNo}</td><td>{row.brands}</td><td>{row.grade}</td><td className="numeric-cell">{row.flexconCount}本</td><td className="numeric-cell">{row.paperBagCount}袋</td><td className="numeric-cell">{row.bulkQuantity.toLocaleString()}kg</td><td className="inspection-progress-inspected numeric-cell">{row.inspectedQuantity.toLocaleString()}kg</td><td className="inspection-progress-uninspected numeric-cell">{row.uninspectedQuantity.toLocaleString()}kg</td>
           {!readOnly && <td className="inspection-summary-actions"><button className="icon-button delete-icon" type="button" title="この登録行を削除" aria-label={`登録No. ${row.registrationNo}を削除`} disabled={busy} onClick={(event) => { event.stopPropagation(); void deleteInspectionRegistration(row) }}><Trash2 size={17} /></button></td>}
         </tr>)}
-        {displayedSummary.length === 0 && <tr><td colSpan={readOnly ? 14 : 15} className="empty-state">該当する検査記録はありません</td></tr>}</tbody>
+        {displayedSummary.length === 0 && <tr><td colSpan={readOnly ? 15 : 16} className="empty-state">該当する検査記録はありません</td></tr>}</tbody>
       </table></div>}
       {notice && <div className={`notice operation-log ${notice.type}`}>{notice.text}</div>}
     </div>
