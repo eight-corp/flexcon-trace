@@ -409,7 +409,9 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
     .sort((left, right) => left.flexcon_no - right.flexcon_no)
   const selectedStandardFlexcons = selectedFlexcons.filter((item) => flexconRecordKind(item, weights) === 'standard')
   const selectedBulkFlexcons = selectedFlexcons.filter((item) => flexconRecordKind(item, weights) === 'bulk')
-  const standardCertificateFlexcons = selectedStandardFlexcons.filter((item) => item.quantity_kg === (isFeedRiceBrand(item.brand ?? '') ? weights.feed_rice : weights.branded_rice))
+  const standardCertificateFlexcons = selectedStandardFlexcons.filter((item) => (
+    isFeedRiceBrand(item.brand ?? '') || item.quantity_kg === weights.branded_rice
+  ))
   const selectedPaperBags = paperBags.filter((item) => item.authorization_id === selectedAuthorizationId && (readOnly || !selectedRegistrationId || item.registration_id === selectedRegistrationId))
   const selectedRegistration = registrations.find((item) => item.id === selectedRegistrationId) ?? null
   const certificateFlexconsFor = (kind: CertificateKind) => kind === 'bulk' ? selectedBulkFlexcons : standardCertificateFlexcons
