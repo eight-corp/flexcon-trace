@@ -35,7 +35,8 @@ type InspectionLedgerData = {
 
 const PAGE_WIDTH = 841.68
 const PAGE_HEIGHT = 595.2
-const CANVAS_SCALE = 2
+// 約288dpiで追記文字を描画し、印刷時の輪郭を滑らかに保つ。
+const CANVAS_SCALE = 4
 const ROWS_PER_PAGE = 12
 const FONT_FAMILY = '"Yu Mincho", "YuMincho", serif'
 const DATA_TOP = 192.48
@@ -120,7 +121,7 @@ export function aggregateInspectionLedgerRecords(records: InspectionLedgerRecord
   ))
 }
 
-function setFont(context: CanvasRenderingContext2D, size: number, weight = 500) {
+function setFont(context: CanvasRenderingContext2D, size: number, weight = 400) {
   context.font = `${weight} ${size}px ${FONT_FAMILY}`
 }
 
