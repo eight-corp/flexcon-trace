@@ -79,20 +79,20 @@ export function ManualShipmentItemsEditor({ kind, items, onChange, shipmentProdu
     <section className="manual-items-editor" aria-label={kind === 'paper_bag' ? '紙袋の明細' : '銘柄米以外の明細'}>
       <div className="manual-item-add paper">
         <label>産地
-          <select value={prefecture} onChange={(event) => { setPrefecture(event.target.value); setProductName(''); setError('') }} disabled={disabled}>
+          <select className={items.length === 0 && !prefecture ? 'shipment-required-missing' : ''} aria-invalid={items.length === 0 && !prefecture} value={prefecture} onChange={(event) => { setPrefecture(event.target.value); setProductName(''); setError('') }} disabled={disabled}>
             <option value="">選択</option>
             <option value="青森県">青森県</option>
             <option value="岩手県">岩手県</option>
           </select>
         </label>
         <label>{kind === 'paper_bag' ? '銘柄' : '種類'}
-          <select value={productName} onChange={(event) => { setProductName(event.target.value); setError('') }} disabled={disabled || !prefecture}>
+          <select className={items.length === 0 && !productName ? 'shipment-required-missing' : ''} aria-invalid={items.length === 0 && !productName} value={productName} onChange={(event) => { setProductName(event.target.value); setError('') }} disabled={disabled || !prefecture}>
             <option value="">{!prefecture ? '先に産地を選択' : '選択'}</option>
             {availableProducts.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}
           </select>
         </label>
         <label>{kind === 'paper_bag' ? '紙袋数' : 'フレコン本数'}
-          <input type="number" min="1" step="1" value={quantityCount} onChange={(event) => { setQuantityCount(event.target.value); setError('') }} disabled={disabled} />
+          <input className={items.length === 0 && (!Number.isInteger(Number(quantityCount)) || Number(quantityCount) < 1) ? 'shipment-required-missing' : ''} aria-invalid={items.length === 0 && (!Number.isInteger(Number(quantityCount)) || Number(quantityCount) < 1)} type="number" min="1" step="1" value={quantityCount} onChange={(event) => { setQuantityCount(event.target.value); setError('') }} disabled={disabled} />
         </label>
         <button className="secondary-button" type="button" onClick={addItem} disabled={disabled}><Plus size={18} />追加</button>
       </div>
@@ -104,18 +104,18 @@ export function ManualShipmentItemsEditor({ kind, items, onChange, shipmentProdu
           const hasCurrentProduct = productOptions.some((option) => option.name === item.productName)
           return (
             <div className="manual-item-row paper" key={item.key}>
-              <select aria-label="産地" value={item.originPrefecture} onChange={(event) => updateItem(item.key, { originPrefecture: event.target.value, productName: kind === 'paper_bag' ? '' : item.productName })} disabled={disabled}>
+              <select className={!item.originPrefecture ? 'shipment-required-missing' : ''} aria-invalid={!item.originPrefecture} aria-label="産地" value={item.originPrefecture} onChange={(event) => updateItem(item.key, { originPrefecture: event.target.value, productName: kind === 'paper_bag' ? '' : item.productName })} disabled={disabled}>
                 <option value="">選択</option>
                 <option value="青森県">青森県</option>
                 <option value="岩手県">岩手県</option>
               </select>
-              <select aria-label={kind === 'paper_bag' ? '銘柄' : '種類'} value={item.productName} onChange={(event) => updateItem(item.key, { productName: event.target.value })} disabled={disabled}>
+              <select className={!item.productName ? 'shipment-required-missing' : ''} aria-invalid={!item.productName} aria-label={kind === 'paper_bag' ? '銘柄' : '種類'} value={item.productName} onChange={(event) => updateItem(item.key, { productName: event.target.value })} disabled={disabled}>
                 {!hasCurrentProduct && item.productName && <option value={item.productName}>{item.productName}</option>}
                 <option value="">選択</option>
                 {productOptions.map((option) => <option key={option.id} value={option.name}>{option.name}{option.active ? '' : '（無効）'}</option>)}
               </select>
               <div className="manual-item-quantity">
-                <input aria-label={kind === 'paper_bag' ? '紙袋数' : 'フレコン本数'} type="number" min="1" step="1" value={item.quantityCount} onChange={(event) => updateItem(item.key, { quantityCount: event.target.value })} disabled={disabled} />
+                <input className={!Number.isInteger(Number(item.quantityCount)) || Number(item.quantityCount) < 1 ? 'shipment-required-missing' : ''} aria-invalid={!Number.isInteger(Number(item.quantityCount)) || Number(item.quantityCount) < 1} aria-label={kind === 'paper_bag' ? '紙袋数' : 'フレコン本数'} type="number" min="1" step="1" value={item.quantityCount} onChange={(event) => updateItem(item.key, { quantityCount: event.target.value })} disabled={disabled} />
                 <span>{kind === 'paper_bag' ? '袋' : '本'}</span>
               </div>
               <button className="icon-button delete-icon" type="button" title="明細を削除" aria-label={`${item.productName}を削除`} onClick={() => onChange(items.filter((current) => current.key !== item.key))} disabled={disabled}><Trash2 size={18} /></button>

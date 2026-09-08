@@ -505,21 +505,21 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
                 <span className="worker-summary-label"><UserRound size={18} />担当者</span>
                 <strong>{workerName}</strong>
               </div>
-              <label className="shipment-form-row"><span>出荷日時</span><input type="datetime-local" step={60} value={shippedAt} onChange={(e) => setShippedAt(e.target.value)} required /></label>
+              <label className="shipment-form-row"><span>出荷日時</span><input className={!shippedAt ? 'shipment-required-missing' : ''} aria-invalid={!shippedAt} type="datetime-local" step={60} value={shippedAt} onChange={(e) => setShippedAt(e.target.value)} required /></label>
               <label className="shipment-form-row"><span>納品先</span>
-                <select value={destinationId} onChange={(e) => setDestinationId(e.target.value)} required>
+                <select className={!destinationId ? 'shipment-required-missing' : ''} aria-invalid={!destinationId} value={destinationId} onChange={(e) => setDestinationId(e.target.value)} required>
                   <option value="">選択してください</option>
                   {destinations.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
                 </select>
               </label>
               <label className="shipment-form-row"><span>運送会社</span>
-                <select value={transportProfileId} onChange={(e) => setTransportProfileId(e.target.value)} required>
+                <select className={!transportProfileId ? 'shipment-required-missing' : ''} aria-invalid={!transportProfileId} value={transportProfileId} onChange={(e) => setTransportProfileId(e.target.value)} required>
                   <option value="">選択してください</option>
                   {transportProfiles.map((item) => <option key={item.id} value={item.id}>{item.company_name}</option>)}
                 </select>
               </label>
-              <label className="shipment-form-row"><span>ドライバー名</span><input value={driverName} onChange={(e) => setDriverName(e.target.value)} required /></label>
-              <label className="shipment-form-row"><span>車両番号</span><input value={vehicleNo} onChange={(e) => setVehicleNo(e.target.value)} required placeholder="例：岩手 100 あ 12-34" /></label>
+              <label className="shipment-form-row"><span>ドライバー名</span><input className={!driverName.trim() ? 'shipment-required-missing' : ''} aria-invalid={!driverName.trim()} value={driverName} onChange={(e) => setDriverName(e.target.value)} required /></label>
+              <label className="shipment-form-row"><span>車両番号</span><input className={!vehicleNo.trim() ? 'shipment-required-missing' : ''} aria-invalid={!vehicleNo.trim()} value={vehicleNo} onChange={(e) => setVehicleNo(e.target.value)} required placeholder="例：岩手 100 あ 12-34" /></label>
               <label className="shipment-form-row"><span>仕入値（任意・1俵当たり）</span><input type="number" min="0" step="0.01" inputMode="decimal" value={purchasePrice} onChange={(e) => setPurchasePrice(e.target.value)} /></label>
               <label className="shipment-form-row"><span>備考（任意）</span><textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="申し送りなど" /></label>
               <div className="modal-actions">
