@@ -143,6 +143,7 @@ function nextAuthorizationNo(items: AuthorizationRecord[]): string {
 
 export function AuthorizationManager({ workerId, onOpenInspections }: Props) {
   const [items, setItems] = useState<AuthorizationRecord[]>([])
+  const [inspectionTargetAuthorizationIds, setInspectionTargetAuthorizationIds] = useState<Set<string>>(new Set())
   const [search, setSearch] = useState('')
   const [notice, setNotice] = useState<Notice>(null)
   const [version, setVersion] = useState(0)
@@ -163,17 +164,31 @@ export function AuthorizationManager({ workerId, onOpenInspections }: Props) {
   }, [])
 
   useEffect(() => {
-    void supabase.from('flexcon_authorizations').select('*').order('authorization_no')
-      .then(({ data, error }) => {
-        if (error) setNotice({ type: 'error', text: error.message })
-        else {
-          const loadedItems = ((data ?? []) as AuthorizationRecord[]).sort((left, right) => (
-            AUTHORIZATION_NO_COLLATOR.compare(left.authorization_no, right.authorization_no)
-          ))
-          setItems(loadedItems)
-          setRowForm({ ...EMPTY_FORM, authorization_no: nextAuthorizationNo(loadedItems) })
-        }
-      })
+    void Promise.all([
+      supabase.from('flexcon_authorizations').select('*').order('authorization_no'),
+      supabase.from('flexcon_inspection_flexcons').select('authorization_id'),
+      supabase.from('flexcon_inspection_paper_bags').select('authorization_id'),
+    ]).then(([authorizationResult, flexconResult, paperBagResult]) => {
+      if (authorizationResult.error) {
+        setNotice({ type: 'error', text: authorizationResult.error.message })
+        return
+      }
+
+      const loadedItems = ((authorizationResult.data ?? []) as AuthorizationRecord[]).sort((left, right) => (
+        AUTHORIZATION_NO_COLLATOR.compare(left.authorization_no, right.authorization_no)
+      ))
+      setItems(loadedItems)
+      setRowForm({ ...EMPTY_FORM, authorization_no: nextAuthorizationNo(loadedItems) })
+
+      if (flexconResult.error || paperBagResult.error) {
+        setInspectionTargetAuthorizationIds(new Set())
+        return
+      }
+      setInspectionTargetAuthorizationIds(new Set([
+        ...(flexconResult.data ?? []).map((item) => item.authorization_id),
+        ...(paperBagResult.data ?? []).map((item) => item.authorization_id),
+      ]))
+    })
   }, [version])
 
   const filtered = useMemo(() => {
@@ -606,7 +621,7 @@ export function AuthorizationManager({ workerId, onOpenInspections }: Props) {
           </thead>
           <tbody>
             {filtered.map((record) => (
-              <tr className="authorization-data-row" key={record.id} onClick={(event) => scheduleOpenInspections(record, event)}>
+              <tr className={`authorization-data-row ${inspectionTargetAuthorizationIds.has(record.id) ? 'authorization-inspection-target' : ''}`} title={inspectionTargetAuthorizationIds.has(record.id) ? '検査対象の米穀あり' : undefined} key={record.id} onClick={(event) => scheduleOpenInspections(record, event)}>
                 {editableCell(record, 'authorization_no', 'authorization-no')}
                 {editableCell(record, 'full_name', 'authorization-name')}
                 <td className="flag-cell">

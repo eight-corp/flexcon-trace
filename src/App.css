@@ -221,6 +221,8 @@
 .authorization-table tbody td { height: 36px; }
 .authorization-table tbody tr:hover { background: var(--green-soft); }
 .authorization-table .authorization-data-row { cursor: pointer; }
+.authorization-table .authorization-data-row.authorization-inspection-target { background: #e8f3ff; }
+.authorization-table .authorization-data-row.authorization-inspection-target:hover { background: #dcecff; }
 .authorization-table tbody tr:last-child td { border-bottom: 0; }
 .authorization-table .authorization-no { font-family: Consolas, monospace; font-weight: 700; }
 .authorization-table .authorization-name { font-weight: 700; }
