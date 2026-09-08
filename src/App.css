@@ -381,7 +381,7 @@
 .inspection-summary-column-inspectedQuantity .shipment-column-sort,
 .inspection-summary-column-uninspectedQuantity .shipment-column-sort { justify-content: flex-end; text-align: right; }
 .inspection-summary-table tbody tr { cursor: pointer; }
-.inspection-summary-table tbody tr.inspection-summary-registration-start td { border-top: 3px solid #87948b; }
+.inspection-summary-table tbody tr.inspection-summary-registration-start td { border-top: 2px solid #87948b; }
 .inspection-summary-table tbody tr:hover, .inspection-summary-table tbody tr:focus { background: var(--green-soft); outline: none; }
 .inspection-summary-table th:last-child, .inspection-summary-table td:last-child { border-right: 0; }
 .inspection-summary-table th.inspection-summary-actions-heading { min-width: 54px; padding: 5px; text-align: center; }
