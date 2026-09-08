@@ -93,6 +93,18 @@
 .manual-shipment-actions { display: flex; justify-content: flex-start; gap: 10px; flex-wrap: wrap; margin-top: -2px; }
 .modal-backdrop { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 18px; background: rgba(17, 24, 19, .62); }
 .registration-modal { width: min(100%, 640px); max-height: calc(100vh - 36px); overflow-y: auto; background: #fff; border-radius: 8px; padding: 20px; box-shadow: 0 18px 50px rgba(0, 0, 0, .28); }
+.lot-confirmation-modal { width: min(100%, 520px); }
+.lot-confirmation-modal .modal-header p { margin: 3px 0 0; color: var(--muted); font-size: 13px; }
+.lot-confirmation-producer { margin: 12px 0; padding: 10px 12px; border-left: 4px solid var(--green); background: var(--green-soft); font-size: 21px; font-weight: 700; }
+.lot-confirmation-details { display: grid; grid-template-columns: 1fr 1fr; margin: 0; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.lot-confirmation-details > div { display: grid; grid-template-columns: 76px minmax(0, 1fr); min-height: 44px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.lot-confirmation-details > div:nth-child(2n) { border-right: 0; }
+.lot-confirmation-details > div:nth-last-child(-n + 2) { border-bottom: 0; }
+.lot-confirmation-details dt, .lot-confirmation-details dd { display: flex; align-items: center; margin: 0; padding: 7px 9px; }
+.lot-confirmation-details dt { background: #eef2ee; color: #4b5650; font-size: 12px; font-weight: 700; }
+.lot-confirmation-details dd { min-width: 0; overflow-wrap: anywhere; font-size: 15px; font-weight: 700; }
+.lot-confirmation-number { font-family: Consolas, monospace; font-size: 17px !important; white-space: nowrap; }
+.lot-confirmation-actions { margin-top: 16px; }
 .modal-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
 .modal-header h2 { margin: 0 0 3px; }
 .modal-header p { margin: 0; color: var(--muted); font-size: 13px; }
@@ -646,6 +658,11 @@ table thead th { text-align: center !important; }
   .manual-shipment-actions > * { flex: 1 1 160px; }
   .modal-backdrop { align-items: end; padding: 0; }
   .registration-modal { width: 100%; max-height: 94vh; border-radius: 8px 8px 0 0; padding: 18px 16px calc(18px + env(safe-area-inset-bottom)); }
+  .lot-confirmation-producer { font-size: 19px; }
+  .lot-confirmation-details { grid-template-columns: 1fr; }
+  .lot-confirmation-details > div { border-right: 0; }
+  .lot-confirmation-details > div:nth-last-child(2) { border-bottom: 1px solid var(--line); }
+  .lot-confirmation-actions { display: grid; grid-template-columns: 1fr; }
   .shipment-registration-summary { grid-template-columns: 1fr; gap: 9px; min-height: 0; }
   .shipment-form-row, .shipment-registration-form .worker-summary { grid-template-columns: 96px minmax(0, 1fr); gap: 8px; }
   .shipment-form-row > span:first-child { font-size: 13px; }

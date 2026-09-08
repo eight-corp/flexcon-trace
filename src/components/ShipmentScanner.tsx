@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
-import { Minus, Package, Plus, Send, Trash2, UserRound, Wheat, X } from 'lucide-react'
+import { Check, Minus, Package, Plus, Send, Trash2, UserRound, Wheat, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { formatPrefectureName } from '../lib/prefecture'
 import type { Destination, InspectionOption, TransportProfile } from '../types'
@@ -32,6 +32,14 @@ type InspectionLotDetails = {
   origin: string
   brand: string
   grade: string
+}
+
+type PendingLotConfirmation = {
+  lotNumber: string
+  flexconNo: number
+  producerName: string
+  detail: InspectionLotDetails
+  resumeScanner: boolean
 }
 
 function currentLocalDateTime() {
@@ -121,6 +129,7 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
   const [plannedCountInput, setPlannedCountInput] = useState(String(initialDraft.plannedCount))
   const [lots, setLots] = useState<string[]>(initialDraft.lots)
   const [scannerActive, setScannerActive] = useState(false)
+  const [pendingLot, setPendingLot] = useState<PendingLotConfirmation | null>(null)
   const [registrationOpen, setRegistrationOpen] = useState(false)
   const [manualShipmentKind, setManualShipmentKind] = useState<ManualShipmentKind | null>(null)
   const [manualItems, setManualItems] = useState<ManualShipmentItemDraft[]>([])
@@ -129,6 +138,7 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
   const [busy, setBusy] = useState(false)
   const lastRead = useRef({ value: '', time: 0 })
   const checkingLots = useRef(new Set<string>())
+  const awaitingLotConfirmation = useRef(false)
   const shipmentBrandCounts = Object.entries(lots.reduce<Record<string, number>>((counts, lot) => {
     const brand = inspectionLotDetails[lot]?.brand.trim() || '銘柄未登録'
     counts[brand] = (counts[brand] ?? 0) + 1
@@ -239,6 +249,7 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
 
   const addLot = useCallback(async (rawValue: string) => {
     const value = rawValue.trim()
+    if (awaitingLotConfirmation.current) return
     const now = Date.now()
     if (lastRead.current.value === value && now - lastRead.current.time < 1800) return
     lastRead.current = { value, time: now }
@@ -248,7 +259,14 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
       return
     }
 
+    if (lots.includes(value)) {
+      setNotice({ type: 'warning', text: `${value} は読み取り済みです。` })
+      return
+    }
+    if (lots.length >= plannedCount) return
+
     if (checkingLots.current.has(value)) return
+    awaitingLotConfirmation.current = true
     checkingLots.current.add(value)
 
     const { data: flexcon, error } = await supabase
@@ -260,11 +278,13 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
     checkingLots.current.delete(value)
 
     if (error) {
+      awaitingLotConfirmation.current = false
       setNotice({ type: 'error', text: `${value} の出荷状況を確認できませんでした。通信状態を確認して、もう一度読み取ってください。` })
       navigator.vibrate?.([180, 100, 180])
       return
     }
     if (flexcon?.status === 'shipped') {
+      awaitingLotConfirmation.current = false
       setNotice({ type: 'warning', text: `${value} は既に出荷済みです。一覧には追加しませんでした。` })
       navigator.vibrate?.([220, 100, 220])
       return
@@ -272,40 +292,60 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
 
     const inspectionDetail = inspectionLotDetails[value]
     if (!inspectionDetail) {
+      awaitingLotConfirmation.current = false
       setNotice({ type: 'warning', text: `${value} の検査記録を確認できません。一覧には追加しませんでした。` })
       navigator.vibrate?.([220, 100, 220])
       return
     }
     if (!inspectionDetail.grade) {
+      awaitingLotConfirmation.current = false
       setNotice({ type: 'warning', text: `${value} は検査記録の等級が未入力です。一覧には追加しませんでした。` })
       navigator.vibrate?.([220, 100, 220])
       return
     }
 
-    setLots((current) => {
-      if (current.length >= plannedCount) return current
-      if (current.includes(value)) {
-        setNotice({ type: 'warning', text: `${value} は読み取り済みです。` })
-        return current
-      }
-      const next = [...current, value]
-      setNotice({
-        type: 'success',
-        text: next.length >= plannedCount
-          ? `予定本数${plannedCount}本の読み取りが完了しました。「出荷情報を入力」をタップしてください。`
-          : `${value} を追加しました。`,
-      })
-      navigator.vibrate?.(80)
-      if (next.length >= plannedCount) {
-        window.setTimeout(() => {
-          setManualShipmentKind(null)
-          setScannerActive(false)
-          setRegistrationOpen(true)
-        }, 0)
-      }
-      return next
+    const producerName = lotProducerNames[value] ?? authorizationNames[authorizationNoFromLot(value)] ?? '委任状未登録'
+    setScannerActive(false)
+    setPendingLot({
+      lotNumber: value,
+      flexconNo: Number(value.slice(-3)),
+      producerName,
+      detail: inspectionDetail,
+      resumeScanner: scannerActive,
     })
-  }, [inspectionLotDetails, plannedCount])
+  }, [authorizationNames, inspectionLotDetails, lotProducerNames, lots, plannedCount, scannerActive])
+
+  const confirmPendingLot = () => {
+    if (!pendingLot) return
+    const nextCount = lots.length + 1
+    setLots((current) => [...current, pendingLot.lotNumber])
+    setNotice({
+      type: 'success',
+      text: nextCount >= plannedCount
+        ? `予定本数${plannedCount}本の読み取りが完了しました。`
+        : `${pendingLot.lotNumber} を追加しました。`,
+    })
+    navigator.vibrate?.(80)
+    const resumeScanner = pendingLot.resumeScanner
+    setPendingLot(null)
+    awaitingLotConfirmation.current = false
+    if (nextCount >= plannedCount) {
+      setManualShipmentKind(null)
+      setScannerActive(false)
+      setRegistrationOpen(true)
+    } else if (resumeScanner) {
+      setScannerActive(true)
+    }
+  }
+
+  const cancelPendingLot = () => {
+    if (!pendingLot) return
+    const resumeScanner = pendingLot.resumeScanner
+    setNotice({ type: 'warning', text: `${pendingLot.lotNumber} の読み取りを取り消しました。` })
+    setPendingLot(null)
+    awaitingLotConfirmation.current = false
+    if (resumeScanner) setScannerActive(true)
+  }
 
   const addManual = () => {
     addLot(manualLot)
@@ -506,6 +546,29 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
         <button className="secondary-button" type="button" onClick={() => openManualRegistration('paper_bag')}><Package size={18} />紙袋出荷</button>
         <button className="secondary-button" type="button" onClick={() => openManualRegistration('other_rice')}><Wheat size={18} />銘柄米以外の出荷</button>
       </div>
+
+      {pendingLot && (
+        <div className="modal-backdrop" role="presentation">
+          <section className="registration-modal lot-confirmation-modal" role="dialog" aria-modal="true" aria-labelledby="lot-confirmation-title">
+            <div className="modal-header">
+              <div><h2 id="lot-confirmation-title">読み取ったフレコンを確認</h2><p>内容を確認してから次のQRコードへ進みます。</p></div>
+            </div>
+            <div className="lot-confirmation-producer">{pendingLot.producerName}</div>
+            <dl className="lot-confirmation-details">
+              <div><dt>№</dt><dd>{pendingLot.flexconNo}</dd></div>
+              <div><dt>生産者</dt><dd>{pendingLot.producerName}</dd></div>
+              <div><dt>産地</dt><dd>{pendingLot.detail.origin}</dd></div>
+              <div><dt>銘柄</dt><dd>{pendingLot.detail.brand}</dd></div>
+              <div><dt>等級</dt><dd>{pendingLot.detail.grade}</dd></div>
+              <div><dt>ロット№</dt><dd className="lot-confirmation-number">{pendingLot.lotNumber}</dd></div>
+            </dl>
+            <div className="modal-actions lot-confirmation-actions">
+              <button className="primary-button" type="button" autoFocus onClick={confirmPendingLot}><Check size={19} />{lots.length + 1 >= plannedCount ? '確認して出荷情報へ' : '確認して次へ'}</button>
+              <button className="secondary-button" type="button" onClick={cancelPendingLot}>読み直す</button>
+            </div>
+          </section>
+        </div>
+      )}
 
       {registrationOpen && (
         <div className="modal-backdrop" role="presentation">
