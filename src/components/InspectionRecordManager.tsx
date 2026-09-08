@@ -318,7 +318,7 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
   const [busy, setBusy] = useState(false)
   const [certificateDialogOpen, setCertificateDialogOpen] = useState(false)
   const [certificateKind, setCertificateKind] = useState<CertificateKind>('standard')
-  const [certificateRange, setCertificateRange] = useState({ start: '', end: '' })
+  const [certificateRange, setCertificateRange] = useState({ start: '', count: '' })
   const [certificateBusy, setCertificateBusy] = useState(false)
   const [certificateError, setCertificateError] = useState('')
   const [generatedCertificate, setGeneratedCertificate] = useState<GeneratedCertificate | null>(null)
@@ -888,7 +888,7 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
     setCertificateKind(kind)
     setCertificateRange({
       start: String(candidates[0].flexcon_no),
-      end: String(candidates[candidates.length - 1].flexcon_no),
+      count: String(candidates.length),
     })
     setCertificateDialogOpen(true)
   }
@@ -901,26 +901,26 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
   }
   const certificateTargets = () => {
     const start = Number(certificateRange.start)
-    const end = Number(certificateRange.end)
-    if (!Number.isInteger(start) || !Number.isInteger(end)) return []
-    return certificateFlexconsFor(certificateKind).filter((item) => item.flexcon_no >= start && item.flexcon_no <= end)
+    const count = Number(certificateRange.count)
+    if (!Number.isInteger(start) || !Number.isInteger(count) || count <= 0) return []
+    return certificateFlexconsFor(certificateKind).filter((item) => item.flexcon_no >= start).slice(0, count)
   }
   const createCertificatePdf = async (event: React.FormEvent) => {
     event.preventDefault()
     if (!selectedAuthorization || certificateBusy) return
     const start = Number(certificateRange.start)
-    const end = Number(certificateRange.end)
-    if (!Number.isInteger(start) || !Number.isInteger(end) || start <= 0 || end <= 0) {
-      setCertificateError('開始№と終了№は1以上の整数で入力してください。')
-      return
-    }
-    if (start > end) {
-      setCertificateError('開始№は終了№以下にしてください。')
+    const count = Number(certificateRange.count)
+    if (!Number.isInteger(start) || !Number.isInteger(count) || start <= 0 || count <= 0) {
+      setCertificateError('開始№と枚数は1以上の整数で入力してください。')
       return
     }
     const targets = certificateTargets()
     if (targets.length === 0) {
-      setCertificateError('指定範囲に印刷できるフレコンがありません。')
+      setCertificateError('開始№以降に印刷できるフレコンがありません。')
+      return
+    }
+    if (targets.length < count) {
+      setCertificateError(`開始№以降の印刷対象は${targets.length}枚です。枚数を${targets.length}以下にしてください。`)
       return
     }
 
@@ -955,6 +955,7 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
       })
       if (generatedCertificate) URL.revokeObjectURL(generatedCertificate.url)
       const url = URL.createObjectURL(blob)
+      const end = targets[targets.length - 1].flexcon_no
       const fileName = `検査証明書_${certificateKind === 'bulk' ? 'バラ_' : ''}${selectedAuthorization.authorization_no}_${start}-${end}.pdf`
       setGeneratedCertificate({
         url,
@@ -1279,9 +1280,9 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
         <div className="certificate-range-fields">
           <label>開始№<input type="number" min="1" step="1" value={certificateRange.start} onChange={(event) => setCertificateRange((current) => ({ ...current, start: event.target.value }))} required autoFocus /></label>
           <span aria-hidden="true">から</span>
-          <label>終了№<input type="number" min="1" step="1" value={certificateRange.end} onChange={(event) => setCertificateRange((current) => ({ ...current, end: event.target.value }))} required /></label>
+          <label>枚数<input type="number" min="1" step="1" value={certificateRange.count} onChange={(event) => setCertificateRange((current) => ({ ...current, count: event.target.value }))} required /></label>
         </div>
-        <div className="certificate-range-summary">対象 {certificateTargets().length}本　印刷済み {certificateTargets().filter((item) => (item.certificate_print_count ?? 0) > 0).length}本{certificateKind === 'standard' && <><br />銘柄米は量目初期値 {weights.branded_rice.toLocaleString()}kg と一致するものだけが対象です。</>}</div>
+        <div className="certificate-range-summary">対象 {certificateTargets().length}本　印刷済み {certificateTargets().filter((item) => (item.certificate_print_count ?? 0) > 0).length}本</div>
         {certificateError && <div className="inline-error">{certificateError}</div>}
         <div className="modal-actions"><button className="primary-button" type="submit" disabled={certificateBusy}><FileText size={18} />{certificateBusy ? 'PDF作成中...' : 'PDFを作成'}</button><button className="secondary-button" type="button" onClick={closeCertificateDialog} disabled={certificateBusy}>取り消し</button></div>
       </form> : <div className="certificate-created-panel">
