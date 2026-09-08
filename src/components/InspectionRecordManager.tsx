@@ -258,7 +258,7 @@ function InspectionSummaryColumnHeader({
     return () => document.removeEventListener('pointerdown', closeOnOutsideClick)
   }, [])
 
-  return <th className="inspection-summary-column-heading">
+  return <th className={`inspection-summary-column-heading inspection-summary-column-${column.key}`}>
     <div className="shipment-column-heading">
       <button type="button" className="shipment-column-sort" onClick={() => onSort(column.key)}>
         <span>{column.label}</span>
@@ -1211,7 +1211,7 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
       {summaryView === 'list' && <div className="inspection-summary-wrap"><table className="inspection-summary-table">
         <thead><tr>{SUMMARY_COLUMNS.map((column) => <InspectionSummaryColumnHeader key={column.key} column={column} sort={summarySort} values={summaryFilterValues[column.key]} selectedValues={summaryColumnFilters[column.key]} onSort={changeSummarySort} onFilterChange={changeSummaryColumnFilter} />)}{!readOnly && <th className="inspection-summary-actions-heading">操作</th>}</tr></thead>
         <tbody>{displayedSummary.map((row) => <tr key={row.registrationId} tabIndex={0} onClick={() => { onSelectedRecordTargetChange(null); onSelectedRegistrationChange(row.registrationId); onSelectedAuthorizationChange(row.authorizationId) }} onKeyDown={(event) => { if (event.key === 'Enter' && event.target === event.currentTarget) { onSelectedRecordTargetChange(null); onSelectedRegistrationChange(row.registrationId); onSelectedAuthorizationChange(row.authorizationId) } }}>
-          <td>{row.registrationNo}</td><td>{row.purchaseDates}</td><td>{row.inspectionDates}</td><td><strong>{row.fullName}</strong></td><td>{row.origin}</td><td>{row.municipality}</td><td>{row.inspectionLocations}</td><td>{row.authorizationNo}</td><td>{row.brands}</td><td>{row.flexconCount}本</td><td>{row.paperBagCount}袋</td><td>{row.bulkQuantity.toLocaleString()}kg</td><td className="inspection-progress-inspected">{row.inspectedQuantity.toLocaleString()}kg</td><td className="inspection-progress-uninspected">{row.uninspectedQuantity.toLocaleString()}kg</td>
+          <td className="numeric-cell">{row.registrationNo}</td><td>{row.purchaseDates}</td><td>{row.inspectionDates}</td><td><strong>{row.fullName}</strong></td><td>{row.origin}</td><td>{row.municipality}</td><td>{row.inspectionLocations}</td><td className="numeric-cell">{row.authorizationNo}</td><td>{row.brands}</td><td className="numeric-cell">{row.flexconCount}本</td><td className="numeric-cell">{row.paperBagCount}袋</td><td className="numeric-cell">{row.bulkQuantity.toLocaleString()}kg</td><td className="inspection-progress-inspected numeric-cell">{row.inspectedQuantity.toLocaleString()}kg</td><td className="inspection-progress-uninspected numeric-cell">{row.uninspectedQuantity.toLocaleString()}kg</td>
           {!readOnly && <td className="inspection-summary-actions"><button className="icon-button delete-icon" type="button" title="この登録行を削除" aria-label={`登録No. ${row.registrationNo}を削除`} disabled={busy} onClick={(event) => { event.stopPropagation(); void deleteInspectionRegistration(row) }}><Trash2 size={17} /></button></td>}
         </tr>)}
         {displayedSummary.length === 0 && <tr><td colSpan={readOnly ? 14 : 15} className="empty-state">該当する検査記録はありません</td></tr>}</tbody>

@@ -142,7 +142,7 @@ function ShipmentColumnHeader({
   }, [])
 
   return (
-    <th>
+    <th className={`shipment-column-${column.key}`}>
       <div className="shipment-column-heading">
         <button type="button" className="shipment-column-sort" onClick={() => onSort(column.key)}>
           <span>{column.label}</span>
@@ -598,8 +598,8 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
                     <tr key={`${row.destination}-${row.productName}`}>
                       <td>{row.destination}</td>
                       <td>{row.productName}</td>
-                      <td>{row.flexconQuantity ? `${row.flexconQuantity}本` : ''}</td>
-                      <td>{row.paperBagQuantity ? `${row.paperBagQuantity}袋` : ''}</td>
+                      <td className="numeric-cell">{row.flexconQuantity ? `${row.flexconQuantity}本` : ''}</td>
+                      <td className="numeric-cell">{row.paperBagQuantity ? `${row.paperBagQuantity}袋` : ''}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -633,8 +633,8 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
                     <td>{row.destination}</td>
                     <td>{row.origin}</td>
                     <td>{row.productName}</td>
-                    <td>{row.flexconQuantityText}</td>
-                    <td>{row.paperBagQuantityText}</td>
+                    <td className="numeric-cell">{row.flexconQuantityText}</td>
+                    <td className="numeric-cell">{row.paperBagQuantityText}</td>
                     <td>{row.carrier}</td>
                     <td>{row.driver}</td>
                     <td>{row.vehicle}</td>
