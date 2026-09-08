@@ -196,7 +196,8 @@
 .shipment-table-actions { display: flex; align-items: center; justify-content: center; gap: 4px; }
 .shipment-table-actions .icon-button { width: 32px; height: 32px; }
 .shipment-column-heading { position: relative; min-height: 36px; display: grid; grid-template-columns: minmax(0, 1fr) 32px; align-items: stretch; }
-.shipment-column-sort { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 5px; padding: 5px 6px 5px 8px; border: 0; background: transparent; color: inherit; font-weight: 700; }
+.shipment-column-sort { position: relative; min-width: 0; display: flex; align-items: center; justify-content: center !important; gap: 5px; padding: 5px 6px 5px 8px; border: 0; background: transparent; color: inherit; font-weight: 700; text-align: center !important; }
+.shipment-column-sort > svg { position: absolute; right: 5px; }
 .shipment-column-sort:hover { background: #deebe2; }
 .shipment-column-filter { position: relative; }
 .shipment-column-filter > summary { height: 100%; display: grid; place-items: center; cursor: pointer; list-style: none; border-left: 1px solid #cfdbd2; color: #5e6c62; }
@@ -526,6 +527,8 @@
 .mixed-table tbody tr:not(:only-child) { cursor: pointer; }
 .mixed-table tbody tr:hover, .mixed-table tbody tr:focus { background: var(--green-soft); outline: none; }
 .mixed-table th:last-child, .mixed-table td:last-child { border-right: 0; }
+
+table thead th { text-align: center !important; }
 .mixed-list-actions { width: 50px; text-align: center !important; }
 .mixed-list-actions { width: 50px; text-align: center !important; }
 .mixed-add-modal { width: min(100%, 820px); }
