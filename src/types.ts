@@ -106,6 +106,7 @@ export type FlexconInspection = {
   inspection_date: string | null
   inspector_name: string | null
   inspection_location: string | null
+  record_kind: 'standard' | 'bulk'
   flexcon_no: number
   lot_number: string
   brand: string | null

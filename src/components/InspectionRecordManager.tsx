@@ -129,6 +129,11 @@ function isHighMoisture(value: string | number | null | undefined) {
 function isFeedRiceBrand(brand: string) {
   return brand.trim() === '飼料用玄米'
 }
+function flexconRecordKind(item: FlexconInspection, weights: Record<InspectionWeight['weight_type'], number>) {
+  if (item.record_kind === 'standard' || item.record_kind === 'bulk') return item.record_kind
+  const standardWeight = isFeedRiceBrand(item.brand ?? '') ? weights.feed_rice : weights.branded_rice
+  return item.quantity_kg === standardWeight ? 'standard' : 'bulk'
+}
 function isGradeAllowedForBrand(brand: string, grade: string) {
   if (!grade) return true
   return isFeedRiceBrand(brand) ? grade === '合格' : grade !== '合格'
@@ -302,9 +307,9 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
   const selectedFlexcons = flexcons
     .filter((item) => item.authorization_id === selectedAuthorizationId && (readOnly || !selectedRegistrationId || item.registration_id === selectedRegistrationId))
     .sort((left, right) => left.flexcon_no - right.flexcon_no)
-  const selectedStandardFlexcons = selectedFlexcons.filter((item) => item.quantity_kg === (isFeedRiceBrand(item.brand ?? '') ? weights.feed_rice : weights.branded_rice))
-  const selectedBulkFlexcons = selectedFlexcons.filter((item) => !selectedStandardFlexcons.includes(item))
-  const certificateEligibleFlexcons = selectedStandardFlexcons
+  const selectedStandardFlexcons = selectedFlexcons.filter((item) => flexconRecordKind(item, weights) === 'standard')
+  const selectedBulkFlexcons = selectedFlexcons.filter((item) => flexconRecordKind(item, weights) === 'bulk')
+  const certificateEligibleFlexcons = selectedStandardFlexcons.filter((item) => item.quantity_kg === (isFeedRiceBrand(item.brand ?? '') ? weights.feed_rice : weights.branded_rice))
   const selectedPaperBags = paperBags.filter((item) => item.authorization_id === selectedAuthorizationId && (readOnly || !selectedRegistrationId || item.registration_id === selectedRegistrationId))
   const selectedRegistration = registrations.find((item) => item.id === selectedRegistrationId) ?? null
 
@@ -329,11 +334,8 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
     const registeredPaperBags = paperBagsByRegistration.get(registration.id) ?? []
     const records: Array<FlexconInspection | PaperBagInspection> = [...registeredFlexcons, ...registeredPaperBags]
     if (records.length === 0) return null
-    const standardFlexcons = registeredFlexcons.filter((item) => {
-      const standardWeight = isFeedRiceBrand(item.brand ?? '') ? weights.feed_rice : weights.branded_rice
-      return item.quantity_kg === standardWeight
-    })
-    const bulkFlexcons = registeredFlexcons.filter((item) => !standardFlexcons.includes(item))
+    const standardFlexcons = registeredFlexcons.filter((item) => flexconRecordKind(item, weights) === 'standard')
+    const bulkFlexcons = registeredFlexcons.filter((item) => flexconRecordKind(item, weights) === 'bulk')
     const quantityFor = (item: FlexconInspection | PaperBagInspection) => (
       'quantity_kg' in item ? item.quantity_kg : item.bag_count * 30
     )
@@ -852,7 +854,7 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
       const records = [
         ...targetFlexcons.map((item) => {
           const standardWeightKg = isFeedRiceBrand(item.brand ?? '') ? weights.feed_rice : weights.branded_rice
-          const isBulk = item.quantity_kg !== standardWeightKg
+          const isBulk = flexconRecordKind(item, weights) === 'bulk'
           return {
             ...commonRecord(item),
             kind: 'flexcon' as const,

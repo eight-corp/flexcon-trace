@@ -24,7 +24,7 @@
 - 委任状一覧から開く生産者別フレコン・紙袋一覧の閲覧専用表示
 - 検査記録の登録行ごとに対象を絞った検査結果入力
 - 検査記録の一覧タブと検査数量の集計タブ
-- 編集画面で推フレ・紙袋・バラを分けた一覧表示と各検査結果の直接入力
+- 編集画面で推フレ・紙袋・バラを分けた一覧表示、推フレ・バラ別№、各検査結果の直接入力
 - 紙袋行の銘柄、数量、等級、水分、理由の直接入力と2行分割
 - 生産者ごとの検査数量集計
 - 産年・産地・銘柄別の検査済み数量・未検査数量集計
@@ -83,6 +83,7 @@ supabase/migrations/202609070005_mixed_dates_and_bulk_flexcon.sql
 supabase/migrations/202609070006_mixed_flexcon_shipping.sql
 supabase/migrations/202609070007_inspection_registration_summary.sql
 supabase/migrations/202609080001_retire_mixed_source_restriction.sql
+supabase/migrations/202609080002_separate_standard_bulk_numbers.sql
 ```
 
 `202609050001_certificate_print_status.sql` まで実行済みの場合は、`202609050003_year_prefixed_lot_numbers.sql` 以降を順番に実行してください。委任状一覧からは従来どおり生産者詳細を開き、検査記録の一覧は生産者詳細で追加した単位を登録No.順に表示します。年度、仕入日、検査日、検査場所、銘柄、数量、水分、等級、理由は各行で直接編集できます。紙袋は合計袋数を変えずに2行へ分割できます。検査証明書はExcelを起動せず、ブラウザ内でA5横の複数ページPDFとして作成します。新しいQRは西暦4桁＋委任状№4桁＋フレコン№3桁の11桁です。

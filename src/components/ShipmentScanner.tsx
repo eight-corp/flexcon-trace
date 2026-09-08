@@ -139,7 +139,7 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
       supabase.from('flexcon_destinations').select('*').eq('active', true).order('name'),
       supabase.from('flexcon_transport_profiles').select('*').eq('active', true).order('company_name'),
       supabase.from('flexcon_authorizations').select('id, authorization_no, full_name, prefecture'),
-      supabase.from('flexcon_inspection_flexcons').select('authorization_id, lot_number, brand'),
+      supabase.from('flexcon_inspection_flexcons').select('*'),
       supabase.from('flexcon_mixed_flexcons').select('mixed_no, lot_number, origin_prefecture, brand, flexcon_mixed_flexcon_members(sort_order, flexcon_authorizations(full_name))'),
       supabase.from('flexcon_inspection_options').select('*').in('option_type', ['shipment_product', 'brand_aomori', 'brand_iwate']).eq('active', true).order('sort_order').order('name'),
     ]).then(([destinationResult, transportResult, authorizationResult, flexconResult, mixedResult, productResult]) => {
@@ -162,6 +162,7 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
         const details: Record<string, InspectionLotDetails> = {}
         const authorizationById = Object.fromEntries((authorizationResult.data ?? []).map((record) => [record.id, record]))
         for (const flexcon of flexconResult.data ?? []) {
+          if (flexcon.record_kind === 'bulk') continue
           const authorization = authorizationById[flexcon.authorization_id]
           if (!authorization) continue
           const origin = formatPrefectureName(authorization.prefecture)
