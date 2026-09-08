@@ -48,6 +48,7 @@ type GeneratedCertificate = {
   count: number
   previouslyPrintedCount: number
 }
+type CertificateKind = 'standard' | 'bulk'
 type GradingNoticeFailure = {
   summary: string
   reasons: string[]
@@ -226,6 +227,7 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
   const [version, setVersion] = useState(0)
   const [busy, setBusy] = useState(false)
   const [certificateDialogOpen, setCertificateDialogOpen] = useState(false)
+  const [certificateKind, setCertificateKind] = useState<CertificateKind>('standard')
   const [certificateRange, setCertificateRange] = useState({ start: '', end: '' })
   const [certificateBusy, setCertificateBusy] = useState(false)
   const [certificateError, setCertificateError] = useState('')
@@ -309,9 +311,10 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
     .sort((left, right) => left.flexcon_no - right.flexcon_no)
   const selectedStandardFlexcons = selectedFlexcons.filter((item) => flexconRecordKind(item, weights) === 'standard')
   const selectedBulkFlexcons = selectedFlexcons.filter((item) => flexconRecordKind(item, weights) === 'bulk')
-  const certificateEligibleFlexcons = selectedStandardFlexcons.filter((item) => item.quantity_kg === (isFeedRiceBrand(item.brand ?? '') ? weights.feed_rice : weights.branded_rice))
+  const standardCertificateFlexcons = selectedStandardFlexcons.filter((item) => item.quantity_kg === (isFeedRiceBrand(item.brand ?? '') ? weights.feed_rice : weights.branded_rice))
   const selectedPaperBags = paperBags.filter((item) => item.authorization_id === selectedAuthorizationId && (readOnly || !selectedRegistrationId || item.registration_id === selectedRegistrationId))
   const selectedRegistration = registrations.find((item) => item.id === selectedRegistrationId) ?? null
+  const certificateFlexconsFor = (kind: CertificateKind) => kind === 'bulk' ? selectedBulkFlexcons : standardCertificateFlexcons
 
   const summaryRows = useMemo(() => {
     const authorizationById = new Map(authorizations.map((item) => [item.id, item]))
@@ -695,14 +698,16 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
     setNotice({ type: 'success', text: `紙袋${first + second}袋を${first}袋と${second}袋に分割しました。` })
     setVersion((value) => value + 1)
   }
-  const openCertificateDialog = () => {
-    if (certificateEligibleFlexcons.length === 0) return
+  const openCertificateDialog = (kind: CertificateKind) => {
+    const candidates = certificateFlexconsFor(kind)
+    if (candidates.length === 0) return
     if (generatedCertificate) URL.revokeObjectURL(generatedCertificate.url)
     setGeneratedCertificate(null)
     setCertificateError('')
+    setCertificateKind(kind)
     setCertificateRange({
-      start: String(certificateEligibleFlexcons[0].flexcon_no),
-      end: String(certificateEligibleFlexcons[certificateEligibleFlexcons.length - 1].flexcon_no),
+      start: String(candidates[0].flexcon_no),
+      end: String(candidates[candidates.length - 1].flexcon_no),
     })
     setCertificateDialogOpen(true)
   }
@@ -717,7 +722,7 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
     const start = Number(certificateRange.start)
     const end = Number(certificateRange.end)
     if (!Number.isInteger(start) || !Number.isInteger(end)) return []
-    return certificateEligibleFlexcons.filter((item) => item.flexcon_no >= start && item.flexcon_no <= end)
+    return certificateFlexconsFor(certificateKind).filter((item) => item.flexcon_no >= start && item.flexcon_no <= end)
   }
   const createCertificatePdf = async (event: React.FormEvent) => {
     event.preventDefault()
@@ -769,7 +774,7 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
       })
       if (generatedCertificate) URL.revokeObjectURL(generatedCertificate.url)
       const url = URL.createObjectURL(blob)
-      const fileName = `検査証明書_${selectedAuthorization.authorization_no}_${start}-${end}.pdf`
+      const fileName = `検査証明書_${certificateKind === 'bulk' ? 'バラ_' : ''}${selectedAuthorization.authorization_no}_${start}-${end}.pdf`
       setGeneratedCertificate({
         url,
         fileName,
@@ -1002,8 +1007,8 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
       </table></div>
     </details>
   }
-  const renderFlexconSection = (title: string, items: FlexconInspection[], showCertificate: boolean) => <section className="section-band inspection-detail-section">
-    <div className="section-title"><div><h2>{title}</h2><span>{items.length}本</span></div>{showCertificate && !readOnly && <div className="button-row"><span className="certificate-status-key"><span aria-hidden="true" />印刷済み</span><button className="secondary-button certificate-create-button" type="button" disabled={certificateEligibleFlexcons.length === 0} onClick={openCertificateDialog}><FileText size={18} />検査証明書作成</button></div>}</div>
+  const renderFlexconSection = (title: string, items: FlexconInspection[], certificateSectionKind: CertificateKind) => <section className="section-band inspection-detail-section">
+    <div className="section-title"><div><h2>{title}</h2><span>{items.length}本</span></div>{!readOnly && <div className="button-row"><span className="certificate-status-key"><span aria-hidden="true" />印刷済み</span><button className="secondary-button certificate-create-button" type="button" disabled={certificateFlexconsFor(certificateSectionKind).length === 0} onClick={() => openCertificateDialog(certificateSectionKind)}><FileText size={18} />検査証明書作成</button></div>}</div>
     <div className="inspection-detail-table-wrap"><table className="inspection-detail-table">
       <thead><tr><th>№</th><th>年度</th><th>仕入日</th><th>検査日</th><th>検査員</th><th>検査場所</th><th>産地</th><th>銘柄</th><th>数量（kg）</th><th>水分</th><th>等級</th><th>理由</th>{!readOnly && <th></th>}</tr></thead>
       <tbody>{items.map((item) => <tr id={`inspection-record-${item.id}`} className={[(item.certificate_print_count ?? 0) > 0 ? 'certificate-printed-row' : '', isInspectionResultComplete(item) ? 'inspection-complete-row' : '', selectedRecordTarget?.kind === 'flexcon' && selectedRecordTarget.id === item.id ? 'inspection-target-row' : ''].filter(Boolean).join(' ') || undefined} title={(item.certificate_print_count ?? 0) > 0 ? `印刷済み（${item.certificate_print_count}回）` : '未印刷'} key={item.id}><td>{item.flexcon_no}</td>{readOnly ? renderReadOnlyMetadataFields(item) : renderInlineMetadataFields('flexcon', item)}{readOnly ? renderReadOnlyProductFields(item) : renderInlineProductFields('flexcon', item)}{readOnly ? renderReadOnlyResultFields(item) : renderInlineResultFields('flexcon', item)}{!readOnly && <td className="inspection-row-actions"><button className="icon-button delete-icon" type="button" title="削除" aria-label={`№${item.flexcon_no}を削除`} onClick={() => void deleteFlexcon(item)}><Trash2 size={17} /></button></td>}</tr>)}
@@ -1077,7 +1082,7 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
         <button className="secondary-button" type="button" onClick={() => void createGradingNoticePdf()} disabled={gradingNoticeBusy || inspectionLedgerBusy}><FileText size={18} />{gradingNoticeBusy ? 'PDF作成中...' : '格付結果通知票'}</button>
       </div>}
     </div>
-    {renderFlexconSection('推フレ', selectedStandardFlexcons, true)}
+    {renderFlexconSection('推フレ', selectedStandardFlexcons, 'standard')}
     <section className="section-band inspection-detail-section">
       <div className="section-title"><div><h2>紙袋</h2><span>{selectedPaperBags.length}件</span></div></div>
       <div className="inspection-detail-table-wrap"><table className="inspection-detail-table paper-detail-table">
@@ -1086,16 +1091,16 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
         {selectedPaperBags.length === 0 && <tr><td colSpan={readOnly ? 12 : 13} className="empty-state">紙袋は登録されていません</td></tr>}</tbody>
       </table></div>
     </section>
-    {renderFlexconSection('バラ', selectedBulkFlexcons, false)}
+    {renderFlexconSection('バラ', selectedBulkFlexcons, 'bulk')}
     {!readOnly && certificateDialogOpen && <div className="modal-backdrop"><section className="registration-modal certificate-modal" role="dialog" aria-modal="true" aria-labelledby="certificate-dialog-title">
-      <div className="modal-header"><div><h2 id="certificate-dialog-title">検査証明書作成</h2><p>{selectedAuthorization.full_name}　委任状№ {selectedAuthorization.authorization_no}</p></div><button className="icon-button" type="button" title="閉じる" aria-label="閉じる" onClick={closeCertificateDialog} disabled={certificateBusy}><X size={20} /></button></div>
+      <div className="modal-header"><div><h2 id="certificate-dialog-title">検査証明書作成</h2><p>{certificateKind === 'bulk' ? 'バラ' : '推フレ'}　{selectedAuthorization.full_name}　委任状№ {selectedAuthorization.authorization_no}</p></div><button className="icon-button" type="button" title="閉じる" aria-label="閉じる" onClick={closeCertificateDialog} disabled={certificateBusy}><X size={20} /></button></div>
       {!generatedCertificate ? <form className="certificate-range-form" onSubmit={(event) => void createCertificatePdf(event)}>
         <div className="certificate-range-fields">
           <label>開始№<input type="number" min="1" step="1" value={certificateRange.start} onChange={(event) => setCertificateRange((current) => ({ ...current, start: event.target.value }))} required autoFocus /></label>
           <span aria-hidden="true">から</span>
           <label>終了№<input type="number" min="1" step="1" value={certificateRange.end} onChange={(event) => setCertificateRange((current) => ({ ...current, end: event.target.value }))} required /></label>
         </div>
-        <div className="certificate-range-summary">対象 {certificateTargets().length}本　印刷済み {certificateTargets().filter((item) => (item.certificate_print_count ?? 0) > 0).length}本<br />銘柄米は量目初期値 {weights.branded_rice.toLocaleString()}kg と一致するものだけが対象です。</div>
+        <div className="certificate-range-summary">対象 {certificateTargets().length}本　印刷済み {certificateTargets().filter((item) => (item.certificate_print_count ?? 0) > 0).length}本{certificateKind === 'standard' && <><br />銘柄米は量目初期値 {weights.branded_rice.toLocaleString()}kg と一致するものだけが対象です。</>}</div>
         {certificateError && <div className="inline-error">{certificateError}</div>}
         <div className="modal-actions"><button className="primary-button" type="submit" disabled={certificateBusy}><FileText size={18} />{certificateBusy ? 'PDF作成中...' : 'PDFを作成'}</button><button className="secondary-button" type="button" onClick={closeCertificateDialog} disabled={certificateBusy}>取り消し</button></div>
       </form> : <div className="certificate-created-panel">
