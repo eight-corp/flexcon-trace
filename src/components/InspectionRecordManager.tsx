@@ -23,7 +23,6 @@ type AddGroupForm = {
   fiscal_year: string
   purchase_date: string
   inspection_date: string
-  inspection_location: string
   brand: string
   flexcon_count: string
   paper_bag_count: string
@@ -140,7 +139,6 @@ function emptyAddGroupForm(): AddGroupForm {
     fiscal_year: String(currentFiscalYear()),
     purchase_date: today(),
     inspection_date: '',
-    inspection_location: '',
     brand: '',
     flexcon_count: '',
     paper_bag_count: '',
@@ -659,7 +657,7 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
       p_fiscal_year: Number(addGroupForm.fiscal_year),
       p_purchase_date: addGroupForm.purchase_date,
       p_inspection_date: addGroupForm.inspection_date || null,
-      p_inspection_location: addGroupForm.inspection_location.trim() || null,
+      p_inspection_location: null,
       p_brand: addGroupForm.brand,
       p_flexcon_count: flexconCount,
       p_paper_bag_count: paperBagCount,
@@ -1219,7 +1217,6 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
         <label>年度<input type="number" min="1" max="99" value={addGroupForm.fiscal_year} onChange={(event) => setAddGroupForm((current) => ({ ...current, fiscal_year: event.target.value }))} required /></label>
         <label>仕入日<input type="date" value={addGroupForm.purchase_date} onChange={(event) => setAddGroupForm((current) => ({ ...current, purchase_date: event.target.value }))} required /></label>
         <label>検査日<input type="date" value={addGroupForm.inspection_date} onChange={(event) => setAddGroupForm((current) => ({ ...current, inspection_date: event.target.value }))} /></label>
-        <label>検査場所<select value={addGroupForm.inspection_location} onChange={(event) => setAddGroupForm((current) => ({ ...current, inspection_location: event.target.value }))}><option value="">未選択</option>{locationOptions.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}</select></label>
         <label>産地<input value={formatPrefectureName(addAuthorization?.prefecture) || ''} readOnly aria-label="産地" /></label>
         <label>銘柄<select value={addGroupForm.brand} onChange={(event) => setAddGroupForm((current) => ({ ...current, brand: event.target.value }))} required disabled={!addAuthorization}><option value="">選択してください</option>{addBrandOptions.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}</select></label>
         <label>推フレ数<input type="number" min="0" max="999" value={addGroupForm.flexcon_count} onChange={(event) => setAddGroupForm((current) => ({ ...current, flexcon_count: event.target.value }))} placeholder="0" /></label>
