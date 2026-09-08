@@ -302,6 +302,7 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
   const [inspectionOptions, setInspectionOptions] = useState<InspectionOption[]>([])
   const [weights, setWeights] = useState<Record<InspectionWeight['weight_type'], number>>({ branded_rice: DEFAULT_BRANDED_RICE_WEIGHT, feed_rice: DEFAULT_FEED_RICE_WEIGHT })
   const [addGroupForm, setAddGroupForm] = useState<AddGroupForm>(emptyAddGroupForm)
+  const [addGroupFormOpen, setAddGroupFormOpen] = useState(false)
   const [producerPickerOpen, setProducerPickerOpen] = useState(false)
   const [detailDrafts, setDetailDrafts] = useState<Record<string, InlineDetailDraft>>({})
   const [splitPaper, setSplitPaper] = useState<PaperBagInspection | null>(null)
@@ -608,6 +609,9 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
     })
     setBusy(false)
     if (error) return setNotice({ type: 'error', text: error.message })
+    setAddGroupForm(emptyAddGroupForm())
+    setAddGroupFormOpen(false)
+    setProducerPickerOpen(false)
     const registrationNo = Number((data as { registration_no?: unknown } | null)?.registration_no)
     let registrationId: string | null = null
     if (Number.isFinite(registrationNo)) {
@@ -1141,11 +1145,11 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
       <div className="page-heading inspection-heading"><div><h1>検査記録</h1><p>生産者詳細で追加した順番に検査記録を表示します。</p></div></div>
       <div className="inspection-record-tabs inspection-summary-tabs" role="tablist" aria-label="検査記録の表示">
         <button type="button" role="tab" aria-selected={summaryView === 'list'} className={summaryView === 'list' ? 'active' : ''} onClick={() => setSummaryView('list')}><List size={18} />一覧</button>
-        <button type="button" role="tab" aria-selected={summaryView === 'aggregate'} className={summaryView === 'aggregate' ? 'active' : ''} onClick={() => { setProducerPickerOpen(false); setSummaryView('aggregate') }}><BarChart3 size={18} />集計</button>
+        <button type="button" role="tab" aria-selected={summaryView === 'aggregate'} className={summaryView === 'aggregate' ? 'active' : ''} onClick={() => { setProducerPickerOpen(false); setAddGroupFormOpen(false); setSummaryView('aggregate') }}><BarChart3 size={18} />集計</button>
       </div>
       {summaryView === 'list' && <>
-      <div className="search-row"><div className="search-input-wrap"><Search size={18} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="登録No.・氏名・産地・銘柄などで検索" /></div></div>
-      {!readOnly && <form className="inspection-group-add inspection-summary-add section-band" onSubmit={(event) => void addInspectionGroup(event)}>
+      <div className="search-row"><div className="search-input-wrap"><Search size={18} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="登録No.・氏名・産地・銘柄などで検索" /></div>{!readOnly && <button className={addGroupFormOpen ? 'secondary-button' : 'primary-button'} type="button" aria-expanded={addGroupFormOpen} onClick={() => { setProducerPickerOpen(false); setAddGroupFormOpen((current) => !current) }}>{addGroupFormOpen ? <><X size={18} />閉じる</> : <><Plus size={18} />追加</>}</button>}</div>
+      {!readOnly && addGroupFormOpen && <form className="inspection-group-add inspection-summary-add section-band" onSubmit={(event) => void addInspectionGroup(event)}>
         <div className="inspection-producer-picker" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setProducerPickerOpen(false) }}>
           <label>生産者名<input value={addGroupForm.producer_name} onFocus={() => setProducerPickerOpen(true)} onChange={(event) => { const producerName = event.target.value; const exactMatches = authorizations.filter((item) => item.full_name.trim() === producerName.trim()); setAddGroupForm((current) => ({ ...current, authorization_id: exactMatches.length === 1 ? exactMatches[0].id : '', producer_name: producerName, brand: '' })); setProducerPickerOpen(true) }} placeholder="氏名・委任状No.で絞り込み" autoComplete="off" role="combobox" aria-expanded={producerPickerOpen} aria-controls="inspection-producer-candidates" required /></label>
           {producerPickerOpen && <div id="inspection-producer-candidates" className="inspection-producer-candidates" role="listbox">
