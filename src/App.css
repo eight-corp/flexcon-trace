@@ -35,7 +35,7 @@
 .full-width { width: 100%; }
 .button-row { display: flex; gap: 8px; flex-wrap: wrap; }
 .bottom-nav {
-  position: fixed; left: 0; right: 0; bottom: 0; height: 66px; z-index: 30; display: grid; grid-template-columns: repeat(5, 1fr);
+  position: fixed; left: 0; right: 0; bottom: 0; height: 66px; z-index: 30; display: grid; grid-template-columns: repeat(var(--nav-count, 5), 1fr);
   background: #fff; border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom);
 }
 .bottom-nav button { border: 0; background: transparent; color: #707b73; display: grid; place-content: center; justify-items: center; gap: 2px; font-size: 11px; }
@@ -621,7 +621,7 @@ table thead th { text-align: center !important; }
 @media (min-width: 760px) {
   .app-shell { padding-bottom: 0; padding-left: 188px; }
   .app-header { margin-left: -188px; padding-left: 20px; }
-  .bottom-nav { top: 64px; bottom: 0; right: auto; width: 188px; height: auto; grid-template-columns: 1fr; grid-template-rows: repeat(5, 58px) 1fr; border-top: 0; border-right: 1px solid var(--line); padding: 14px 10px; gap: 6px; }
+  .bottom-nav { top: 64px; bottom: 0; right: auto; width: 188px; height: auto; grid-template-columns: 1fr; grid-template-rows: repeat(var(--nav-count, 5), 58px) 1fr; border-top: 0; border-right: 1px solid var(--line); padding: 14px 10px; gap: 6px; }
   .bottom-nav button { display: flex; justify-content: flex-start; align-items: center; place-content: initial; gap: 10px; padding: 0 14px; border-radius: 6px; font-size: 13px; }
   .app-main { padding: 20px 22px 34px; }
   .app-main.app-main-wide { width: 100%; max-width: none; height: calc(100vh - 64px); padding-bottom: 20px; overflow: hidden; }

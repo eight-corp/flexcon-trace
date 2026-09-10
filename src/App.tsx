@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type CSSProperties } from 'react'
 import { ClipboardList, FileSignature, History, House, LogOut, ScanLine, Settings2, Wheat } from 'lucide-react'
 import { AuthorizationManager } from './components/AuthorizationManager'
 import { InspectionRecordManager, type InspectionRecordTarget } from './components/InspectionRecordManager'
@@ -60,6 +60,7 @@ function App() {
   const canOperate = worker.role !== 'viewer'
   const isAdmin = worker.role === 'admin'
   const roleName = isAdmin ? '管理者' : canOperate ? '作業者' : '閲覧者'
+  const navStyle = { '--nav-count': isAdmin ? 5 : canOperate ? 4 : 1 } as CSSProperties
 
   return (
     <div className="app-shell">
@@ -130,7 +131,7 @@ function App() {
         {tab === 'master' && isAdmin && <InspectionOptionManager workerId={worker.worker_id} />}
       </main>
 
-      <nav className="bottom-nav" aria-label="メインメニュー" style={{ gridTemplateColumns: `repeat(${isAdmin ? 5 : canOperate ? 4 : 1}, 1fr)` }}>
+      <nav className="bottom-nav" aria-label="メインメニュー" style={navStyle}>
         {canOperate && <button className={tab === 'scan' ? 'active' : ''} onClick={() => setTab('scan')}>
           <ScanLine size={22} /><span>出荷作業</span>
         </button>}
