@@ -72,8 +72,9 @@ function App() {
           </div>
         </div>
         <div className="header-actions">
-          <button className="icon-button" type="button" title="業務管理メニューへ" aria-label="業務管理メニューへ" onClick={returnToMenu}>
+          <button className="menu-button" type="button" title="業務管理メニューへ" aria-label="業務管理メニューへ" onClick={returnToMenu}>
             <House size={20} />
+            <span>メニュー</span>
           </button>
           <button className="icon-button" type="button" title="ログアウト" aria-label="ログアウト" onClick={() => void logout()}>
             <LogOut size={20} />
