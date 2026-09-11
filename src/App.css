@@ -699,7 +699,16 @@ table thead th { text-align: center !important; }
 }
 
 @media (max-width: 760px) {
-  .inventory-entry-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .inventory-entry-form { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .inventory-entry-form .inventory-field-date,
+  .inventory-entry-form .inventory-field-worker,
+  .inventory-entry-form .inventory-field-quantity,
+  .inventory-entry-form .inventory-field-unit,
+  .inventory-entry-form .inventory-field-from,
+  .inventory-entry-form .inventory-field-to { grid-column: span 3; }
+  .inventory-entry-form .inventory-field-origin,
+  .inventory-entry-form .inventory-field-product,
+  .inventory-entry-form .inventory-field-grade { grid-column: span 2; }
   .inventory-entry-form .primary-button { grid-column: 1 / -1; width: 100%; }
   .inventory-balance-table { width: var(--inventory-balance-mobile-width); min-width: var(--inventory-balance-mobile-width); table-layout: fixed; }
   .inventory-balance-table .inventory-balance-warehouse-col { width: 112px; }

@@ -53,6 +53,13 @@ function formatQuantity(value: number) {
   return Number(value).toLocaleString('ja-JP', { maximumFractionDigits: 3 })
 }
 
+function weekdayLabel(value: string) {
+  const parts = value.split('-').map(Number)
+  if (parts.length !== 3 || parts.some((part) => !Number.isInteger(part))) return ''
+  const weekday = ['日', '月', '火', '水', '木', '金', '土'][new Date(parts[0], parts[1] - 1, parts[2]).getDay()]
+  return `（${weekday}）`
+}
+
 function modeForMovement(movement: InventoryMovement): MovementMode {
   if (!movement.from_warehouse_id) return 'inbound'
   if (!movement.to_warehouse_id) return 'outbound'
@@ -361,15 +368,15 @@ export function InventoryManager({ workerId, workerName, canOperate }: Props) {
     const otherProduct = otherProductNames.has(target.productName)
     const selectableToWarehouses = editing ? warehouses.filter((warehouse) => warehouse.active || warehouse.id === target.toWarehouseId) : activeWarehouses
     return <>
-      <label>日付<input type="date" value={target.movementDate} onChange={(e) => setTarget((current) => ({ ...current, movementDate: e.target.value }))} required /></label>
-      <label>作業者<input value={editing?.worker_name ?? workerName} readOnly /></label>
-      <label>産地<select value={target.origin} onChange={(e) => setTarget((current) => ({ ...current, origin: e.target.value, productName: '', grade: '' }))} required><option value="">選択</option>{originOptions.map((origin) => <option key={origin.id} value={origin.name}>{origin.name}</option>)}</select></label>
-      <label>名称<select value={target.productName} onChange={(e) => setTarget((current) => ({ ...current, productName: e.target.value, grade: '' }))} disabled={!target.origin} required><option value="">{target.origin ? '選択' : '先に産地を選択'}</option>{productNames.map((product) => <option key={product} value={product}>{product}</option>)}</select></label>
-      <label>等級<select value={otherProduct ? '' : target.grade} onChange={(e) => setTarget((current) => ({ ...current, grade: e.target.value }))} disabled={!target.productName || otherProduct} required={!otherProduct}><option value="">{otherProduct ? '対象外' : target.productName ? '選択' : '先に名称を選択'}</option>{grades.map((grade) => <option key={grade.id} value={grade.name}>{grade.name}</option>)}</select></label>
-      <label>量<input type="number" min="0.001" step="0.001" inputMode="decimal" value={target.quantity} onChange={(e) => setTarget((current) => ({ ...current, quantity: e.target.value }))} required /></label>
-      <label>単位<select value={target.unit} onChange={(e) => setTarget((current) => ({ ...current, unit: e.target.value }))} required><option value="本">本</option><option value="袋">袋</option><option value="kg">kg</option></select></label>
-      <label>移動元{mode === 'inbound' ? <input value="外部" readOnly /> : <select value={target.fromWarehouseId} onChange={(e) => setTarget((current) => ({ ...current, fromWarehouseId: e.target.value }))} required><option value="">未選択</option>{warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}{warehouse.active ? '' : '（無効）'}</option>)}</select>}</label>
-      <label>移動先{mode === 'outbound' ? <input value="外部" readOnly /> : <select value={target.toWarehouseId} onChange={(e) => setTarget((current) => ({ ...current, toWarehouseId: e.target.value }))} required><option value="">未選択</option>{selectableToWarehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}{warehouse.active ? '' : '（無効）'}</option>)}</select>}</label>
+      <label className="inventory-field-date">日付{weekdayLabel(target.movementDate)}<input type="date" value={target.movementDate} onChange={(e) => setTarget((current) => ({ ...current, movementDate: e.target.value }))} required /></label>
+      <label className="inventory-field-worker">作業者<input value={editing?.worker_name ?? workerName} readOnly /></label>
+      <label className="inventory-field-origin">産地<select value={target.origin} onChange={(e) => setTarget((current) => ({ ...current, origin: e.target.value, productName: '', grade: '' }))} required><option value="">選択</option>{originOptions.map((origin) => <option key={origin.id} value={origin.name}>{origin.name}</option>)}</select></label>
+      <label className="inventory-field-product">名称<select value={target.productName} onChange={(e) => setTarget((current) => ({ ...current, productName: e.target.value, grade: '' }))} disabled={!target.origin} required><option value="">{target.origin ? '選択' : '先に産地を選択'}</option>{productNames.map((product) => <option key={product} value={product}>{product}</option>)}</select></label>
+      <label className="inventory-field-grade">等級<select value={otherProduct ? '' : target.grade} onChange={(e) => setTarget((current) => ({ ...current, grade: e.target.value }))} disabled={!target.productName || otherProduct} required={!otherProduct}><option value="">{otherProduct ? '対象外' : target.productName ? '選択' : '先に名称を選択'}</option>{grades.map((grade) => <option key={grade.id} value={grade.name}>{grade.name}</option>)}</select></label>
+      <label className="inventory-field-quantity">数量<input type="number" min="0.001" step="0.001" inputMode="decimal" value={target.quantity} onChange={(e) => setTarget((current) => ({ ...current, quantity: e.target.value }))} required /></label>
+      <label className="inventory-field-unit">単位<select value={target.unit} onChange={(e) => setTarget((current) => ({ ...current, unit: e.target.value }))} required><option value="本">本</option><option value="袋">袋</option><option value="kg">kg</option></select></label>
+      <label className="inventory-field-from">移動元{mode === 'inbound' ? <input value="外部" readOnly /> : <select value={target.fromWarehouseId} onChange={(e) => setTarget((current) => ({ ...current, fromWarehouseId: e.target.value }))} required><option value="">未選択</option>{warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}{warehouse.active ? '' : '（無効）'}</option>)}</select>}</label>
+      <label className="inventory-field-to">移動先{mode === 'outbound' ? <input value="外部" readOnly /> : <select value={target.toWarehouseId} onChange={(e) => setTarget((current) => ({ ...current, toWarehouseId: e.target.value }))} required><option value="">未選択</option>{selectableToWarehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}{warehouse.active ? '' : '（無効）'}</option>)}</select>}</label>
     </>
   }
 
