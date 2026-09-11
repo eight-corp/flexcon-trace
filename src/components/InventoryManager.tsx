@@ -7,7 +7,7 @@ type Props = { workerId: string; workerName: string; canOperate: boolean }
 type MovementMode = 'inbound' | 'outbound' | 'transfer'
 type ViewMode = 'history' | 'balance'
 type SortDirection = 'asc' | 'desc'
-type InventoryColumn = 'movementDate' | 'workerName' | 'origin' | 'productName' | 'grade' | 'quantity' | 'unit' | 'movementFrom' | 'movementTo'
+type InventoryColumn = 'movementDate' | 'movementType' | 'workerName' | 'origin' | 'productName' | 'grade' | 'quantity' | 'unit' | 'movementFrom' | 'movementTo'
 type InventoryMovement = {
   id: string
   movement_date: string
@@ -28,6 +28,7 @@ type MovementForm = { movementDate: string; origin: string; productName: string;
 
 const INVENTORY_COLUMNS: Array<{ key: InventoryColumn; label: string }> = [
   { key: 'movementDate', label: '日付' },
+  { key: 'movementType', label: '区分' },
   { key: 'workerName', label: '作業者名' },
   { key: 'origin', label: '産地' },
   { key: 'productName', label: '名称' },
@@ -58,8 +59,14 @@ function modeForMovement(movement: InventoryMovement): MovementMode {
   return 'transfer'
 }
 
+function movementTypeLabel(movement: InventoryMovement) {
+  const mode = modeForMovement(movement)
+  return mode === 'inbound' ? '入庫' : mode === 'outbound' ? '出庫' : '倉庫間移動'
+}
+
 function movementValue(movement: InventoryMovement, key: InventoryColumn) {
   if (key === 'movementDate') return movement.movement_date.replaceAll('-', '/')
+  if (key === 'movementType') return movementTypeLabel(movement)
   if (key === 'workerName') return movement.worker_name
   if (key === 'productName') return movement.product_name
   if (key === 'quantity') return formatQuantity(movement.quantity)
@@ -344,7 +351,7 @@ export function InventoryManager({ workerId, workerName, canOperate }: Props) {
       <div className="search-row inventory-search-row"><div className="search-input-wrap"><Search size={18} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="入出庫記録を検索" /></div></div>
       <div className="inventory-table-wrap"><table className="inventory-table inventory-history-table">
         <thead><tr>{INVENTORY_COLUMNS.map((column) => <InventoryColumnHeader key={column.key} column={column} sort={sort} values={filterValues[column.key]} selectedValues={columnFilters[column.key]} onSort={changeSort} onFilterChange={changeColumnFilter} />)}{canOperate && <th className="inventory-actions-heading">編集</th>}</tr></thead>
-        <tbody>{displayedMovements.map((movement) => <tr key={movement.id}><td>{movementValue(movement, 'movementDate')}</td><td>{movement.worker_name}</td><td>{movement.origin}</td><td>{movement.product_name}</td><td>{movementValue(movement, 'grade')}</td><td className="numeric-cell">{formatQuantity(movement.quantity)}</td><td>{movement.unit}</td><td>{movement.movement_from}</td><td>{movement.movement_to}</td>{canOperate && <td className="inventory-actions-cell"><button className="icon-button" type="button" title="入出庫記録を編集" aria-label="入出庫記録を編集" onClick={() => beginEdit(movement)}><Pencil size={17} /></button></td>}</tr>)}{displayedMovements.length === 0 && <tr><td className="empty-state" colSpan={canOperate ? 10 : 9}>該当する入出庫記録はありません</td></tr>}</tbody>
+        <tbody>{displayedMovements.map((movement) => { const mode = modeForMovement(movement); return <tr className={`inventory-movement-${mode}`} key={movement.id}><td>{movementValue(movement, 'movementDate')}</td><td><span className={`inventory-movement-badge ${mode}`}>{mode === 'inbound' ? <ArrowDownToLine size={14} /> : mode === 'outbound' ? <ArrowUpFromLine size={14} /> : <ArrowRightLeft size={14} />}{movementTypeLabel(movement)}</span></td><td>{movement.worker_name}</td><td>{movement.origin}</td><td>{movement.product_name}</td><td>{movementValue(movement, 'grade')}</td><td className="numeric-cell">{formatQuantity(movement.quantity)}</td><td>{movement.unit}</td><td>{movement.movement_from}</td><td>{movement.movement_to}</td>{canOperate && <td className="inventory-actions-cell"><button className="icon-button" type="button" title="入出庫記録を編集" aria-label="入出庫記録を編集" onClick={() => beginEdit(movement)}><Pencil size={17} /></button></td>}</tr> })}{displayedMovements.length === 0 && <tr><td className="empty-state" colSpan={canOperate ? 11 : 10}>該当する入出庫記録はありません</td></tr>}</tbody>
       </table></div>
     </> : <div className="inventory-table-wrap"><table className="inventory-table inventory-balance-table"><thead><tr><th>倉庫</th><th>産地</th><th>名称</th><th>単位</th>{balanceGradeColumns.map((grade) => <th className="inventory-balance-grade" key={grade}>{grade}</th>)}</tr></thead><tbody>{balanceRows.length > 0 && <tr className="inventory-balance-total"><td><span className="warehouse-name"><Warehouse size={17} />全倉庫合計</span></td><td>全産地</td><td>全名称</td><td>単位別</td>{balanceGradeColumns.map((grade) => { const totals = balanceTotals[grade] ?? {}; const values = ['本', '袋', 'kg'].filter((unit) => totals[unit]).map((unit) => `${formatQuantity(totals[unit])}${unit}`); const negative = Object.values(totals).some((quantity) => quantity < 0); return <td className={`numeric-cell inventory-balance-grade ${negative ? 'inventory-negative' : ''}`} key={grade}>{values.join(' / ')}</td> })}</tr>}{balanceRows.map((row) => <tr key={`${row.warehouseId}-${row.origin}-${row.productName}-${row.unit}`}><td><span className="warehouse-name"><Warehouse size={17} />{row.warehouseName}</span></td><td>{row.origin}</td><td>{row.productName}</td><td>{row.unit}</td>{balanceGradeColumns.map((grade) => { const quantity = row.quantities[grade] ?? 0; return <td className={`numeric-cell inventory-balance-grade ${quantity < 0 ? 'inventory-negative' : ''}`} key={grade}>{quantity === 0 ? '' : formatQuantity(quantity)}</td> })}</tr>)}{balanceRows.length === 0 && <tr><td className="empty-state" colSpan={4 + balanceGradeColumns.length}>倉庫在庫はありません</td></tr>}</tbody></table></div>}
     {editing && <div className="modal-backdrop" role="presentation"><section className="registration-modal inventory-edit-modal" role="dialog" aria-modal="true" aria-labelledby="inventory-edit-title">

@@ -163,9 +163,20 @@
 .inventory-table tbody tr:last-child td { border-bottom: 0; }
 .inventory-table tbody tr:hover { background: var(--green-soft); }
 .inventory-history-table th:nth-child(1), .inventory-history-table td:nth-child(1) { width: 104px; white-space: nowrap; }
-.inventory-history-table th:nth-child(2), .inventory-history-table td:nth-child(2) { width: 130px; }
-.inventory-history-table th:nth-child(5), .inventory-history-table td:nth-child(5) { width: 100px; }
-.inventory-history-table th:nth-child(6), .inventory-history-table td:nth-child(6) { width: 70px; text-align: center; }
+.inventory-history-table th:nth-child(2), .inventory-history-table td:nth-child(2) { width: 112px; }
+.inventory-history-table th:nth-child(3), .inventory-history-table td:nth-child(3) { width: 130px; }
+.inventory-history-table th:nth-child(6), .inventory-history-table td:nth-child(6) { width: 100px; }
+.inventory-history-table th:nth-child(7), .inventory-history-table td:nth-child(7) { width: 70px; text-align: right; }
+.inventory-history-table .inventory-movement-inbound { background: #edf8f0; }
+.inventory-history-table .inventory-movement-outbound { background: #fff1ed; }
+.inventory-history-table .inventory-movement-transfer { background: #edf4fb; }
+.inventory-history-table .inventory-movement-inbound:hover { background: #e0f1e5; }
+.inventory-history-table .inventory-movement-outbound:hover { background: #fbe3dc; }
+.inventory-history-table .inventory-movement-transfer:hover { background: #dfeaf6; }
+.inventory-movement-badge { min-width: 82px; display: inline-flex; align-items: center; justify-content: center; gap: 4px; padding: 3px 6px; border: 1px solid; border-radius: 4px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.inventory-movement-badge.inbound { border-color: #83ac8d; background: #fff; color: #236139; }
+.inventory-movement-badge.outbound { border-color: #d69a87; background: #fff; color: #9b3d24; }
+.inventory-movement-badge.transfer { border-color: #91aac5; background: #fff; color: #315f8d; }
 .inventory-balance-table { min-width: 650px; }
 .inventory-balance-table th:nth-child(4), .inventory-balance-table td:nth-child(4) { width: 64px; text-align: center; }
 .inventory-balance-table .inventory-balance-grade { width: 82px; min-width: 82px; }
