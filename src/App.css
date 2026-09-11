@@ -167,8 +167,9 @@
 .inventory-history-table th:nth-child(5), .inventory-history-table td:nth-child(5) { width: 100px; }
 .inventory-history-table th:nth-child(6), .inventory-history-table td:nth-child(6) { width: 70px; text-align: center; }
 .inventory-balance-table { min-width: 650px; }
-.inventory-balance-table th:nth-child(4), .inventory-balance-table td:nth-child(4) { width: 120px; }
-.inventory-balance-table th:nth-child(5), .inventory-balance-table td:nth-child(5) { width: 80px; text-align: center; }
+.inventory-balance-table th:nth-child(4), .inventory-balance-table td:nth-child(4) { width: 64px; text-align: center; }
+.inventory-balance-table .inventory-balance-grade { width: 82px; min-width: 82px; }
+.inventory-balance-table td.inventory-balance-grade { text-align: right; }
 .warehouse-name { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; }
 .inventory-negative { color: var(--red); font-weight: 700; }
 .worker-summary-label { display: flex; align-items: center; gap: 7px; color: var(--green-dark) !important; }

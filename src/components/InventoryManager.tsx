@@ -23,6 +23,7 @@ type InventoryMovement = {
   movement_to: string
 }
 type InventoryBalance = { warehouse_id: string; warehouse_name: string; origin: string; product_name: string; grade: string; quantity: number; unit: string }
+type InventoryBalanceRow = { warehouseId: string; warehouseName: string; origin: string; productName: string; unit: string; quantities: Record<string, number> }
 type MovementForm = { movementDate: string; origin: string; productName: string; grade: string; quantity: string; unit: string; fromWarehouseId: string; toWarehouseId: string }
 
 const INVENTORY_COLUMNS: Array<{ key: InventoryColumn; label: string }> = [
@@ -177,6 +178,32 @@ export function InventoryManager({ workerId, workerName, canOperate }: Props) {
   const addGrades = gradesFor(form.productName)
   const editProductNames = productNamesFor(editForm.origin)
   const editGrades = gradesFor(editForm.productName)
+  const balanceGradeColumns = useMemo(() => [...new Set([
+    ...productOptions.filter((item) => item.option_type === 'grade').map((item) => item.name),
+    ...balances.map((item) => item.grade || '対象外'),
+    '対象外',
+  ])], [balances, productOptions])
+  const balanceRows = useMemo(() => {
+    const grouped = new Map<string, InventoryBalanceRow>()
+    balances.forEach((balance) => {
+      const key = `${balance.warehouse_id}\u001f${balance.origin}\u001f${balance.product_name}\u001f${balance.unit}`
+      const row = grouped.get(key) ?? {
+        warehouseId: balance.warehouse_id,
+        warehouseName: balance.warehouse_name,
+        origin: balance.origin,
+        productName: balance.product_name,
+        unit: balance.unit,
+        quantities: {},
+      }
+      const grade = balance.grade || '対象外'
+      row.quantities[grade] = (row.quantities[grade] ?? 0) + Number(balance.quantity)
+      grouped.set(key, row)
+    })
+    return [...grouped.values()].sort((left, right) => left.warehouseName.localeCompare(right.warehouseName, 'ja', { numeric: true })
+      || left.origin.localeCompare(right.origin, 'ja', { numeric: true })
+      || left.productName.localeCompare(right.productName, 'ja', { numeric: true })
+      || left.unit.localeCompare(right.unit, 'ja', { numeric: true }))
+  }, [balances])
   const warehouseRouteAvailable = movementMode === 'inbound'
     ? activeWarehouses.length > 0
     : movementMode === 'outbound'
@@ -310,7 +337,7 @@ export function InventoryManager({ workerId, workerName, canOperate }: Props) {
         <thead><tr>{INVENTORY_COLUMNS.map((column) => <InventoryColumnHeader key={column.key} column={column} sort={sort} values={filterValues[column.key]} selectedValues={columnFilters[column.key]} onSort={changeSort} onFilterChange={changeColumnFilter} />)}{canOperate && <th className="inventory-actions-heading">編集</th>}</tr></thead>
         <tbody>{displayedMovements.map((movement) => <tr key={movement.id}><td>{movementValue(movement, 'movementDate')}</td><td>{movement.worker_name}</td><td>{movement.origin}</td><td>{movement.product_name}</td><td>{movementValue(movement, 'grade')}</td><td className="numeric-cell">{formatQuantity(movement.quantity)}</td><td>{movement.unit}</td><td>{movement.movement_from}</td><td>{movement.movement_to}</td>{canOperate && <td className="inventory-actions-cell"><button className="icon-button" type="button" title="入出庫記録を編集" aria-label="入出庫記録を編集" onClick={() => beginEdit(movement)}><Pencil size={17} /></button></td>}</tr>)}{displayedMovements.length === 0 && <tr><td className="empty-state" colSpan={canOperate ? 10 : 9}>該当する入出庫記録はありません</td></tr>}</tbody>
       </table></div>
-    </> : <div className="inventory-table-wrap"><table className="inventory-table inventory-balance-table"><thead><tr><th>倉庫</th><th>産地</th><th>名称</th><th>等級</th><th>在庫量</th><th>単位</th></tr></thead><tbody>{balances.map((balance) => <tr key={`${balance.warehouse_id}-${balance.origin}-${balance.product_name}-${balance.grade}-${balance.unit}`}><td><span className="warehouse-name"><Warehouse size={17} />{balance.warehouse_name}</span></td><td>{balance.origin}</td><td>{balance.product_name}</td><td>{balance.grade || '対象外'}</td><td className={`numeric-cell ${Number(balance.quantity) < 0 ? 'inventory-negative' : ''}`}>{formatQuantity(balance.quantity)}</td><td>{balance.unit}</td></tr>)}{balances.length === 0 && <tr><td className="empty-state" colSpan={6}>倉庫在庫はありません</td></tr>}</tbody></table></div>}
+    </> : <div className="inventory-table-wrap"><table className="inventory-table inventory-balance-table"><thead><tr><th>倉庫</th><th>産地</th><th>名称</th><th>単位</th>{balanceGradeColumns.map((grade) => <th className="inventory-balance-grade" key={grade}>{grade}</th>)}</tr></thead><tbody>{balanceRows.map((row) => <tr key={`${row.warehouseId}-${row.origin}-${row.productName}-${row.unit}`}><td><span className="warehouse-name"><Warehouse size={17} />{row.warehouseName}</span></td><td>{row.origin}</td><td>{row.productName}</td><td>{row.unit}</td>{balanceGradeColumns.map((grade) => { const quantity = row.quantities[grade] ?? 0; return <td className={`numeric-cell inventory-balance-grade ${quantity < 0 ? 'inventory-negative' : ''}`} key={grade}>{quantity === 0 ? '' : formatQuantity(quantity)}</td> })}</tr>)}{balanceRows.length === 0 && <tr><td className="empty-state" colSpan={4 + balanceGradeColumns.length}>倉庫在庫はありません</td></tr>}</tbody></table></div>}
     {editing && <div className="modal-backdrop" role="presentation"><section className="registration-modal inventory-edit-modal" role="dialog" aria-modal="true" aria-labelledby="inventory-edit-title">
       <div className="modal-header"><div><h2 id="inventory-edit-title">入出庫記録を編集</h2><p>登録時の作業者：{editing.worker_name}</p></div><button className="icon-button" type="button" title="閉じる" aria-label="編集画面を閉じる" onClick={() => setEditing(null)} disabled={busy}><X size={20} /></button></div>
       {notice?.type === 'error' && <div className="notice error" role="alert">{notice.text}</div>}
