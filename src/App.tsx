@@ -35,6 +35,55 @@ function App() {
       .finally(() => setLoading(false))
   }, [])
 
+  useEffect(() => {
+    const root = document.documentElement
+    const visualViewport = window.visualViewport
+    let focusTimer = 0
+
+    const editableElementIsActive = () => {
+      const active = document.activeElement
+      if (active instanceof HTMLTextAreaElement) return !active.readOnly && !active.disabled
+      if (active instanceof HTMLInputElement) return !active.readOnly && !active.disabled && !['button', 'checkbox', 'radio', 'range', 'submit'].includes(active.type)
+      return active instanceof HTMLSelectElement && !active.disabled
+    }
+
+    const updateViewport = () => {
+      const height = visualViewport?.height ?? window.innerHeight
+      const offsetTop = visualViewport?.offsetTop ?? 0
+      root.style.setProperty('--visual-viewport-height', `${Math.round(height)}px`)
+      root.style.setProperty('--visual-viewport-offset-top', `${Math.round(offsetTop)}px`)
+      root.classList.toggle('software-keyboard-open', editableElementIsActive() && window.innerHeight - height > 120)
+    }
+
+    const revealFocusedField = (event: FocusEvent) => {
+      const target = event.target
+      if (!(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement)) return
+      window.clearTimeout(focusTimer)
+      focusTimer = window.setTimeout(() => {
+        updateViewport()
+        if (window.matchMedia('(max-width: 760px)').matches) target.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'smooth' })
+      }, 180)
+    }
+
+    updateViewport()
+    visualViewport?.addEventListener('resize', updateViewport)
+    visualViewport?.addEventListener('scroll', updateViewport)
+    window.addEventListener('resize', updateViewport)
+    document.addEventListener('focusin', revealFocusedField)
+    document.addEventListener('focusout', updateViewport)
+    return () => {
+      window.clearTimeout(focusTimer)
+      visualViewport?.removeEventListener('resize', updateViewport)
+      visualViewport?.removeEventListener('scroll', updateViewport)
+      window.removeEventListener('resize', updateViewport)
+      document.removeEventListener('focusin', revealFocusedField)
+      document.removeEventListener('focusout', updateViewport)
+      root.classList.remove('software-keyboard-open')
+      root.style.removeProperty('--visual-viewport-height')
+      root.style.removeProperty('--visual-viewport-offset-top')
+    }
+  }, [])
+
   if (loading) {
     return (
       <main className="loading-screen">

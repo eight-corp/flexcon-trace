@@ -1,5 +1,5 @@
-#root { min-height: 100vh; }
-.app-shell { min-height: 100vh; padding-bottom: 74px; }
+#root { min-height: 100vh; min-height: 100dvh; }
+.app-shell { min-height: 100vh; min-height: 100dvh; padding-bottom: 74px; }
 .app-header {
   height: 64px; padding: 0 16px; display: flex; align-items: center; justify-content: space-between;
   background: #fff; border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 20;
@@ -10,7 +10,7 @@
 .brand-lockup small { color: var(--muted); font-size: 11px; margin-top: 1px; }
 .brand-mark { width: 36px; height: 36px; display: grid; place-items: center; color: #fff; background: var(--green); border-radius: 6px; }
 .app-main { width: min(100%, 920px); margin: 0 auto; padding: 18px 16px 30px; }
-.loading-screen { min-height: 100vh; display: grid; place-content: center; justify-items: center; gap: 12px; color: var(--green); }
+.loading-screen { min-height: 100vh; min-height: 100dvh; display: grid; place-content: center; justify-items: center; gap: 12px; color: var(--green); }
 .icon-button { width: 38px; height: 38px; display: grid; place-items: center; border: 0; background: transparent; color: #4d5950; border-radius: 6px; }
 .icon-button:hover { background: var(--surface-soft); }
 .header-actions { display: flex; align-items: center; gap: 4px; }
@@ -98,8 +98,8 @@
 .scanner-top { margin-top: 0; }
 .scan-actions { margin-top: 14px; justify-content: flex-end; }
 .manual-shipment-actions { display: flex; justify-content: flex-start; gap: 10px; flex-wrap: wrap; margin-top: -2px; }
-.modal-backdrop { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 18px; background: rgba(17, 24, 19, .62); }
-.registration-modal { width: min(100%, 640px); max-height: calc(100vh - 36px); overflow-y: auto; background: #fff; border-radius: 8px; padding: 20px; box-shadow: 0 18px 50px rgba(0, 0, 0, .28); }
+.modal-backdrop { position: fixed; top: var(--visual-viewport-offset-top, 0); right: 0; left: 0; height: var(--visual-viewport-height, 100dvh); z-index: 100; display: grid; place-items: center; padding: 18px; background: rgba(17, 24, 19, .62); }
+.registration-modal { width: min(100%, 640px); max-height: calc(var(--visual-viewport-height, 100dvh) - 36px); overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; background: #fff; border-radius: 8px; padding: 20px; box-shadow: 0 18px 50px rgba(0, 0, 0, .28); }
 .lot-confirmation-modal { width: min(100%, 520px); }
 .lot-confirmation-modal .modal-header h2 { font-size: 23px; }
 .lot-confirmation-modal .modal-header p { margin: 4px 0 0; color: var(--muted); font-size: 16px; }
@@ -234,7 +234,7 @@
 .history-edit-lots { margin: 0 0 14px; }
 .shipment-note { margin: 10px 0 0; color: #667068; font-size: 13px; }
 .empty-state { text-align: center; color: var(--muted); padding: 30px 16px; }
-.auth-page { min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; background: #edf1ed; }
+.auth-page { min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; padding: 24px 16px; background: #edf1ed; }
 .auth-panel { width: min(100%, 420px); background: #fff; border: 1px solid var(--line); border-radius: 7px; padding: 26px; }
 .auth-brand { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
 .auth-brand h1 { margin: 0 0 2px; }
@@ -245,7 +245,7 @@
 .view-mode-switch button { width: 42px; min-height: 42px; display: grid; place-items: center; border: 0; border-right: 1px solid #d6dcd7; background: #fff; color: #5d685f; }
 .view-mode-switch button:last-child { border-right: 0; }
 .view-mode-switch button.active { background: var(--green); color: #fff; }
-.shipment-table-wrap { position: relative; width: 100%; min-width: 0; max-height: calc(100vh - 190px); min-height: 260px; overflow: auto; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
+.shipment-table-wrap { position: relative; width: 100%; min-width: 0; max-height: calc(100dvh - 190px); min-height: 260px; overflow: auto; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
 .shipment-table-view { width: 100%; max-width: 100%; min-width: 0; display: grid; gap: 16px; overflow: hidden; }
 .shipment-destination-summary { width: 100%; max-width: 100%; min-width: 0; }
 .shipment-destination-summary .section-title { margin-bottom: 8px; }
@@ -425,7 +425,7 @@
 .inspection-option-section { min-width: 0; }
 .inspection-option-form { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; margin-bottom: 12px; }
 .inspection-option-form input { min-width: 0; }
-.inspection-option-list { display: grid; gap: 7px; max-height: calc(100vh - 270px); overflow-y: auto; }
+.inspection-option-list { display: grid; gap: 7px; max-height: calc(100dvh - 270px); overflow-y: auto; }
 .inspection-option-row { min-height: 42px; display: grid; grid-template-columns: auto minmax(0, 1fr) 68px 36px 48px 36px; align-items: center; gap: 7px; padding: 4px 7px; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
 @media (max-width: 600px) {
   .inspection-option-row { grid-template-columns: 20px minmax(0, 1fr) 38px 48px 38px; gap: 5px; }
@@ -676,7 +676,7 @@ table thead th { text-align: center !important; }
   .bottom-nav { top: 64px; bottom: 0; right: auto; width: 188px; height: auto; grid-template-columns: 1fr; grid-template-rows: repeat(var(--nav-count, 5), 58px) 1fr; border-top: 0; border-right: 1px solid var(--line); padding: 14px 10px; gap: 6px; }
   .bottom-nav button { display: flex; justify-content: flex-start; align-items: center; place-content: initial; gap: 10px; padding: 0 14px; border-radius: 6px; font-size: 13px; }
   .app-main { padding: 20px 22px 34px; }
-  .app-main.app-main-wide { width: 100%; max-width: none; height: calc(100vh - 64px); padding-bottom: 20px; overflow: hidden; }
+  .app-main.app-main-wide { width: 100%; max-width: none; height: calc(100dvh - 64px); padding-bottom: 20px; overflow: hidden; }
   .app-main-wide .authorization-page { height: 100%; min-height: 0; display: flex; flex-direction: column; }
   .app-main-wide .authorization-table-wrap { flex: 1; min-height: 0; }
   .app-main-wide .inspection-page { height: 100%; min-height: 0; display: flex; flex-direction: column; }
@@ -699,6 +699,9 @@ table thead th { text-align: center !important; }
 }
 
 @media (max-width: 760px) {
+  input, select, textarea, button { scroll-margin-block: 88px; }
+  .software-keyboard-open .bottom-nav { display: none; }
+  .software-keyboard-open .app-shell { padding-bottom: env(safe-area-inset-bottom); }
   .inventory-entry-form { grid-template-columns: repeat(6, minmax(0, 1fr)); }
   .inventory-entry-form .inventory-field-date,
   .inventory-entry-form .inventory-field-worker,
@@ -733,14 +736,15 @@ table thead th { text-align: center !important; }
   .inventory-mode-switch button, .inventory-view-tabs button { flex: 1; min-width: 0; padding-inline: 6px; font-size: 12px; }
   .search-row { flex-wrap: wrap; }
   .search-row > div:first-child { flex: 1 1 180px !important; min-width: 0; }
-  .shipment-table-wrap { max-height: calc(100vh - 220px); }
+  .shipment-table-wrap { max-height: calc(100dvh - 220px); }
   .form-grid.two { grid-template-columns: 1fr; }
   .auth-panel { padding: 22px 18px; }
   .shipment-head { align-items: center; }
   .scan-actions > *, .modal-actions > * { flex: 1; }
   .manual-shipment-actions > * { flex: 1 1 160px; }
   .modal-backdrop { align-items: end; padding: 0; }
-  .registration-modal { width: 100%; max-height: 94vh; border-radius: 8px 8px 0 0; padding: 18px 16px calc(18px + env(safe-area-inset-bottom)); }
+  .registration-modal { width: 100%; max-height: calc(var(--visual-viewport-height, 100dvh) - 4px); border-radius: 8px 8px 0 0; padding: 18px 16px calc(18px + env(safe-area-inset-bottom)); }
+  .registration-modal .modal-actions { position: sticky; bottom: calc(-18px - env(safe-area-inset-bottom)); z-index: 8; margin: 4px -16px 0; padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); background: #fff; box-shadow: 0 -6px 12px rgb(20 35 25 / 8%); }
   .lot-confirmation-modal .modal-header h2 { font-size: 22px; }
   .lot-confirmation-producer { font-size: 25px; }
   .lot-confirmation-details { grid-template-columns: 1fr; }
