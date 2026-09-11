@@ -140,7 +140,7 @@
 .inventory-mode-switch { margin-bottom: 10px; }
 .inventory-mode-switch button, .inventory-view-tabs button { min-height: 34px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 5px 12px; border: 0; border-radius: 4px; background: transparent; color: #536057; font-weight: 700; }
 .inventory-mode-switch button.active, .inventory-view-tabs button.active { background: #fff; color: var(--green-dark); box-shadow: 0 1px 3px rgb(29 55 37 / 16%); }
-.inventory-entry-form { display: grid; grid-template-columns: 130px 150px minmax(130px, .8fr) minmax(170px, 1.2fr) 100px 80px minmax(140px, .9fr) minmax(140px, .9fr) auto; align-items: end; gap: 8px; }
+.inventory-entry-form { display: grid; grid-template-columns: 130px 150px minmax(120px, .8fr) minmax(160px, 1.2fr) 90px 90px 70px minmax(130px, .9fr) minmax(130px, .9fr) auto; align-items: end; gap: 8px; }
 .inventory-entry-form label { min-width: 0; margin: 0; font-size: 12px; }
 .inventory-entry-form input, .inventory-entry-form select { width: 100%; min-width: 0; height: 34px; min-height: 34px; }
 .inventory-entry-form input[readonly] { background: #edf1ee; color: #4b5650; }
@@ -150,6 +150,15 @@
 .inventory-table { width: 100%; min-width: 820px; border-collapse: collapse; font-size: 13px; }
 .inventory-table th, .inventory-table td { height: 34px; padding: 5px 8px; border-right: 1px solid #e4e8e5; border-bottom: 1px solid var(--line); }
 .inventory-table th { position: sticky; top: 0; z-index: 2; background: #eef2ee; color: #3d4840; white-space: nowrap; }
+.inventory-table th.inventory-filter-heading { padding: 0; }
+.inventory-search-row { margin: 0; }
+.inventory-search-row .search-input-wrap { width: min(100%, 430px); }
+.inventory-actions-heading, .inventory-actions-cell { width: 54px; min-width: 54px; text-align: center; }
+.inventory-actions-cell { padding: 2px 5px !important; }
+.inventory-actions-cell .icon-button { width: 30px; height: 30px; margin: 0 auto; }
+.inventory-edit-modal { width: min(100%, 760px); }
+.inventory-edit-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.inventory-edit-form .modal-actions { grid-column: 1 / -1; }
 .inventory-table th:last-child, .inventory-table td:last-child { border-right: 0; }
 .inventory-table tbody tr:last-child td { border-bottom: 0; }
 .inventory-table tbody tr:hover { background: var(--green-soft); }
