@@ -1,15 +1,16 @@
 import { useEffect, useState, type CSSProperties } from 'react'
-import { ClipboardList, FileSignature, History, House, LogOut, ScanLine, Settings2, Wheat } from 'lucide-react'
+import { Boxes, ClipboardList, FileSignature, History, House, LogOut, ScanLine, Settings2, Wheat } from 'lucide-react'
 import { AuthorizationManager } from './components/AuthorizationManager'
 import { InspectionRecordManager, type InspectionRecordTarget } from './components/InspectionRecordManager'
 import { InspectionOptionManager } from './components/InspectionOptionManager'
+import { InventoryManager } from './components/InventoryManager'
 import { ShipmentHistory } from './components/ShipmentHistory'
 import { ShipmentScanner } from './components/ShipmentScanner'
 import { logoutBusinessSession, MANAGEMENT_MENU_URL, restoreBusinessSession } from './lib/businessAuth'
 import type { Worker } from './types'
 import './App.css'
 
-type Tab = 'scan' | 'history' | 'authorizations' | 'inspections' | 'master'
+type Tab = 'scan' | 'history' | 'inventory' | 'authorizations' | 'inspections' | 'master'
 
 function App() {
   const [worker, setWorker] = useState<Worker | null>(null)
@@ -60,7 +61,7 @@ function App() {
   const canOperate = worker.role !== 'viewer'
   const isAdmin = worker.role === 'admin'
   const roleName = isAdmin ? '管理者' : canOperate ? '作業者' : '閲覧者'
-  const navStyle = { '--nav-count': isAdmin ? 5 : canOperate ? 4 : 1 } as CSSProperties
+  const navStyle = { '--nav-count': isAdmin ? 6 : canOperate ? 5 : 2 } as CSSProperties
 
   return (
     <div className="app-shell">
@@ -83,7 +84,7 @@ function App() {
         </div>
       </header>
 
-      <main className={`app-main ${tab === 'history' || tab === 'authorizations' || tab === 'inspections' ? 'app-main-wide' : ''}`}>
+      <main className={`app-main ${tab === 'history' || tab === 'inventory' || tab === 'authorizations' || tab === 'inspections' ? 'app-main-wide' : ''}`}>
         {tab === 'scan' && canOperate && (
           <ShipmentScanner
             key={worker.worker_id}
@@ -93,6 +94,7 @@ function App() {
           />
         )}
         {tab === 'history' && <ShipmentHistory refreshKey={historyVersion} workerId={worker.worker_id} isAdmin={worker.role === 'admin'} />}
+        {tab === 'inventory' && <InventoryManager workerId={worker.worker_id} workerName={worker.worker_name} canOperate={canOperate} />}
         {tab === 'authorizations' && canOperate && (
           <AuthorizationManager
             workerId={worker.worker_id}
@@ -137,6 +139,9 @@ function App() {
         </button>}
         <button className={tab === 'history' ? 'active' : ''} onClick={() => setTab('history')}>
           <History size={22} /><span>出荷履歴</span>
+        </button>
+        <button className={tab === 'inventory' ? 'active' : ''} onClick={() => setTab('inventory')}>
+          <Boxes size={22} /><span>在庫</span>
         </button>
         {canOperate && <button className={tab === 'authorizations' ? 'active' : ''} onClick={() => setTab('authorizations')}>
           <FileSignature size={22} /><span>委任状一覧</span>

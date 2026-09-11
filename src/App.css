@@ -134,6 +134,34 @@
 .shipment-required-missing:focus { outline-color: rgba(177, 113, 8, .22); border-color: #a86b08 !important; }
 .shipment-registration-form .worker-summary { grid-template-columns: 132px minmax(0, 1fr); }
 .shipment-registration-form .worker-summary strong { justify-self: start; }
+.inventory-page { height: 100%; min-height: 0; display: flex; flex-direction: column; }
+.inventory-entry-section { flex: 0 0 auto; }
+.inventory-mode-switch, .inventory-view-tabs { display: inline-flex; align-items: center; gap: 4px; padding: 3px; border: 1px solid var(--line); border-radius: 6px; background: #eef2ee; }
+.inventory-mode-switch { margin-bottom: 10px; }
+.inventory-mode-switch button, .inventory-view-tabs button { min-height: 34px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 5px 12px; border: 0; border-radius: 4px; background: transparent; color: #536057; font-weight: 700; }
+.inventory-mode-switch button.active, .inventory-view-tabs button.active { background: #fff; color: var(--green-dark); box-shadow: 0 1px 3px rgb(29 55 37 / 16%); }
+.inventory-entry-form { display: grid; grid-template-columns: 130px 150px minmax(130px, .8fr) minmax(170px, 1.2fr) 100px 80px minmax(140px, .9fr) minmax(140px, .9fr) auto; align-items: end; gap: 8px; }
+.inventory-entry-form label { min-width: 0; margin: 0; font-size: 12px; }
+.inventory-entry-form input, .inventory-entry-form select { width: 100%; min-width: 0; height: 34px; min-height: 34px; }
+.inventory-entry-form input[readonly] { background: #edf1ee; color: #4b5650; }
+.inventory-entry-form .primary-button { min-height: 34px; height: 34px; white-space: nowrap; }
+.inventory-view-tabs { flex: 0 0 auto; align-self: flex-start; margin-bottom: 8px; }
+.inventory-table-wrap { flex: 1; min-height: 0; overflow: auto; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
+.inventory-table { width: 100%; min-width: 820px; border-collapse: collapse; font-size: 13px; }
+.inventory-table th, .inventory-table td { height: 34px; padding: 5px 8px; border-right: 1px solid #e4e8e5; border-bottom: 1px solid var(--line); }
+.inventory-table th { position: sticky; top: 0; z-index: 2; background: #eef2ee; color: #3d4840; white-space: nowrap; }
+.inventory-table th:last-child, .inventory-table td:last-child { border-right: 0; }
+.inventory-table tbody tr:last-child td { border-bottom: 0; }
+.inventory-table tbody tr:hover { background: var(--green-soft); }
+.inventory-history-table th:nth-child(1), .inventory-history-table td:nth-child(1) { width: 104px; white-space: nowrap; }
+.inventory-history-table th:nth-child(2), .inventory-history-table td:nth-child(2) { width: 130px; }
+.inventory-history-table th:nth-child(5), .inventory-history-table td:nth-child(5) { width: 100px; }
+.inventory-history-table th:nth-child(6), .inventory-history-table td:nth-child(6) { width: 70px; text-align: center; }
+.inventory-balance-table { min-width: 650px; }
+.inventory-balance-table th:nth-child(4), .inventory-balance-table td:nth-child(4) { width: 120px; }
+.inventory-balance-table th:nth-child(5), .inventory-balance-table td:nth-child(5) { width: 80px; text-align: center; }
+.warehouse-name { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; }
+.inventory-negative { color: var(--red); font-weight: 700; }
 .worker-summary-label { display: flex; align-items: center; gap: 7px; color: var(--green-dark) !important; }
 .manual-items-editor { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 6px; background: #f7f9f7; }
 .manual-item-add { display: grid; grid-template-columns: minmax(0, 1fr) 112px auto; align-items: end; gap: 8px; }
@@ -634,11 +662,15 @@ table thead th { text-align: center !important; }
 }
 
 @media (max-width: 1500px) {
+  .inventory-entry-form { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .inventory-entry-form .primary-button { grid-column: 5; }
   .inspection-summary-add { grid-template-columns: repeat(6, minmax(0, 1fr)); }
   .inspection-summary-add > .primary-button { align-self: end; }
 }
 
 @media (max-width: 900px) {
+  .inventory-entry-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .inventory-entry-form .primary-button { grid-column: 1 / -1; width: 100%; }
   .inspection-form-row-one, .inspection-form-row-two, .inspection-form-row-three { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .inspection-split-grid { grid-template-columns: 1fr; }
   .inspection-group-add { grid-template-columns: repeat(4, minmax(0, 1fr)); }
@@ -658,6 +690,10 @@ table thead th { text-align: center !important; }
 }
 
 @media (max-width: 560px) {
+  .inventory-mode-switch, .inventory-view-tabs { width: 100%; }
+  .inventory-mode-switch button, .inventory-view-tabs button { flex: 1; min-width: 0; padding-inline: 6px; font-size: 12px; }
+  .inventory-entry-form { grid-template-columns: 1fr; }
+  .inventory-entry-form .primary-button { grid-column: 1; }
   .search-row { flex-wrap: wrap; }
   .search-row > div:first-child { flex: 1 1 180px !important; min-width: 0; }
   .shipment-table-wrap { max-height: calc(100vh - 220px); }
