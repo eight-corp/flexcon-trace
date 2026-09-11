@@ -76,20 +76,31 @@ function movementValue(movement: InventoryMovement, key: InventoryColumn) {
   return movement[key]
 }
 
-function InventoryColumnHeader({
+function balanceValue(row: InventoryBalanceRow, key: string) {
+  if (key === 'warehouseName') return row.warehouseName
+  if (key === 'origin') return row.origin
+  if (key === 'productName') return row.productName
+  if (key === 'unit') return row.unit
+  const quantity = row.quantities[key.slice('grade:'.length)] ?? 0
+  return quantity === 0 ? '' : formatQuantity(quantity)
+}
+
+function FilterableColumnHeader<Key extends string>({
   column,
   sort,
   values,
   selectedValues,
   onSort,
   onFilterChange,
+  openRight = false,
 }: {
-  column: { key: InventoryColumn; label: string }
-  sort: { key: InventoryColumn; direction: SortDirection } | null
+  column: { key: Key; label: string }
+  sort?: { key: Key; direction: SortDirection } | null
   values: string[]
   selectedValues: string[] | undefined
-  onSort: (key: InventoryColumn) => void
-  onFilterChange: (key: InventoryColumn, values: string[] | undefined) => void
+  onSort?: (key: Key) => void
+  onFilterChange: (key: Key, values: string[] | undefined) => void
+  openRight?: boolean
 }) {
   const filterRef = useRef<HTMLDetailsElement>(null)
   const allSelected = selectedValues === undefined || selectedValues.length === values.length
@@ -105,11 +116,11 @@ function InventoryColumnHeader({
 
   return <th className="inventory-filter-heading">
     <div className="shipment-column-heading">
-      <button type="button" className="shipment-column-sort" onClick={() => onSort(column.key)}>
+      {onSort ? <button type="button" className="shipment-column-sort" onClick={() => onSort(column.key)}>
         <span>{column.label}</span>
         {sort?.key === column.key && (sort.direction === 'asc' ? <ArrowUp size={14} /> : <ArrowDown size={14} />)}
-      </button>
-      <details ref={filterRef} className={`shipment-column-filter ${column.key === 'movementDate' ? 'open-right' : ''} ${selectedValues === undefined ? '' : 'active'}`}>
+      </button> : <div className="shipment-column-sort"><span>{column.label}</span></div>}
+      <details ref={filterRef} className={`shipment-column-filter ${openRight ? 'open-right' : ''} ${selectedValues === undefined ? '' : 'active'}`}>
         <summary title={`${column.label}を絞り込む`} aria-label={`${column.label}を絞り込む`}><Filter size={14} /></summary>
         <div className="shipment-filter-menu">
           <strong>{column.label}</strong>
@@ -151,6 +162,8 @@ export function InventoryManager({ workerId, workerName, canOperate }: Props) {
   const [search, setSearch] = useState('')
   const [sort, setSort] = useState<{ key: InventoryColumn; direction: SortDirection } | null>(null)
   const [columnFilters, setColumnFilters] = useState<Partial<Record<InventoryColumn, string[]>>>({})
+  const [balanceSearch, setBalanceSearch] = useState('')
+  const [balanceColumnFilters, setBalanceColumnFilters] = useState<Record<string, string[]>>({})
   const [notice, setNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [busy, setBusy] = useState(false)
   const [version, setVersion] = useState(0)
@@ -211,15 +224,37 @@ export function InventoryManager({ workerId, workerName, canOperate }: Props) {
       || left.productName.localeCompare(right.productName, 'ja', { numeric: true })
       || left.unit.localeCompare(right.unit, 'ja', { numeric: true }))
   }, [balances])
+  const balanceColumns = useMemo(() => [
+    { key: 'warehouseName', label: '倉庫' },
+    { key: 'origin', label: '産地' },
+    { key: 'productName', label: '名称' },
+    { key: 'unit', label: '単位' },
+    ...balanceGradeColumns.map((grade) => ({ key: `grade:${grade}`, label: grade })),
+  ], [balanceGradeColumns])
+  const balanceFilterValues = useMemo(() => Object.fromEntries(balanceColumns.map((column) => [
+    column.key,
+    [...new Set(balanceRows.map((row) => balanceValue(row, column.key)))].sort((left, right) => left.localeCompare(right, 'ja', { numeric: true })),
+  ])) as Record<string, string[]>, [balanceColumns, balanceRows])
+  const displayedBalanceRows = useMemo(() => {
+    const term = balanceSearch.trim().toLowerCase()
+    return balanceRows.filter((row) => {
+      if (term && !balanceColumns.some((column) => balanceValue(row, column.key).toLowerCase().includes(term))) return false
+      return balanceColumns.every((column) => balanceColumnFilters[column.key] === undefined || balanceColumnFilters[column.key].includes(balanceValue(row, column.key)))
+    })
+  }, [balanceColumnFilters, balanceColumns, balanceRows, balanceSearch])
   const balanceTotals = useMemo(() => {
     const totals: Record<string, Record<string, number>> = {}
-    balances.forEach((balance) => {
-      const grade = balance.grade || '対象外'
-      totals[grade] ??= {}
-      totals[grade][balance.unit] = (totals[grade][balance.unit] ?? 0) + Number(balance.quantity)
+    displayedBalanceRows.forEach((row) => {
+      balanceGradeColumns.forEach((grade) => {
+        const quantity = row.quantities[grade] ?? 0
+        if (!quantity) return
+        totals[grade] ??= {}
+        totals[grade][row.unit] = (totals[grade][row.unit] ?? 0) + quantity
+      })
     })
     return totals
-  }, [balances])
+  }, [balanceGradeColumns, displayedBalanceRows])
+  const balanceIsFiltered = balanceSearch.trim() !== '' || Object.keys(balanceColumnFilters).length > 0
   const warehouseRouteAvailable = movementMode === 'inbound'
     ? activeWarehouses.length > 0
     : movementMode === 'outbound'
@@ -315,6 +350,12 @@ export function InventoryManager({ workerId, workerName, canOperate }: Props) {
     else next[key] = values
     return next
   })
+  const changeBalanceColumnFilter = (key: string, values: string[] | undefined) => setBalanceColumnFilters((current) => {
+    const next = { ...current }
+    if (values === undefined) delete next[key]
+    else next[key] = values
+    return next
+  })
 
   const renderMovementFields = (target: MovementForm, setTarget: React.Dispatch<React.SetStateAction<MovementForm>>, mode: MovementMode, productNames: string[], grades: InspectionOption[]) => {
     const otherProduct = otherProductNames.has(target.productName)
@@ -350,10 +391,10 @@ export function InventoryManager({ workerId, workerName, canOperate }: Props) {
     {viewMode === 'history' ? <>
       <div className="search-row inventory-search-row"><div className="search-input-wrap"><Search size={18} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="入出庫記録を検索" /></div></div>
       <div className="inventory-table-wrap"><table className="inventory-table inventory-history-table">
-        <thead><tr>{INVENTORY_COLUMNS.map((column) => <InventoryColumnHeader key={column.key} column={column} sort={sort} values={filterValues[column.key]} selectedValues={columnFilters[column.key]} onSort={changeSort} onFilterChange={changeColumnFilter} />)}{canOperate && <th className="inventory-actions-heading">編集</th>}</tr></thead>
+        <thead><tr>{INVENTORY_COLUMNS.map((column) => <FilterableColumnHeader key={column.key} column={column} sort={sort} values={filterValues[column.key]} selectedValues={columnFilters[column.key]} onSort={changeSort} onFilterChange={changeColumnFilter} openRight={column.key === 'movementDate'} />)}{canOperate && <th className="inventory-actions-heading">編集</th>}</tr></thead>
         <tbody>{displayedMovements.map((movement) => { const mode = modeForMovement(movement); return <tr className={`inventory-movement-${mode}`} key={movement.id}><td>{movementValue(movement, 'movementDate')}</td><td><span className={`inventory-movement-badge ${mode}`}>{mode === 'inbound' ? <ArrowDownToLine size={14} /> : mode === 'outbound' ? <ArrowUpFromLine size={14} /> : <ArrowRightLeft size={14} />}{movementTypeLabel(movement)}</span></td><td>{movement.worker_name}</td><td>{movement.origin}</td><td>{movement.product_name}</td><td>{movementValue(movement, 'grade')}</td><td className="numeric-cell">{formatQuantity(movement.quantity)}</td><td>{movement.unit}</td><td>{movement.movement_from}</td><td>{movement.movement_to}</td>{canOperate && <td className="inventory-actions-cell"><button className="icon-button" type="button" title="入出庫記録を編集" aria-label="入出庫記録を編集" onClick={() => beginEdit(movement)}><Pencil size={17} /></button></td>}</tr> })}{displayedMovements.length === 0 && <tr><td className="empty-state" colSpan={canOperate ? 11 : 10}>該当する入出庫記録はありません</td></tr>}</tbody>
       </table></div>
-    </> : <div className="inventory-table-wrap"><table className="inventory-table inventory-balance-table"><thead><tr><th>倉庫</th><th>産地</th><th>名称</th><th>単位</th>{balanceGradeColumns.map((grade) => <th className="inventory-balance-grade" key={grade}>{grade}</th>)}</tr></thead><tbody>{balanceRows.length > 0 && <tr className="inventory-balance-total"><td><span className="warehouse-name"><Warehouse size={17} />全倉庫合計</span></td><td>全産地</td><td>全名称</td><td>単位別</td>{balanceGradeColumns.map((grade) => { const totals = balanceTotals[grade] ?? {}; const values = ['本', '袋', 'kg'].filter((unit) => totals[unit]).map((unit) => `${formatQuantity(totals[unit])}${unit}`); const negative = Object.values(totals).some((quantity) => quantity < 0); return <td className={`numeric-cell inventory-balance-grade ${negative ? 'inventory-negative' : ''}`} key={grade}>{values.join(' / ')}</td> })}</tr>}{balanceRows.map((row) => <tr key={`${row.warehouseId}-${row.origin}-${row.productName}-${row.unit}`}><td><span className="warehouse-name"><Warehouse size={17} />{row.warehouseName}</span></td><td>{row.origin}</td><td>{row.productName}</td><td>{row.unit}</td>{balanceGradeColumns.map((grade) => { const quantity = row.quantities[grade] ?? 0; return <td className={`numeric-cell inventory-balance-grade ${quantity < 0 ? 'inventory-negative' : ''}`} key={grade}>{quantity === 0 ? '' : formatQuantity(quantity)}</td> })}</tr>)}{balanceRows.length === 0 && <tr><td className="empty-state" colSpan={4 + balanceGradeColumns.length}>倉庫在庫はありません</td></tr>}</tbody></table></div>}
+    </> : <><div className="search-row inventory-search-row"><div className="search-input-wrap"><Search size={18} /><input value={balanceSearch} onChange={(event) => setBalanceSearch(event.target.value)} placeholder="倉庫別在庫を検索" /></div></div><div className="inventory-table-wrap"><table className="inventory-table inventory-balance-table"><thead><tr>{balanceColumns.map((column, index) => <FilterableColumnHeader key={column.key} column={column} values={balanceFilterValues[column.key]} selectedValues={balanceColumnFilters[column.key]} onFilterChange={changeBalanceColumnFilter} openRight={index === 0} />)}</tr></thead><tbody>{displayedBalanceRows.length > 0 && <tr className="inventory-balance-total"><td><span className="warehouse-name"><Warehouse size={17} />{balanceIsFiltered ? '絞り込み合計' : '全倉庫合計'}</span></td><td>{balanceIsFiltered ? '表示中' : '全産地'}</td><td>{balanceIsFiltered ? '表示中' : '全名称'}</td><td>単位別</td>{balanceGradeColumns.map((grade) => { const totals = balanceTotals[grade] ?? {}; const values = ['本', '袋', 'kg'].filter((unit) => totals[unit]).map((unit) => `${formatQuantity(totals[unit])}${unit}`); const negative = Object.values(totals).some((quantity) => quantity < 0); return <td className={`numeric-cell inventory-balance-grade ${negative ? 'inventory-negative' : ''}`} key={grade}>{values.join(' / ')}</td> })}</tr>}{displayedBalanceRows.map((row) => <tr key={`${row.warehouseId}-${row.origin}-${row.productName}-${row.unit}`}><td><span className="warehouse-name"><Warehouse size={17} />{row.warehouseName}</span></td><td>{row.origin}</td><td>{row.productName}</td><td>{row.unit}</td>{balanceGradeColumns.map((grade) => { const quantity = row.quantities[grade] ?? 0; return <td className={`numeric-cell inventory-balance-grade ${quantity < 0 ? 'inventory-negative' : ''}`} key={grade}>{quantity === 0 ? '' : formatQuantity(quantity)}</td> })}</tr>)}{displayedBalanceRows.length === 0 && <tr><td className="empty-state" colSpan={balanceColumns.length}>該当する倉庫在庫はありません</td></tr>}</tbody></table></div></>}
     {editing && <div className="modal-backdrop" role="presentation"><section className="registration-modal inventory-edit-modal" role="dialog" aria-modal="true" aria-labelledby="inventory-edit-title">
       <div className="modal-header"><div><h2 id="inventory-edit-title">入出庫記録を編集</h2><p>登録時の作業者：{editing.worker_name}</p></div><button className="icon-button" type="button" title="閉じる" aria-label="編集画面を閉じる" onClick={() => setEditing(null)} disabled={busy}><X size={20} /></button></div>
       {notice?.type === 'error' && <div className="notice error" role="alert">{notice.text}</div>}
