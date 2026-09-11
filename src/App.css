@@ -170,6 +170,8 @@
 .inventory-balance-table th:nth-child(4), .inventory-balance-table td:nth-child(4) { width: 64px; text-align: center; }
 .inventory-balance-table .inventory-balance-grade { width: 82px; min-width: 82px; }
 .inventory-balance-table td.inventory-balance-grade { text-align: right; }
+.inventory-balance-table .inventory-balance-total { background: #e3eee6; font-weight: 700; }
+.inventory-balance-table .inventory-balance-total td { border-bottom: 2px solid #9aae9f; }
 .warehouse-name { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; }
 .inventory-negative { color: var(--red); font-weight: 700; }
 .worker-summary-label { display: flex; align-items: center; gap: 7px; color: var(--green-dark) !important; }
