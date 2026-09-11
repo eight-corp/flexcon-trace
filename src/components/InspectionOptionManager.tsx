@@ -315,6 +315,14 @@ export function InspectionOptionManager({ workerId }: Props) {
         />
         <OptionSection
           workerId={workerId}
+          optionType="origin"
+          title="産地"
+          items={items.filter((item) => item.option_type === 'origin')}
+          onChanged={changed}
+          onError={failed}
+        />
+        <OptionSection
+          workerId={workerId}
           optionType="location"
           title="検査場所"
           items={items.filter((item) => item.option_type === 'location')}

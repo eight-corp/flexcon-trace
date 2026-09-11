@@ -33,7 +33,7 @@ export function InventoryManager({ workerId, workerName, canOperate }: Props) {
   useEffect(() => {
     void Promise.all([
       supabase.from('flexcon_inspection_options').select('*').eq('option_type', 'warehouse').order('sort_order').order('name'),
-      supabase.from('flexcon_inspection_options').select('*').in('option_type', ['brand_aomori', 'brand_iwate', 'shipment_product']).eq('active', true).order('sort_order').order('name'),
+      supabase.from('flexcon_inspection_options').select('*').in('option_type', ['origin', 'brand', 'brand_aomori', 'brand_iwate', 'shipment_product']).eq('active', true).order('sort_order').order('name'),
       supabase.from('flexcon_inventory_movements').select('*').order('movement_date', { ascending: false }).order('created_at', { ascending: false }).limit(500),
       supabase.from('flexcon_inventory_balances').select('*').order('warehouse_name').order('origin').order('product_name').order('unit'),
     ]).then(([warehouseResult, productResult, movementResult, balanceResult]) => {
@@ -51,8 +51,12 @@ export function InventoryManager({ workerId, workerName, canOperate }: Props) {
     : movementMode === 'outbound'
       ? warehouses.length > 0
       : activeWarehouses.length > 0 && warehouses.length > 1
-  const originOptions = useMemo(() => [...new Set([...movements.map((item) => item.origin), ...balances.map((item) => item.origin), '青森県', '岩手県'])].filter(Boolean).sort((a, b) => a.localeCompare(b, 'ja')), [balances, movements])
-  const uniqueProductOptions = useMemo(() => [...new Set(productOptions.map((item) => item.name))], [productOptions])
+  const originOptions = productOptions.filter((item) => item.option_type === 'origin')
+  const uniqueProductOptions = useMemo(() => {
+    const regionalType = form.origin === '青森県' ? 'brand_aomori' : form.origin === '岩手県' ? 'brand_iwate' : ''
+    const allowedTypes = [regionalType, ...(form.origin === '青森県' ? ['brand'] : []), 'shipment_product']
+    return [...new Set(productOptions.filter((item) => allowedTypes.includes(item.option_type)).map((item) => item.name))]
+  }, [form.origin, productOptions])
 
   const changeMode = (mode: MovementMode) => {
     setMovementMode(mode)
@@ -65,10 +69,10 @@ export function InventoryManager({ workerId, workerName, canOperate }: Props) {
     if (busy || !canOperate) return
     const quantity = Number(form.quantity)
     if (!form.movementDate) return setNotice({ type: 'error', text: '日付を入力してください。' })
-    if (!form.origin.trim()) return setNotice({ type: 'error', text: '産地を入力してください。' })
-    if (!form.productName.trim()) return setNotice({ type: 'error', text: '名称を入力してください。' })
+    if (!originOptions.some((item) => item.name === form.origin)) return setNotice({ type: 'error', text: '産地をマスタから選択してください。' })
+    if (!uniqueProductOptions.includes(form.productName)) return setNotice({ type: 'error', text: '名称をマスタから選択してください。' })
     if (!Number.isFinite(quantity) || quantity <= 0) return setNotice({ type: 'error', text: '量は0より大きい数値で入力してください。' })
-    if (!form.unit.trim()) return setNotice({ type: 'error', text: '単位を入力してください。' })
+    if (!['本', '袋', 'kg'].includes(form.unit)) return setNotice({ type: 'error', text: '単位を本・袋・kgから選択してください。' })
     if (movementMode !== 'inbound' && !form.fromWarehouseId) return setNotice({ type: 'error', text: '移動元の倉庫を選択してください。' })
     if (movementMode !== 'outbound' && !form.toWarehouseId) return setNotice({ type: 'error', text: '移動先の倉庫を選択してください。' })
     if (movementMode === 'transfer' && form.fromWarehouseId === form.toWarehouseId) return setNotice({ type: 'error', text: '移動元と移動先には別の倉庫を選択してください。' })
@@ -97,17 +101,14 @@ export function InventoryManager({ workerId, workerName, canOperate }: Props) {
       <form className="inventory-entry-form" onSubmit={(event) => void submit(event)}>
         <label>日付<input type="date" value={form.movementDate} onChange={(e) => setForm((c) => ({ ...c, movementDate: e.target.value }))} required /></label>
         <label>作業者<input value={workerName} readOnly /></label>
-        <label>産地<input list="inventory-origin-options" value={form.origin} onChange={(e) => setForm((c) => ({ ...c, origin: e.target.value }))} placeholder="産地" required /></label>
-        <label>名称<input list="inventory-product-options" value={form.productName} onChange={(e) => setForm((c) => ({ ...c, productName: e.target.value }))} placeholder="銘柄等の名称" required /></label>
+        <label>産地<select value={form.origin} onChange={(e) => setForm((c) => ({ ...c, origin: e.target.value, productName: '' }))} required><option value="">選択</option>{originOptions.map((origin) => <option key={origin.id} value={origin.name}>{origin.name}</option>)}</select></label>
+        <label>名称<select value={form.productName} onChange={(e) => setForm((c) => ({ ...c, productName: e.target.value }))} disabled={!form.origin} required><option value="">{form.origin ? '選択' : '先に産地を選択'}</option>{uniqueProductOptions.map((product) => <option key={product} value={product}>{product}</option>)}</select></label>
         <label>量<input type="number" min="0.001" step="0.001" inputMode="decimal" value={form.quantity} onChange={(e) => setForm((c) => ({ ...c, quantity: e.target.value }))} required /></label>
-        <label>単位<input list="inventory-unit-options" value={form.unit} onChange={(e) => setForm((c) => ({ ...c, unit: e.target.value }))} required /></label>
+        <label>単位<select value={form.unit} onChange={(e) => setForm((c) => ({ ...c, unit: e.target.value }))} required><option value="本">本</option><option value="袋">袋</option><option value="kg">kg</option></select></label>
         <label>移動元{movementMode === 'inbound' ? <input value="外部" readOnly /> : <select value={form.fromWarehouseId} onChange={(e) => setForm((c) => ({ ...c, fromWarehouseId: e.target.value }))} required><option value="">未選択</option>{warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}{w.active ? '' : '（無効）'}</option>)}</select>}</label>
         <label>移動先{movementMode === 'outbound' ? <input value="外部" readOnly /> : <select value={form.toWarehouseId} onChange={(e) => setForm((c) => ({ ...c, toWarehouseId: e.target.value }))} required><option value="">未選択</option>{activeWarehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}</select>}</label>
         <button className="primary-button" type="submit" disabled={busy || !warehouseRouteAvailable}><Plus size={18} />{busy ? '登録中...' : '記録を追加'}</button>
       </form>
-      <datalist id="inventory-origin-options">{originOptions.map((origin) => <option key={origin} value={origin} />)}</datalist>
-      <datalist id="inventory-product-options">{uniqueProductOptions.map((product) => <option key={product} value={product} />)}</datalist>
-      <datalist id="inventory-unit-options"><option value="kg" /><option value="袋" /><option value="本" /><option value="俵" /></datalist>
     </section>}
     {notice && <div className={`notice ${notice.type}`} role={notice.type === 'error' ? 'alert' : 'status'}>{notice.text}</div>}
     <div className="inventory-view-tabs" role="tablist" aria-label="在庫表示">
