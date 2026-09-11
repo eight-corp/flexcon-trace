@@ -179,6 +179,7 @@
 .inventory-movement-badge.transfer { border-color: #91aac5; background: #fff; color: #315f8d; }
 .inventory-balance-table { min-width: 650px; }
 .inventory-balance-table th:nth-child(4), .inventory-balance-table td:nth-child(4) { width: 64px; text-align: center; }
+.inventory-balance-table th:nth-child(3), .inventory-balance-table td:nth-child(3) { white-space: nowrap; }
 .inventory-balance-table .inventory-balance-grade { width: 82px; min-width: 82px; }
 .inventory-balance-table td.inventory-balance-grade { text-align: right; }
 .inventory-balance-table .inventory-balance-total { background: #e3eee6; font-weight: 700; }
@@ -700,6 +701,14 @@ table thead th { text-align: center !important; }
 @media (max-width: 760px) {
   .inventory-entry-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .inventory-entry-form .primary-button { grid-column: 1 / -1; width: 100%; }
+  .inventory-balance-table { width: var(--inventory-balance-mobile-width); min-width: var(--inventory-balance-mobile-width); table-layout: fixed; }
+  .inventory-balance-table .inventory-balance-warehouse-col { width: 112px; }
+  .inventory-balance-table .inventory-balance-origin-col { width: 72px; }
+  .inventory-balance-table .inventory-balance-product-col { width: 130px; }
+  .inventory-balance-table .inventory-balance-unit-col { width: 44px; }
+  .inventory-balance-table .inventory-balance-grade-col { width: 62px; }
+  .inventory-balance-table .inventory-balance-grade { width: 62px; min-width: 0; max-width: 62px; padding-inline: 4px; }
+  .inventory-balance-table td.inventory-balance-grade { line-height: 1.25; white-space: normal; overflow-wrap: anywhere; }
   .scan-list li { grid-template-columns: 58px minmax(0, 1fr) minmax(96px, max-content) 42px; gap: 5px 7px; }
   .scan-list .sequence { grid-column: 1; grid-row: 1; }
   .scan-list .lot-producer-name { grid-column: 2; grid-row: 1; }
