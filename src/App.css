@@ -153,9 +153,10 @@
 .inventory-table th.inventory-filter-heading { padding: 0; }
 .inventory-search-row { margin: 0; }
 .inventory-search-row .search-input-wrap { width: min(100%, 430px); }
-.inventory-actions-heading, .inventory-actions-cell { width: 54px; min-width: 54px; text-align: center; }
+.inventory-actions-heading, .inventory-actions-cell { width: 76px; min-width: 76px; text-align: center; }
 .inventory-actions-cell { padding: 2px 5px !important; }
-.inventory-actions-cell .icon-button { width: 30px; height: 30px; margin: 0 auto; }
+.inventory-row-actions { display: flex; align-items: center; justify-content: center; gap: 4px; }
+.inventory-actions-cell .icon-button { width: 30px; height: 30px; margin: 0; }
 .inventory-edit-modal { width: min(100%, 760px); }
 .inventory-edit-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .inventory-edit-form .modal-actions { grid-column: 1 / -1; }
