@@ -35,7 +35,21 @@ inspection_flexcons as (
   select
     'inspection-flexcon:' || flexcon.id::text as id,
     'inspection_flexcon'::text as source_type,
-    'inbound'::text as movement_type,
+    case when
+      flexcon.fiscal_year > 0
+      and flexcon.purchase_date is not null
+      and flexcon.inspection_date is not null
+      and nullif(btrim(flexcon.inspector_name), '') is not null
+      and nullif(btrim(flexcon.inspection_location), '') is not null
+      and nullif(btrim(flexcon.brand), '') is not null
+      and flexcon.quantity_kg > 0
+      and flexcon.moisture is not null
+      and nullif(btrim(flexcon.grade), '') is not null
+      and ((btrim(flexcon.brand) = '飼料用玄米' and btrim(flexcon.grade) = '合格')
+        or (btrim(flexcon.brand) <> '飼料用玄米' and btrim(flexcon.grade) <> '合格'))
+      and (btrim(flexcon.grade) in ('1等', '合格') or nullif(btrim(flexcon.reason), '') is not null)
+      then 'inspected' else 'pre_inspection'
+    end as movement_type,
     coalesce(flexcon.purchase_date, flexcon.created_at::date) as movement_date,
     coalesce(worker.worker_name, '登録者不明') as worker_name,
     case
@@ -60,7 +74,21 @@ inspection_paper_bags as (
   select
     'inspection-paper:' || paper.id::text as id,
     'inspection_paper_bag'::text as source_type,
-    'inbound'::text as movement_type,
+    case when
+      paper.fiscal_year > 0
+      and paper.purchase_date is not null
+      and paper.inspection_date is not null
+      and nullif(btrim(paper.inspector_name), '') is not null
+      and nullif(btrim(paper.inspection_location), '') is not null
+      and nullif(btrim(paper.brand), '') is not null
+      and paper.bag_count > 0
+      and paper.moisture is not null
+      and nullif(btrim(paper.grade), '') is not null
+      and ((btrim(paper.brand) = '飼料用玄米' and btrim(paper.grade) = '合格')
+        or (btrim(paper.brand) <> '飼料用玄米' and btrim(paper.grade) <> '合格'))
+      and (btrim(paper.grade) in ('1等', '合格') or nullif(btrim(paper.reason), '') is not null)
+      then 'inspected' else 'pre_inspection'
+    end as movement_type,
     coalesce(paper.purchase_date, paper.created_at::date) as movement_date,
     coalesce(worker.worker_name, '登録者不明') as worker_name,
     case
@@ -85,7 +113,7 @@ qr_shipments as (
   select
     'shipment-flexcon:' || shipment.id::text || ':' || item.flexcon_id::text as id,
     'shipment_flexcon'::text as source_type,
-    'outbound'::text as movement_type,
+    'shipped'::text as movement_type,
     shipment.shipped_at::date as movement_date,
     coalesce(worker.worker_name, '登録者不明') as worker_name,
     case
@@ -121,7 +149,7 @@ manual_shipments as (
   select
     'shipment-manual:' || item.id::text as id,
     'shipment_manual'::text as source_type,
-    'outbound'::text as movement_type,
+    'shipped'::text as movement_type,
     shipment.shipped_at::date as movement_date,
     coalesce(worker.worker_name, '登録者不明') as worker_name,
     case

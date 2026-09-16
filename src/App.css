@@ -178,6 +178,9 @@
 .inventory-movement-badge.inbound { border-color: #83ac8d; background: #fff; color: #236139; }
 .inventory-movement-badge.outbound { border-color: #d69a87; background: #fff; color: #9b3d24; }
 .inventory-movement-badge.transfer { border-color: #91aac5; background: #fff; color: #315f8d; }
+.inventory-movement-badge.pre-inspection { border-color: #d5a15c; background: #fff8e9; color: #8b5816; }
+.inventory-movement-badge.inspected { border-color: #7da88a; background: #eef8f1; color: #28633c; }
+.inventory-movement-badge.shipped { border-color: #829dba; background: #edf4fb; color: #315f8d; }
 .inventory-balance-table { min-width: 650px; }
 .inventory-balance-table th:nth-child(4), .inventory-balance-table td:nth-child(4) { width: 64px; text-align: center; }
 .inventory-balance-table th:nth-child(3), .inventory-balance-table td:nth-child(3) { white-space: nowrap; }
