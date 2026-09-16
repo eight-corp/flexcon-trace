@@ -69,3 +69,5 @@ revoke all on function public.flexcon_delete_inventory_movement(text, uuid) from
 grant execute on function public.flexcon_delete_inventory_movement(text, uuid) to anon, authenticated;
 
 commit;
+
+notify pgrst, 'reload schema';
