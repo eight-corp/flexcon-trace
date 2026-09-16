@@ -9,9 +9,9 @@ with inspection_flexcons as (
   select
     flexcon.fiscal_year,
     case
-      when nullif(btrim(authorization.prefecture), '') is null then '産地未登録'
-      when right(btrim(authorization.prefecture), 1) in ('都', '道', '府', '県') then btrim(authorization.prefecture)
-      else btrim(authorization.prefecture) || '県'
+      when nullif(btrim(auth_record.prefecture), '') is null then '産地未登録'
+      when right(btrim(auth_record.prefecture), 1) in ('都', '道', '府', '県') then btrim(auth_record.prefecture)
+      else btrim(auth_record.prefecture) || '県'
     end as origin,
     coalesce(nullif(btrim(flexcon.brand), ''), '名称未登録') as product_name,
     coalesce(nullif(btrim(flexcon.grade), ''), '未入力') as grade,
@@ -33,15 +33,15 @@ with inspection_flexcons as (
     case when flexcon.record_kind = 'bulk' then flexcon.quantity_kg::numeric else 1::numeric end as quantity,
     case when flexcon.record_kind = 'bulk' then 'kg' else '本' end as unit
   from public.flexcon_inspection_flexcons as flexcon
-  join public.flexcon_authorizations as authorization on authorization.id = flexcon.authorization_id
+  join public.flexcon_authorizations as auth_record on auth_record.id = flexcon.authorization_id
 ),
 inspection_paper_bags as (
   select
     paper.fiscal_year,
     case
-      when nullif(btrim(authorization.prefecture), '') is null then '産地未登録'
-      when right(btrim(authorization.prefecture), 1) in ('都', '道', '府', '県') then btrim(authorization.prefecture)
-      else btrim(authorization.prefecture) || '県'
+      when nullif(btrim(auth_record.prefecture), '') is null then '産地未登録'
+      when right(btrim(auth_record.prefecture), 1) in ('都', '道', '府', '県') then btrim(auth_record.prefecture)
+      else btrim(auth_record.prefecture) || '県'
     end as origin,
     coalesce(nullif(btrim(paper.brand), ''), '名称未登録') as product_name,
     coalesce(nullif(btrim(paper.grade), ''), '未入力') as grade,
@@ -63,7 +63,7 @@ inspection_paper_bags as (
     paper.bag_count::numeric as quantity,
     '袋'::text as unit
   from public.flexcon_inspection_paper_bags as paper
-  join public.flexcon_authorizations as authorization on authorization.id = paper.authorization_id
+  join public.flexcon_authorizations as auth_record on auth_record.id = paper.authorization_id
 ),
 qr_shipments as (
   select
