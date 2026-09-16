@@ -194,6 +194,12 @@
 .inventory-import-mappings { display: grid; gap: 7px; padding: 10px 12px; border: 1px solid #d4ad58; border-radius: 5px; background: #fff9e8; }
 .inventory-import-mappings > label { display: grid; grid-template-columns: minmax(120px, 1fr) minmax(180px, 1.4fr); align-items: center; gap: 10px; margin: 0; }
 .inventory-import-mappings select { width: 100%; }
+.inventory-import-warehouses { display: grid; gap: 7px; }
+.inventory-import-warehouse-list { max-height: 220px; display: grid; gap: 5px; overflow-y: auto; padding-right: 3px; }
+.inventory-import-warehouse-list > label { display: grid; grid-template-columns: minmax(260px, 1fr) minmax(180px, 260px); align-items: center; gap: 10px; margin: 0; padding: 6px 8px; border: 1px solid var(--line); border-radius: 5px; background: #f7f9f7; }
+.inventory-import-warehouse-list span { display: grid; grid-template-columns: 90px minmax(0, 1fr); align-items: center; gap: 8px; min-width: 0; }
+.inventory-import-warehouse-list small { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inventory-import-warehouse-list select { width: 100%; }
 .inventory-import-preview { max-height: 330px; }
 .inventory-import-preview table { min-width: 840px; }
 .inventory-balance-table { min-width: 650px; }
@@ -745,6 +751,8 @@ table thead th { text-align: center !important; }
   .inventory-entry-toolbar > .secondary-button { width: 100%; }
   .inventory-import-modal > label { grid-template-columns: 1fr; gap: 4px; }
   .inventory-import-mappings > label { grid-template-columns: 1fr; gap: 3px; }
+  .inventory-import-warehouse-list > label { grid-template-columns: 1fr; gap: 5px; }
+  .inventory-import-warehouse-list span { grid-template-columns: 82px minmax(0, 1fr); }
   .inventory-balance-table { width: var(--inventory-balance-mobile-width); min-width: var(--inventory-balance-mobile-width); table-layout: fixed; }
   .inventory-balance-table .inventory-balance-warehouse-col { width: 112px; }
   .inventory-balance-table .inventory-balance-origin-col { width: 72px; }

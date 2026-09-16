@@ -47,6 +47,16 @@ type PurchaseImportRecord = {
   quantity: number
   unit: string
 }
+type StatementEditForm = {
+  movementDate: string
+  settlementNo: string
+  producerName: string
+  origin: string
+  productName: string
+  quantity: string
+  unit: string
+  toWarehouseId: string
+}
 
 const INVENTORY_COLUMNS: Array<{ key: InventoryColumn; label: string }> = [
   { key: 'movementDate', label: '日付' },
@@ -264,11 +274,14 @@ export function InventoryManager({ workerId, workerName, canOperate }: Props) {
   const importFileRef = useRef<HTMLInputElement>(null)
   const [importOpen, setImportOpen] = useState(false)
   const [importFileName, setImportFileName] = useState('')
-  const [importWarehouseId, setImportWarehouseId] = useState('')
+  const [importWarehouseIds, setImportWarehouseIds] = useState<Record<string, string>>({})
   const [importRecords, setImportRecords] = useState<PurchaseImportRecord[]>([])
   const [importErrors, setImportErrors] = useState<string[]>([])
+  const [importBlockedSettlementNos, setImportBlockedSettlementNos] = useState<string[]>([])
   const [importError, setImportError] = useState('')
   const [importProductMappings, setImportProductMappings] = useState<Record<string, string>>({})
+  const [statementEditing, setStatementEditing] = useState<InventoryMovement | null>(null)
+  const [statementEditForm, setStatementEditForm] = useState<StatementEditForm | null>(null)
 
   useEffect(() => {
     void Promise.all([
@@ -303,6 +316,27 @@ export function InventoryManager({ workerId, workerName, canOperate }: Props) {
   const editGrades = gradesFor(editForm.productName)
   const knownProductNames = useMemo(() => new Set(productOptions.filter((item) => ['brand', 'brand_aomori', 'brand_iwate', 'shipment_product'].includes(item.option_type)).map((item) => item.name)), [productOptions])
   const unmappedImportProducts = useMemo(() => [...new Set(importRecords.map((record) => record.product_name).filter((name) => !knownProductNames.has(name)))], [importRecords, knownProductNames])
+  const mappedImportRecords = useMemo(() => {
+    const blocked = new Set(importBlockedSettlementNos)
+    importRecords.forEach((record) => {
+      const productName = importProductMappings[record.product_name] ?? record.product_name
+      if (!knownProductNames.has(productName)) blocked.add(record.settlement_no)
+    })
+    return importRecords.flatMap((record) => {
+    const productName = importProductMappings[record.product_name] ?? record.product_name
+    if (blocked.has(record.settlement_no) || !knownProductNames.has(productName)) return []
+    return [{ ...record, product_name: productName, grade: otherProductNames.has(productName) ? '対象外' : '未検査' }]
+    })
+  }, [importBlockedSettlementNos, importProductMappings, importRecords, knownProductNames, otherProductNames])
+  const importSettlements = useMemo(() => {
+    const grouped = new Map<string, { settlementNo: string; producerName: string; purchaseDate: string; lineCount: number }>()
+    mappedImportRecords.forEach((record) => {
+      const current = grouped.get(record.settlement_no)
+      if (current) current.lineCount += 1
+      else grouped.set(record.settlement_no, { settlementNo: record.settlement_no, producerName: record.producer_name, purchaseDate: record.purchased_at.slice(0, 10), lineCount: 1 })
+    })
+    return [...grouped.values()].sort((left, right) => left.settlementNo.localeCompare(right.settlementNo, 'ja', { numeric: true }))
+  }, [mappedImportRecords])
   const balanceGradeColumns = useMemo(() => [...new Set([
     ...productOptions.filter((item) => item.option_type === 'grade').map((item) => item.name),
     ...balances.map((item) => item.grade || '対象外'),
@@ -383,6 +417,7 @@ export function InventoryManager({ workerId, workerName, canOperate }: Props) {
 
       const records: PurchaseImportRecord[] = []
       const errors: string[] = []
+      const blockedSettlementNos = new Set<string>()
       const detailCounts = new Map<string, number>()
       rows.slice(1).forEach((row, rowIndex) => {
         const sourceRow = rowIndex + 2
@@ -408,6 +443,7 @@ export function InventoryManager({ workerId, workerName, canOperate }: Props) {
         if (!purchasedAt) rowErrors.push('仕入日時が不正')
         if (rowErrors.length > 0) {
           errors.push(`${sourceRow}行目：${rowErrors.join('、')}`)
+          if (settlementNo) blockedSettlementNos.add(settlementNo)
           return
         }
 
@@ -453,8 +489,10 @@ export function InventoryManager({ workerId, workerName, canOperate }: Props) {
       setImportFileName(file.name)
       setImportRecords(records)
       setImportErrors(errors)
+      setImportBlockedSettlementNos([...blockedSettlementNos])
       setImportProductMappings({})
-      setImportWarehouseId(activeWarehouses.length === 1 ? activeWarehouses[0].id : '')
+      const defaultWarehouseId = activeWarehouses.length === 1 ? activeWarehouses[0].id : ''
+      setImportWarehouseIds(Object.fromEntries([...new Set(records.map((record) => record.settlement_no))].map((settlementNo) => [settlementNo, defaultWarehouseId])))
       setImportOpen(true)
     } catch (error) {
       setNotice({ type: 'error', text: error instanceof Error ? error.message : 'Excelファイルを読み込めませんでした。' })
@@ -466,25 +504,21 @@ export function InventoryManager({ workerId, workerName, canOperate }: Props) {
 
   const executePurchaseImport = async () => {
     if (busy) return
-    if (!importWarehouseId) return setImportError('入庫先倉庫を選択してください。')
-    if (importErrors.length > 0) return setImportError('エラーのある明細を修正したExcelで、もう一度取り込んでください。')
-    if (unmappedImportProducts.some((name) => !importProductMappings[name])) return setImportError('名称の対応先をすべて選択してください。')
+    if (mappedImportRecords.length === 0) return setImportError('取込可能な明細がありません。')
+    if (importSettlements.some((settlement) => !importWarehouseIds[settlement.settlementNo])) return setImportError('仕切り書№ごとに入庫先倉庫を選択してください。')
     setBusy(true)
     setImportError('')
     const { data, error } = await supabase.rpc('flexcon_import_purchase_statements', {
       p_worker_id: workerId,
       p_file_name: importFileName,
-      p_to_warehouse_id: importWarehouseId,
-      p_records: importRecords.map((record) => {
-        const productName = importProductMappings[record.product_name] ?? record.product_name
-        return { ...record, product_name: productName, grade: otherProductNames.has(productName) ? '対象外' : '未検査' }
-      }),
+      p_records: mappedImportRecords.map((record) => ({ ...record, to_warehouse_id: importWarehouseIds[record.settlement_no] })),
     })
     setBusy(false)
     if (error) return setImportError(error.message)
     const result = data as { settlement_count?: number; line_count?: number } | null
     setImportOpen(false)
-    setNotice({ type: 'success', text: `仕切り書${result?.settlement_count ?? 0}件、在庫明細${result?.line_count ?? importRecords.length}行を取り込みました。` })
+    const excludedCount = importErrors.length + (importRecords.length - mappedImportRecords.length)
+    setNotice({ type: 'success', text: `仕切り書${result?.settlement_count ?? 0}件、在庫明細${result?.line_count ?? mappedImportRecords.length}行を取り込みました。${excludedCount > 0 ? ` エラー・未対応の${excludedCount}行は除外しました。` : ''}` })
     setVersion((value) => value + 1)
   }
 
@@ -571,6 +605,65 @@ export function InventoryManager({ workerId, workerName, canOperate }: Props) {
     setVersion((value) => value + 1)
   }
 
+  const beginStatementEdit = (movement: InventoryMovement) => {
+    setStatementEditing(movement)
+    setStatementEditForm({
+      movementDate: movement.movement_date,
+      settlementNo: movement.settlement_no,
+      producerName: movement.producer_name,
+      origin: movement.origin,
+      productName: movement.product_name,
+      quantity: String(movement.quantity),
+      unit: movement.unit,
+      toWarehouseId: movement.to_warehouse_id ?? '',
+    })
+    setNotice(null)
+  }
+
+  const saveStatementEdit = async (event: React.FormEvent) => {
+    event.preventDefault()
+    if (!statementEditing || !statementEditForm || busy || !canOperate) return
+    if (!statementEditForm.movementDate) return setNotice({ type: 'error', text: '日付を入力してください。' })
+    if (!statementEditForm.settlementNo.trim()) return setNotice({ type: 'error', text: '仕切り書№を入力してください。' })
+    if (!statementEditForm.producerName.trim()) return setNotice({ type: 'error', text: '生産者名を入力してください。' })
+    if (!originOptions.some((item) => item.name === statementEditForm.origin)) return setNotice({ type: 'error', text: '産地をマスタから選択してください。' })
+    if (!productNamesFor(statementEditForm.origin).includes(statementEditForm.productName)) return setNotice({ type: 'error', text: '名称をマスタから選択してください。' })
+    const quantity = Number(statementEditForm.quantity)
+    if (!Number.isFinite(quantity) || quantity <= 0) return setNotice({ type: 'error', text: '数量は0より大きい数値で入力してください。' })
+    if (!['本', '袋', 'kg', '俵'].includes(statementEditForm.unit)) return setNotice({ type: 'error', text: '単位を選択してください。' })
+    if (!statementEditForm.toWarehouseId) return setNotice({ type: 'error', text: '入庫先倉庫を選択してください。' })
+    setBusy(true); setNotice(null)
+    const { error } = await supabase.rpc('flexcon_update_purchase_statement_line', {
+      p_worker_id: workerId,
+      p_line_id: statementEditing.id,
+      p_movement_date: statementEditForm.movementDate,
+      p_settlement_no: statementEditForm.settlementNo.trim(),
+      p_producer_name: statementEditForm.producerName.trim(),
+      p_origin: statementEditForm.origin,
+      p_product_name: statementEditForm.productName,
+      p_quantity: quantity,
+      p_unit: statementEditForm.unit,
+      p_to_warehouse_id: statementEditForm.toWarehouseId,
+    })
+    setBusy(false)
+    if (error) return setNotice({ type: 'error', text: error.message })
+    setStatementEditing(null); setStatementEditForm(null)
+    setNotice({ type: 'success', text: '仕切り書の在庫明細を更新しました。' })
+    setVersion((value) => value + 1)
+  }
+
+  const deleteStatementLine = async (movement: InventoryMovement) => {
+    if (busy || !canOperate) return
+    const description = `仕切り書№${movement.settlement_no} ${movement.producer_name} ${movement.product_name} ${formatQuantity(movement.quantity)}${movement.unit}`
+    if (!window.confirm(`${description}\n\nこの取込明細を削除しますか？`)) return
+    setBusy(true); setNotice(null)
+    const { error } = await supabase.rpc('flexcon_delete_purchase_statement_line', { p_worker_id: workerId, p_line_id: movement.id })
+    setBusy(false)
+    if (error) return setNotice({ type: 'error', text: error.message })
+    setNotice({ type: 'success', text: '仕切り書の在庫明細を削除しました。' })
+    setVersion((value) => value + 1)
+  }
+
   const filterValues = useMemo(() => Object.fromEntries(INVENTORY_COLUMNS.map((column) => [column.key, [...new Set(movements.map((movement) => movementValue(movement, column.key)))].sort((a, b) => a.localeCompare(b, 'ja', { numeric: true }))])) as Record<InventoryColumn, string[]>, [movements])
   const displayedMovements = useMemo(() => {
     const term = search.trim().toLowerCase()
@@ -640,7 +733,7 @@ export function InventoryManager({ workerId, workerName, canOperate }: Props) {
       <div className="search-row inventory-search-row"><div className="search-input-wrap"><Search size={18} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="入出庫記録を検索" /></div></div>
       <div className="inventory-table-wrap"><table className="inventory-table inventory-history-table">
         <thead><tr>{INVENTORY_COLUMNS.map((column) => <FilterableColumnHeader key={column.key} column={column} sort={sort} values={filterValues[column.key]} selectedValues={columnFilters[column.key]} onSort={changeSort} onFilterChange={changeColumnFilter} openRight={column.key === 'movementDate'} />)}{canOperate && <th className="inventory-actions-heading">操作</th>}</tr></thead>
-        <tbody>{displayedMovements.map((movement) => { const mode = modeForMovement(movement); const manual = movement.source_type === 'manual'; return <tr className={`inventory-movement-${mode}`} key={movement.id}><td>{movementValue(movement, 'movementDate')}</td><td><span className={`inventory-movement-badge ${movementBadgeClass(movement)}`}>{mode === 'inbound' ? <ArrowDownToLine size={14} /> : mode === 'outbound' ? <ArrowUpFromLine size={14} /> : <ArrowRightLeft size={14} />}{movementTypeLabel(movement)}</span></td><td>{movement.settlement_no}</td><td>{movement.worker_name}</td><td>{movement.producer_name}</td><td>{movement.origin}</td><td>{movement.product_name}</td><td>{movementValue(movement, 'grade')}</td><td className="numeric-cell">{formatQuantity(movement.quantity)}</td><td>{movement.unit}</td><td>{movement.movement_from}</td><td>{movement.movement_to}</td>{canOperate && <td className="inventory-actions-cell">{manual ? <div className="inventory-row-actions"><button className="icon-button" type="button" title="入出庫記録を編集" aria-label="入出庫記録を編集" disabled={busy} onClick={() => beginEdit(movement)}><Pencil size={17} /></button><button className="icon-button delete-icon" type="button" title="入出庫記録を削除" aria-label="入出庫記録を削除" disabled={busy} onClick={() => void deleteMovement(movement)}><Trash2 size={17} /></button></div> : <span className="inventory-auto-label" title="仕切り書Excelから取り込まれた記録">取込</span>}</td>}</tr> })}{displayedMovements.length === 0 && <tr><td className="empty-state" colSpan={INVENTORY_COLUMNS.length + (canOperate ? 1 : 0)}>該当する入出庫記録はありません</td></tr>}</tbody>
+        <tbody>{displayedMovements.map((movement) => { const mode = modeForMovement(movement); const manual = movement.source_type === 'manual'; return <tr className={`inventory-movement-${mode}`} key={movement.id}><td>{movementValue(movement, 'movementDate')}</td><td><span className={`inventory-movement-badge ${movementBadgeClass(movement)}`}>{mode === 'inbound' ? <ArrowDownToLine size={14} /> : mode === 'outbound' ? <ArrowUpFromLine size={14} /> : <ArrowRightLeft size={14} />}{movementTypeLabel(movement)}</span></td><td>{movement.settlement_no}</td><td>{movement.worker_name}</td><td>{movement.producer_name}</td><td>{movement.origin}</td><td>{movement.product_name}</td><td>{movementValue(movement, 'grade')}</td><td className="numeric-cell">{formatQuantity(movement.quantity)}</td><td>{movement.unit}</td><td>{movement.movement_from}</td><td>{movement.movement_to}</td>{canOperate && <td className="inventory-actions-cell"><div className="inventory-row-actions"><button className="icon-button" type="button" title={manual ? '入出庫記録を編集' : '仕切り書明細を編集'} aria-label={manual ? '入出庫記録を編集' : '仕切り書明細を編集'} disabled={busy} onClick={() => manual ? beginEdit(movement) : beginStatementEdit(movement)}><Pencil size={17} /></button><button className="icon-button delete-icon" type="button" title={manual ? '入出庫記録を削除' : '仕切り書明細を削除'} aria-label={manual ? '入出庫記録を削除' : '仕切り書明細を削除'} disabled={busy} onClick={() => manual ? void deleteMovement(movement) : void deleteStatementLine(movement)}><Trash2 size={17} /></button></div></td>}</tr> })}{displayedMovements.length === 0 && <tr><td className="empty-state" colSpan={INVENTORY_COLUMNS.length + (canOperate ? 1 : 0)}>該当する入出庫記録はありません</td></tr>}</tbody>
       </table></div>
     </> : <><div className="search-row inventory-search-row"><div className="search-input-wrap"><Search size={18} /><input value={balanceSearch} onChange={(event) => setBalanceSearch(event.target.value)} placeholder="倉庫別在庫を検索" /></div></div><div className="inventory-table-wrap"><table className="inventory-table inventory-balance-table" style={{ '--inventory-balance-mobile-width': `${358 + balanceGradeColumns.length * 62}px` } as React.CSSProperties}><colgroup><col className="inventory-balance-warehouse-col" /><col className="inventory-balance-origin-col" /><col className="inventory-balance-product-col" /><col className="inventory-balance-unit-col" />{balanceGradeColumns.map((grade) => <col className="inventory-balance-grade-col" key={grade} />)}</colgroup><thead><tr>{balanceColumns.map((column, index) => <FilterableColumnHeader key={column.key} column={column} values={balanceFilterValues[column.key]} selectedValues={balanceColumnFilters[column.key]} onFilterChange={changeBalanceColumnFilter} openRight={index === 0} />)}</tr></thead><tbody>{displayedBalanceRows.length > 0 && <tr className="inventory-balance-total"><td><span className="warehouse-name"><Warehouse size={17} />{balanceIsFiltered ? '絞り込み合計' : '全倉庫合計'}</span></td><td>{balanceIsFiltered ? '表示中' : '全産地'}</td><td>{balanceIsFiltered ? '表示中' : '全名称'}</td><td>単位別</td>{balanceGradeColumns.map((grade) => { const totals = balanceTotals[grade] ?? {}; const values = ['本', '袋', 'kg', '俵'].filter((unit) => totals[unit]).map((unit) => `${formatQuantity(totals[unit])}${unit}`); const negative = Object.values(totals).some((quantity) => quantity < 0); return <td className={`numeric-cell inventory-balance-grade ${negative ? 'inventory-negative' : ''}`} key={grade}>{values.join(' / ')}</td> })}</tr>}{displayedBalanceRows.map((row) => <tr key={`${row.warehouseId}-${row.origin}-${row.productName}-${row.unit}`}><td><span className="warehouse-name"><Warehouse size={17} />{row.warehouseName}</span></td><td>{row.origin}</td><td>{row.productName}</td><td>{row.unit}</td>{balanceGradeColumns.map((grade) => { const quantity = row.quantities[grade] ?? 0; return <td className={`numeric-cell inventory-balance-grade ${quantity < 0 ? 'inventory-negative' : ''}`} key={grade}>{quantity === 0 ? '' : formatQuantity(quantity)}</td> })}</tr>)}{displayedBalanceRows.length === 0 && <tr><td className="empty-state" colSpan={balanceColumns.length}>該当する倉庫在庫はありません</td></tr>}</tbody></table></div></>}
     {editing && <div className="modal-backdrop" role="presentation"><section className="registration-modal inventory-edit-modal" role="dialog" aria-modal="true" aria-labelledby="inventory-edit-title">
@@ -649,17 +742,32 @@ export function InventoryManager({ workerId, workerName, canOperate }: Props) {
       <div className="inventory-mode-switch" role="group" aria-label="移動区分">{(['inbound', 'outbound', 'transfer'] as MovementMode[]).map((mode) => <button key={mode} type="button" className={editMode === mode ? 'active' : ''} onClick={() => { setEditMode(mode); setEditForm((current) => ({ ...current, fromWarehouseId: mode === 'inbound' ? '' : current.fromWarehouseId, toWarehouseId: mode === 'outbound' ? '' : current.toWarehouseId })) }}>{mode === 'inbound' ? '入庫' : mode === 'outbound' ? '出庫' : '倉庫間移動'}</button>)}</div>
       <form className="form-grid inventory-edit-form" onSubmit={(event) => void saveEdit(event)}>{renderMovementFields(editForm, setEditForm, editMode, editProductNames, editGrades)}<div className="modal-actions"><button className="secondary-button" type="button" onClick={() => setEditing(null)} disabled={busy}>取消</button><button className="primary-button" type="submit" disabled={busy}><Save size={18} />{busy ? '保存中...' : '変更を保存'}</button></div></form>
     </section></div>}
+    {statementEditing && statementEditForm && <div className="modal-backdrop" role="presentation"><section className="registration-modal inventory-edit-modal" role="dialog" aria-modal="true" aria-labelledby="statement-edit-title">
+      <div className="modal-header"><div><h2 id="statement-edit-title">仕切り書明細を編集</h2><p>元の取込内容は監査情報として保持されます。</p></div><button className="icon-button" type="button" title="閉じる" aria-label="編集画面を閉じる" onClick={() => { setStatementEditing(null); setStatementEditForm(null) }} disabled={busy}><X size={20} /></button></div>
+      {notice?.type === 'error' && <div className="notice error" role="alert">{notice.text}</div>}
+      <form className="form-grid inventory-edit-form" onSubmit={(event) => void saveStatementEdit(event)}>
+        <label>日付<input type="date" value={statementEditForm.movementDate} onChange={(event) => setStatementEditForm((current) => current ? { ...current, movementDate: event.target.value } : current)} required /></label>
+        <label>仕切り書№<input value={statementEditForm.settlementNo} maxLength={80} onChange={(event) => setStatementEditForm((current) => current ? { ...current, settlementNo: event.target.value } : current)} required /></label>
+        <label>生産者名<input value={statementEditForm.producerName} maxLength={120} onChange={(event) => setStatementEditForm((current) => current ? { ...current, producerName: event.target.value } : current)} required /></label>
+        <label>産地<select value={statementEditForm.origin} onChange={(event) => setStatementEditForm((current) => current ? { ...current, origin: event.target.value, productName: '' } : current)} required><option value="">選択</option>{originOptions.map((origin) => <option key={origin.id} value={origin.name}>{origin.name}</option>)}</select></label>
+        <label>名称<select value={statementEditForm.productName} onChange={(event) => setStatementEditForm((current) => current ? { ...current, productName: event.target.value } : current)} required><option value="">選択</option>{productNamesFor(statementEditForm.origin).map((product) => <option key={product} value={product}>{product}</option>)}</select></label>
+        <label>数量<input type="number" min="0.001" step="0.001" inputMode="decimal" value={statementEditForm.quantity} onChange={(event) => setStatementEditForm((current) => current ? { ...current, quantity: event.target.value } : current)} required /></label>
+        <label>単位<select value={statementEditForm.unit} onChange={(event) => setStatementEditForm((current) => current ? { ...current, unit: event.target.value } : current)} required><option value="本">本</option><option value="袋">袋</option><option value="kg">kg</option><option value="俵">俵</option></select></label>
+        <label>入庫先倉庫<select value={statementEditForm.toWarehouseId} onChange={(event) => setStatementEditForm((current) => current ? { ...current, toWarehouseId: event.target.value } : current)} required><option value="">選択</option>{warehouses.filter((warehouse) => warehouse.active || warehouse.id === statementEditForm.toWarehouseId).map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}{warehouse.active ? '' : '（無効）'}</option>)}</select></label>
+        <div className="modal-actions"><button className="secondary-button" type="button" onClick={() => { setStatementEditing(null); setStatementEditForm(null) }} disabled={busy}>取消</button><button className="primary-button" type="submit" disabled={busy}><Save size={18} />{busy ? '保存中...' : '変更を保存'}</button></div>
+      </form>
+    </section></div>}
     {importOpen && <div className="modal-backdrop" role="presentation"><section className="registration-modal inventory-import-modal" role="dialog" aria-modal="true" aria-labelledby="inventory-import-title">
       <div className="modal-header"><div><h2 id="inventory-import-title">仕切り書Excel取込</h2><p>{importFileName}</p></div><button className="icon-button" type="button" title="閉じる" aria-label="取込画面を閉じる" onClick={() => setImportOpen(false)} disabled={busy}><X size={20} /></button></div>
       {importError && <div className="notice error" role="alert">{importError}</div>}
-      <label>入庫先倉庫<select value={importWarehouseId} onChange={(event) => setImportWarehouseId(event.target.value)} required><option value="">選択</option>{activeWarehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</select></label>
-      <div className="import-summary"><strong>{new Set(importRecords.map((record) => record.settlement_no)).size}件</strong><span>仕切り書／在庫明細 {importRecords.length}行</span></div>
-      <p className="import-note">同じ仕切り書№は、今回のExcel内容で差し替えます。銘柄米はkgへ換算しません。</p>
-      {unmappedImportProducts.length > 0 && <div className="inventory-import-mappings"><strong>名称の対応を選択</strong>{unmappedImportProducts.map((sourceName) => <label key={sourceName}><span>{sourceName}</span><select value={importProductMappings[sourceName] ?? ''} onChange={(event) => setImportProductMappings((current) => ({ ...current, [sourceName]: event.target.value }))}><option value="">対応先を選択</option>{productOptions.filter((item) => ['brand', 'brand_aomori', 'brand_iwate', 'shipment_product'].includes(item.option_type)).map((item) => <option key={`${item.option_type}-${item.id}`} value={item.name}>{item.name}</option>)}</select></label>)}</div>}
-      {importErrors.length > 0 && <div className="inventory-import-errors" role="alert"><strong>取込できない行が{importErrors.length}件あります</strong>{importErrors.slice(0, 20).map((error) => <span key={error}>{error}</span>)}{importErrors.length > 20 && <span>ほか {importErrors.length - 20}件</span>}</div>}
-      <div className="import-preview inventory-import-preview"><table><thead><tr><th>仕切り書№</th><th>日付</th><th>生産者名</th><th>産地</th><th>名称</th><th>元数量</th><th>在庫数量</th></tr></thead><tbody>{importRecords.slice(0, 30).map((record) => <tr key={`${record.settlement_no}-${record.detail_no}-${record.part_no}`}><td>{record.settlement_no}</td><td>{record.purchased_at.slice(0, 10).replaceAll('-', '/')}</td><td>{record.producer_name}</td><td>{record.origin}</td><td>{importProductMappings[record.product_name] ?? record.product_name}</td><td className="numeric-cell">{formatQuantity(record.raw_quantity)}{record.raw_unit}</td><td className="numeric-cell">{formatQuantity(record.quantity)}{record.unit}</td></tr>)}</tbody></table></div>
-      {importRecords.length > 30 && <p className="import-preview-more">ほか {importRecords.length - 30}行</p>}
-      <div className="modal-actions"><button className="secondary-button" type="button" onClick={() => setImportOpen(false)} disabled={busy}>取消</button><button className="primary-button" type="button" onClick={() => void executePurchaseImport()} disabled={busy || importErrors.length > 0 || importRecords.length === 0 || unmappedImportProducts.some((name) => !importProductMappings[name])}><FileUp size={18} />{busy ? '取込中...' : '取込を実行'}</button></div>
+      <div className="import-summary"><strong>{importSettlements.length}件</strong><span>仕切り書／取込対象 {mappedImportRecords.length}行</span></div>
+      <p className="import-note">同じ仕切り書№は、今回のExcel内容で差し替えます。エラーや未対応の名称を含む仕切り書№だけを除外し、正常な仕切り書はそのまま取り込めます。</p>
+      {unmappedImportProducts.length > 0 && <div className="inventory-import-mappings"><strong>名称の対応を選択（選択しない名称は除外）</strong>{unmappedImportProducts.map((sourceName) => <label key={sourceName}><span>{sourceName}</span><select value={importProductMappings[sourceName] ?? ''} onChange={(event) => setImportProductMappings((current) => ({ ...current, [sourceName]: event.target.value }))}><option value="">取込から除外</option>{productOptions.filter((item) => ['brand', 'brand_aomori', 'brand_iwate', 'shipment_product'].includes(item.option_type)).map((item) => <option key={`${item.option_type}-${item.id}`} value={item.name}>{item.name}</option>)}</select></label>)}</div>}
+      {importSettlements.length > 0 && <div className="inventory-import-warehouses"><strong>仕切り書№ごとの入庫先</strong><div className="inventory-import-warehouse-list">{importSettlements.map((settlement) => <label key={settlement.settlementNo}><span><b>{settlement.settlementNo}</b><small>{settlement.producerName}　{settlement.purchaseDate.replaceAll('-', '/')}　{settlement.lineCount}行</small></span><select value={importWarehouseIds[settlement.settlementNo] ?? ''} onChange={(event) => setImportWarehouseIds((current) => ({ ...current, [settlement.settlementNo]: event.target.value }))} required><option value="">入庫先を選択</option>{activeWarehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</select></label>)}</div></div>}
+      {importErrors.length > 0 && <div className="inventory-import-errors" role="status"><strong>次のエラーを含む仕切り書№は除外されます（{importErrors.length}行）</strong>{importErrors.slice(0, 20).map((error) => <span key={error}>{error}</span>)}{importErrors.length > 20 && <span>ほか {importErrors.length - 20}件</span>}</div>}
+      <div className="import-preview inventory-import-preview"><table><thead><tr><th>仕切り書№</th><th>日付</th><th>生産者名</th><th>産地</th><th>名称</th><th>元数量</th><th>在庫数量</th></tr></thead><tbody>{mappedImportRecords.slice(0, 30).map((record) => <tr key={`${record.settlement_no}-${record.detail_no}-${record.part_no}`}><td>{record.settlement_no}</td><td>{record.purchased_at.slice(0, 10).replaceAll('-', '/')}</td><td>{record.producer_name}</td><td>{record.origin}</td><td>{record.product_name}</td><td className="numeric-cell">{formatQuantity(record.raw_quantity)}{record.raw_unit}</td><td className="numeric-cell">{formatQuantity(record.quantity)}{record.unit}</td></tr>)}</tbody></table></div>
+      {mappedImportRecords.length > 30 && <p className="import-preview-more">ほか {mappedImportRecords.length - 30}行</p>}
+      <div className="modal-actions"><button className="secondary-button" type="button" onClick={() => setImportOpen(false)} disabled={busy}>取消</button><button className="primary-button" type="button" onClick={() => void executePurchaseImport()} disabled={busy || mappedImportRecords.length === 0 || importSettlements.some((settlement) => !importWarehouseIds[settlement.settlementNo])}><FileUp size={18} />{busy ? '取込中...' : '正常な明細を取り込む'}</button></div>
     </section></div>}
   </div>
 }
