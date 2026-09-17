@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { AlertTriangle, ArrowDown, ArrowDownToLine, ArrowRightLeft, ArrowUp, ArrowUpFromLine, Boxes, FileUp, Filter, List, Pencil, Plus, Save, Search, Trash2, Warehouse, X } from 'lucide-react'
+import { AlertTriangle, ArrowDown, ArrowDownToLine, ArrowRightLeft, ArrowUp, ArrowUpFromLine, Boxes, Camera, FileUp, Filter, List, Pencil, Plus, Save, Search, Trash2, Warehouse, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import type { InspectionOption } from '../types'
 
@@ -47,6 +47,15 @@ type PurchaseImportRecord = {
   grade: string
   quantity: number
   unit: string
+}
+type GeminiStatement = {
+  settlement_no: string
+  crop_year: string
+  purchased_at: string
+  origin: string
+  producer_name: string
+  lines: Array<{ product_name: string; package_type: 'FL' | '紙袋' | 'その他'; quantity: number; unit: string }>
+  warnings: string[]
 }
 type StatementEditRow = {
   id: string
@@ -146,6 +155,35 @@ function productReadingKey(value: string) {
     .toLowerCase()
     .replace(/[ぁ-ゖ]/g, (character) => String.fromCharCode(character.charCodeAt(0) + 0x60))
     .replace(/[\s　]/g, '')
+}
+
+async function resizeStatementPhoto(file: File) {
+  const objectUrl = URL.createObjectURL(file)
+  try {
+    const source = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const image = new Image()
+      image.onload = () => resolve(image)
+      image.onerror = () => reject(new Error('撮影画像を読み込めませんでした。'))
+      image.src = objectUrl
+    })
+    const maxDimension = 1800
+    const scale = Math.min(1, maxDimension / Math.max(source.naturalWidth, source.naturalHeight))
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.max(1, Math.round(source.naturalWidth * scale))
+    canvas.height = Math.max(1, Math.round(source.naturalHeight * scale))
+    const context = canvas.getContext('2d')
+    if (!context) throw new Error('撮影画像を処理できませんでした。')
+    context.drawImage(source, 0, 0, canvas.width, canvas.height)
+    const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob((result) => result ? resolve(result) : reject(new Error('撮影画像を変換できませんでした。')), 'image/jpeg', 0.86))
+    const bytes = new Uint8Array(await blob.arrayBuffer())
+    let binary = ''
+    const chunkSize = 0x8000
+    for (let index = 0; index < bytes.length; index += chunkSize) binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize))
+    const imageBase64 = btoa(binary)
+    return { imageBase64, mimeType: 'image/jpeg', previewUrl: `data:image/jpeg;base64,${imageBase64}` }
+  } finally {
+    URL.revokeObjectURL(objectUrl)
+  }
 }
 
 function splitSourceProduct(value: unknown) {
@@ -290,11 +328,15 @@ export function InventoryManager({ workerId, workerName, canOperate, isAdmin }: 
   const [busy, setBusy] = useState(false)
   const [version, setVersion] = useState(0)
   const importFileRef = useRef<HTMLInputElement>(null)
+  const cameraFileRef = useRef<HTMLInputElement>(null)
   const [importOpen, setImportOpen] = useState(false)
+  const [importSource, setImportSource] = useState<'excel' | 'camera'>('excel')
   const [importFileName, setImportFileName] = useState('')
+  const [importPreviewUrl, setImportPreviewUrl] = useState('')
   const [importWarehouseIds, setImportWarehouseIds] = useState<Record<string, string>>({})
   const [importRecords, setImportRecords] = useState<PurchaseImportRecord[]>([])
   const [importErrors, setImportErrors] = useState<string[]>([])
+  const [importWarnings, setImportWarnings] = useState<string[]>([])
   const [importBlockedSettlementNos, setImportBlockedSettlementNos] = useState<string[]>([])
   const [importError, setImportError] = useState('')
   const [importProductMappings, setImportProductMappings] = useState<Record<string, string>>({})
@@ -430,6 +472,9 @@ export function InventoryManager({ workerId, workerName, canOperate, isAdmin }: 
     setBusy(true)
     setNotice(null)
     setImportError('')
+    setImportSource('excel')
+    setImportPreviewUrl('')
+    setImportWarnings([])
     try {
       const { readSheet } = await import('read-excel-file/browser')
       const rows = await readSheet(file)
@@ -529,9 +574,112 @@ export function InventoryManager({ workerId, workerName, canOperate, isAdmin }: 
     }
   }
 
+  const preparePurchasePhoto = async (file: File) => {
+    setBusy(true)
+    setNotice(null)
+    setImportError('')
+    try {
+      const image = await resizeStatementPhoto(file)
+      const { data, error } = await supabase.functions.invoke('analyze-purchase-statement', {
+        body: { imageBase64: image.imageBase64, mimeType: image.mimeType },
+      })
+      if (error) {
+        let message = error.message
+        const context = (error as { context?: Response }).context
+        if (context) {
+          try { message = ((await context.clone().json()) as { error?: string }).error ?? message } catch {}
+        }
+        throw new Error(message)
+      }
+      const statement = (data as { statement?: GeminiStatement } | null)?.statement
+      if (!statement || !Array.isArray(statement.lines) || statement.lines.length === 0) throw new Error('仕切書の米穀明細を読み取れませんでした。')
+
+      const cropYearNumber = Number(statement.crop_year)
+      const cropYear = Number.isInteger(cropYearNumber) && cropYearNumber >= 1900 && cropYearNumber <= 2100 ? cropYearNumber : null
+      const purchasedAt = normalizePurchaseDate(statement.purchased_at)
+      const origin = normalizeOrigin(statement.origin)
+      const records: PurchaseImportRecord[] = []
+      const warnings = [...(statement.warnings ?? [])]
+      if (!statement.settlement_no?.trim()) warnings.push('仕切り書№を読み取れませんでした。')
+      if (!cropYear) warnings.push('産年を読み取れませんでした。')
+      if (!purchasedAt) warnings.push('仕入日を読み取れませんでした。')
+      if (!origin) warnings.push('産地を読み取れませんでした。')
+      if (!statement.producer_name?.trim()) warnings.push('生産者名を読み取れませんでした。')
+
+      statement.lines.forEach((line, lineIndex) => {
+        const packageSuffix = line.package_type === 'FL' ? '(FL)' : line.package_type === '紙袋' ? '(紙袋)' : ''
+        const product = splitSourceProduct(`${line.product_name ?? ''}${packageSuffix}`)
+        const masterProductName = masterProductByReading.get(productReadingKey(product.productName)) ?? product.productName
+        const sourceUnit = normalizeSourceUnit(line.unit)
+        const rawQuantity = Number(line.quantity)
+        const parts: Array<{ quantity: number; unit: string }> = []
+        if (product.packageType === 'FL' && sourceUnit === '俵' && (cropYear ?? 0) >= 2026 && rawQuantity > 0) {
+          const fullFlexcons = Math.floor(rawQuantity / 17)
+          const remainderBales = rawQuantity % 17
+          if (fullFlexcons > 0) parts.push({ quantity: fullFlexcons, unit: '本' })
+          if (remainderBales > 0) parts.push({ quantity: remainderBales, unit: '俵' })
+        } else if (!product.packageType && sourceUnit === 'kg' && ['くず米', '飼料用玄米', '中米', '中米はじき', '色選はじき'].includes(masterProductName) && rawQuantity > 0) {
+          const fullWeight = ['くず米', '飼料用玄米'].includes(masterProductName) ? 1000 : 1020
+          const fullFlexcons = Math.floor(rawQuantity / fullWeight)
+          const remainderKg = rawQuantity % fullWeight
+          if (fullFlexcons > 0) parts.push({ quantity: fullFlexcons, unit: '本' })
+          if (remainderKg > 0) parts.push({ quantity: remainderKg, unit: 'kg' })
+        } else {
+          parts.push({ quantity: Number.isFinite(rawQuantity) ? rawQuantity : 0, unit: sourceUnit || 'kg' })
+        }
+        parts.forEach((part, partIndex) => records.push({
+          settlement_no: statement.settlement_no?.trim() ?? '', detail_no: lineIndex + 1, part_no: partIndex + 1,
+          source_import_id: `camera-${lineIndex + 1}`, crop_year: cropYear, purchased_at: purchasedAt,
+          origin, raw_product_name: product.raw, product_name: masterProductName, producer_name: statement.producer_name?.trim() ?? '',
+          raw_quantity: Number.isFinite(rawQuantity) ? rawQuantity : 0, raw_unit: sourceUnit || 'kg',
+          grade: otherProductNames.has(masterProductName) ? '対象外' : '未検査', quantity: part.quantity, unit: part.unit,
+        }))
+      })
+
+      setImportSource('camera')
+      setImportFileName(`仕切書撮影_${new Date().toLocaleString('ja-JP')}.jpg`)
+      setImportPreviewUrl(image.previewUrl)
+      setImportRecords(records)
+      setImportErrors([])
+      setImportWarnings([...new Set(warnings.filter(Boolean))])
+      setImportBlockedSettlementNos([])
+      setImportProductMappings({})
+      const defaultWarehouseId = activeWarehouses.length === 1 ? activeWarehouses[0].id : ''
+      setImportWarehouseIds(statement.settlement_no ? { [statement.settlement_no]: defaultWarehouseId } : {})
+      setImportOpen(true)
+    } catch (error) {
+      setNotice({ type: 'error', text: error instanceof Error ? error.message : '仕切書画像を解析できませんでした。' })
+    } finally {
+      setBusy(false)
+      if (cameraFileRef.current) cameraFileRef.current.value = ''
+    }
+  }
+
+  const updateImportCommon = (changes: Partial<Pick<PurchaseImportRecord, 'settlement_no' | 'crop_year' | 'purchased_at' | 'producer_name' | 'origin'>>) => {
+    setImportRecords((current) => current.map((record) => ({ ...record, ...changes })))
+  }
+
+  const updateImportRecord = (index: number, changes: Partial<PurchaseImportRecord>) => {
+    setImportRecords((current) => current.map((record, recordIndex) => recordIndex === index ? { ...record, ...changes } : record))
+  }
+
+  const changeCameraSettlementNo = (settlementNo: string) => {
+    const previous = importRecords[0]?.settlement_no ?? ''
+    updateImportCommon({ settlement_no: settlementNo })
+    setImportWarehouseIds((current) => {
+      const next = { ...current, [settlementNo]: current[previous] ?? '' }
+      if (previous && previous !== settlementNo) delete next[previous]
+      return next
+    })
+  }
+
   const executePurchaseImport = async () => {
     if (busy) return
     if (mappedImportRecords.length === 0) return setImportError('取込可能な明細がありません。')
+    const invalidRecord = mappedImportRecords.find((record) => !record.settlement_no.trim() || !record.purchased_at || !record.producer_name.trim()
+      || !originOptions.some((origin) => origin.name === record.origin) || !Number.isFinite(Number(record.quantity)) || Number(record.quantity) <= 0
+      || !['本', '袋', 'kg', '俵'].includes(record.unit))
+    if (invalidRecord) return setImportError('仕切書№・仕入日・生産者名・産地・数量・単位を確認してください。')
     setBusy(true)
     setImportError('')
     const { data, error } = await supabase.rpc('flexcon_import_purchase_statements', {
@@ -791,8 +939,12 @@ export function InventoryManager({ workerId, workerName, canOperate, isAdmin }: 
           <button type="button" className={movementMode === 'outbound' ? 'active' : ''} onClick={() => changeMode('outbound')}><ArrowUpFromLine size={18} />出庫</button>
           <button type="button" className={movementMode === 'transfer' ? 'active' : ''} onClick={() => changeMode('transfer')}><ArrowRightLeft size={18} />倉庫間移動</button>
         </div>
+        <div className="inventory-import-actions">
+        <input ref={cameraFileRef} className="visually-hidden" type="file" accept="image/*" capture="environment" onChange={(event) => { const file = event.target.files?.[0]; if (file) void preparePurchasePhoto(file) }} />
         <input ref={importFileRef} className="visually-hidden" type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel.sheet.macroEnabled.12" onChange={(event) => { const file = event.target.files?.[0]; if (file) void preparePurchaseImport(file) }} />
+        <button className="secondary-button" type="button" onClick={() => cameraFileRef.current?.click()} disabled={busy}><Camera size={18} />{busy ? '読取中...' : '仕切書撮影'}</button>
         <button className="secondary-button" type="button" onClick={() => importFileRef.current?.click()} disabled={busy}><FileUp size={18} />仕切り書Excel取込</button>
+        </div>
       </div>
       <form className={`inventory-entry-form ${movementMode === 'inbound' ? 'with-producer' : ''}`} noValidate onSubmit={(event) => void submit(event)}>{renderMovementFields(form, setForm, movementMode, addProductNames, addGrades)}<button className="primary-button" type="submit" disabled={busy || !warehouseRouteAvailable}><Plus size={18} />{busy ? '登録中...' : '記録を追加'}</button></form>
     </section>}
@@ -847,16 +999,27 @@ export function InventoryManager({ workerId, workerName, canOperate, isAdmin }: 
       </form>
     </section></div>}
     {importOpen && <div className="modal-backdrop" role="presentation"><section className="registration-modal inventory-import-modal" role="dialog" aria-modal="true" aria-labelledby="inventory-import-title">
-      <div className="modal-header"><div><h2 id="inventory-import-title">仕切り書Excel取込</h2><p>{importFileName}</p></div><button className="icon-button" type="button" title="閉じる" aria-label="取込画面を閉じる" onClick={() => setImportOpen(false)} disabled={busy}><X size={20} /></button></div>
+      <div className="modal-header"><div><h2 id="inventory-import-title">{importSource === 'camera' ? '仕切書撮影取込' : '仕切り書Excel取込'}</h2><p>{importFileName}</p></div><button className="icon-button" type="button" title="閉じる" aria-label="取込画面を閉じる" onClick={() => setImportOpen(false)} disabled={busy}><X size={20} /></button></div>
       {importError && <div className="notice error" role="alert">{importError}</div>}
       <div className="import-summary"><strong>{importSettlements.length}件</strong><span>仕切り書／取込対象 {mappedImportRecords.length}行</span></div>
-      <p className="import-note">入庫先は未指定のまま取込可能です。同じ仕切り書№は今回のExcel内容で差し替え、エラーや未対応の名称を含む仕切り書№だけを除外します。</p>
+      <p className="import-note">入庫先は未指定のまま取込可能です。同じ仕切り書№は今回の内容で差し替えます。</p>
+      {importSource === 'camera' && importRecords[0] && <div className="inventory-camera-result">
+        {importPreviewUrl && <img src={importPreviewUrl} alt="撮影した仕切書" />}
+        <div className="inventory-camera-common-fields">
+          <label>仕切り書№<input value={importRecords[0].settlement_no} maxLength={80} onChange={(event) => changeCameraSettlementNo(event.target.value)} /></label>
+          <label>産年<input type="number" min="1900" max="2100" step="1" value={importRecords[0].crop_year ?? ''} onChange={(event) => updateImportCommon({ crop_year: event.target.value ? Number(event.target.value) : null })} /></label>
+          <label>仕入日<input type="date" value={importRecords[0].purchased_at.slice(0, 10)} onChange={(event) => updateImportCommon({ purchased_at: event.target.value ? `${event.target.value}T00:00:00+09:00` : '' })} /></label>
+          <label>生産者名<input value={importRecords[0].producer_name} maxLength={120} onChange={(event) => updateImportCommon({ producer_name: event.target.value })} /></label>
+          <label>産地<select value={importRecords[0].origin} onChange={(event) => updateImportCommon({ origin: event.target.value })}><option value="">選択</option>{originOptions.map((origin) => <option key={origin.id} value={origin.name}>{origin.name}</option>)}</select></label>
+        </div>
+      </div>}
+      {importWarnings.length > 0 && <div className="inventory-import-warnings"><div><AlertTriangle size={20} /><strong>読取結果を確認してください</strong></div>{importWarnings.map((warning) => <span key={warning}>{warning}</span>)}</div>}
       {importErrors.length > 0 && <div className="inventory-import-errors" role="alert"><div className="inventory-import-error-heading"><AlertTriangle size={24} /><strong>取込できない行があります（{importErrors.length}行）</strong></div><b>該当する仕切り書№は除外し、正常な仕切り書だけ取り込みます。</b>{importErrors.slice(0, 20).map((error) => <span key={error}>{error}</span>)}{importErrors.length > 20 && <span>ほか {importErrors.length - 20}件</span>}</div>}
       {unmappedImportProducts.length > 0 && <div className="inventory-import-mappings"><strong>名称の対応を選択（選択しない名称は除外）</strong>{unmappedImportProducts.map((sourceName) => <label key={sourceName}><span>{sourceName}</span><select value={importProductMappings[sourceName] ?? ''} onChange={(event) => setImportProductMappings((current) => ({ ...current, [sourceName]: event.target.value }))}><option value="">取込から除外</option>{productOptions.filter((item) => ['brand', 'brand_aomori', 'brand_iwate', 'shipment_product'].includes(item.option_type)).map((item) => <option key={`${item.option_type}-${item.id}`} value={item.name}>{item.name}</option>)}</select></label>)}</div>}
       {importSettlements.length > 0 && <div className="inventory-import-warehouses"><strong>仕切り書№ごとの入庫先</strong><div className="inventory-import-warehouse-list">{importSettlements.map((settlement) => <label key={settlement.settlementNo}><span><b>{settlement.settlementNo}</b><small>{settlement.producerName}　{settlement.purchaseDate.replaceAll('-', '/')}　{settlement.lineCount}行</small></span><select value={importWarehouseIds[settlement.settlementNo] ?? ''} onChange={(event) => setImportWarehouseIds((current) => ({ ...current, [settlement.settlementNo]: event.target.value }))}><option value="">未指定で取込</option>{activeWarehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</select></label>)}</div></div>}
-      <div className="import-preview inventory-import-preview"><table><thead><tr><th>仕切り書№</th><th>日付</th><th>生産者名</th><th>産地</th><th>名称</th><th>元数量</th><th>在庫数量</th></tr></thead><tbody>{mappedImportRecords.slice(0, 30).map((record) => <tr key={`${record.settlement_no}-${record.detail_no}-${record.part_no}`}><td>{record.settlement_no}</td><td>{record.purchased_at.slice(0, 10).replaceAll('-', '/')}</td><td>{record.producer_name}</td><td>{record.origin}</td><td>{record.product_name}</td><td className="numeric-cell">{formatQuantity(record.raw_quantity)}{record.raw_unit}</td><td className="numeric-cell">{formatQuantity(record.quantity)}{record.unit}</td></tr>)}</tbody></table></div>
+      {importSource === 'camera' ? <div className="import-preview inventory-import-preview inventory-camera-lines"><table><thead><tr><th>行</th><th>名称</th><th>数量</th><th>単位</th></tr></thead><tbody>{importRecords.map((record, index) => <tr key={`${record.detail_no}-${record.part_no}-${index}`}><td data-label="明細">{index + 1}</td><td data-label="名称"><select value={record.product_name} onChange={(event) => { const productName = event.target.value; updateImportRecord(index, { product_name: productName, grade: otherProductNames.has(productName) ? '対象外' : '未検査' }) }}><option value="">選択</option>{!knownProductNames.has(record.product_name) && record.product_name && <option value={record.product_name}>{record.product_name}（未登録）</option>}{productNamesFor(record.origin).map((product) => <option key={product} value={product}>{product}</option>)}</select></td><td data-label="数量"><input type="number" min="0.001" step="1" inputMode="decimal" value={record.quantity} onChange={(event) => updateImportRecord(index, { quantity: Number(event.target.value), raw_quantity: Number(event.target.value) })} /></td><td data-label="単位"><select value={record.unit} onChange={(event) => updateImportRecord(index, { unit: event.target.value, raw_unit: event.target.value })}><option value="本">本</option><option value="袋">袋</option><option value="kg">kg</option><option value="俵">俵</option></select></td></tr>)}</tbody></table></div> : <div className="import-preview inventory-import-preview"><table><thead><tr><th>仕切り書№</th><th>日付</th><th>生産者名</th><th>産地</th><th>名称</th><th>元数量</th><th>在庫数量</th></tr></thead><tbody>{mappedImportRecords.slice(0, 30).map((record) => <tr key={`${record.settlement_no}-${record.detail_no}-${record.part_no}`}><td>{record.settlement_no}</td><td>{record.purchased_at.slice(0, 10).replaceAll('-', '/')}</td><td>{record.producer_name}</td><td>{record.origin}</td><td>{record.product_name}</td><td className="numeric-cell">{formatQuantity(record.raw_quantity)}{record.raw_unit}</td><td className="numeric-cell">{formatQuantity(record.quantity)}{record.unit}</td></tr>)}</tbody></table></div>}
       {mappedImportRecords.length > 30 && <p className="import-preview-more">ほか {mappedImportRecords.length - 30}行</p>}
-      <div className="modal-actions"><button className="secondary-button" type="button" onClick={() => setImportOpen(false)} disabled={busy}>取消</button><button className="primary-button" type="button" onClick={() => void executePurchaseImport()} disabled={busy || mappedImportRecords.length === 0}><FileUp size={18} />{busy ? '取込中...' : '正常な明細を取り込む'}</button></div>
+      <div className="modal-actions"><button className="secondary-button" type="button" onClick={() => setImportOpen(false)} disabled={busy}>取消</button><button className="primary-button" type="button" onClick={() => void executePurchaseImport()} disabled={busy || mappedImportRecords.length === 0}><FileUp size={18} />{busy ? '取込中...' : '確認した明細を取り込む'}</button></div>
     </section></div>}
   </div>
 }

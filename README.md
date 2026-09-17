@@ -119,3 +119,16 @@ https://eight-corp.github.io/flexcon-trace/
 ```
 
 カメラ利用にはHTTPSが必要ですが、GitHub Pagesの公開URLはHTTPSに対応しています。
+
+## Gemini仕切書撮影
+
+Gemini APIキーはGitHub Pagesの変数へ登録せず、Supabase Edge FunctionのSecret `GEMINI_API_KEY` として登録します。必要に応じて `GEMINI_MODEL` を設定でき、未設定時は `gemini-3.8-flash` を使用します。
+
+```powershell
+npx supabase login
+npx supabase link --project-ref tkbsjmeszabnluwpeweh
+npx supabase secrets set GEMINI_API_KEY=取得したAPIキー
+npx supabase functions deploy analyze-purchase-statement --no-verify-jwt
+```
+
+`--no-verify-jwt` で公開された関数内でも、米穀出荷管理の業務ログイン情報を確認し、管理者または作業者だけが画像解析を実行できます。画像は最大辺1,800pxのJPEGへ端末内で縮小してGeminiへ送信し、Supabase Storageやデータベースには保存しません。

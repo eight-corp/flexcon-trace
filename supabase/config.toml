@@ -1,0 +1,2 @@
+[functions.analyze-purchase-statement]
+verify_jwt = false
