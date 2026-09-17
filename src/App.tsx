@@ -143,7 +143,7 @@ function App() {
           />
         )}
         {tab === 'history' && <ShipmentHistory refreshKey={historyVersion} workerId={worker.worker_id} isAdmin={worker.role === 'admin'} />}
-        {tab === 'inventory' && <InventoryManager workerId={worker.worker_id} workerName={worker.worker_name} canOperate={canOperate} />}
+        {tab === 'inventory' && <InventoryManager workerId={worker.worker_id} workerName={worker.worker_name} canOperate={canOperate} isAdmin={isAdmin} />}
         {tab === 'authorizations' && canOperate && (
           <AuthorizationManager
             workerId={worker.worker_id}
