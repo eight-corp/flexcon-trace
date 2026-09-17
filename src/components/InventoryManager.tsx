@@ -134,6 +134,14 @@ function normalizeSourceProduct(value: unknown) {
   return excelCellText(value).normalize('NFKC').replace(/色選ばじき/g, '色選はじき')
 }
 
+function productReadingKey(value: string) {
+  return value
+    .normalize('NFKC')
+    .toLowerCase()
+    .replace(/[ぁ-ゖ]/g, (character) => String.fromCharCode(character.charCodeAt(0) + 0x60))
+    .replace(/[\s　]/g, '')
+}
+
 function splitSourceProduct(value: unknown) {
   const raw = normalizeSourceProduct(value)
   const packageMatch = raw.match(/\((FL|紙袋)\)\s*$/i)
@@ -315,6 +323,9 @@ export function InventoryManager({ workerId, workerName, canOperate }: Props) {
   const editProductNames = productNamesFor(editForm.origin)
   const editGrades = gradesFor(editForm.productName)
   const knownProductNames = useMemo(() => new Set(productOptions.filter((item) => ['brand', 'brand_aomori', 'brand_iwate', 'shipment_product'].includes(item.option_type)).map((item) => item.name)), [productOptions])
+  const masterProductByReading = useMemo(() => new Map(productOptions
+    .filter((item) => ['brand', 'brand_aomori', 'brand_iwate', 'shipment_product'].includes(item.option_type))
+    .map((item) => [productReadingKey(item.name), item.name])), [productOptions])
   const unmappedImportProducts = useMemo(() => [...new Set(importRecords.map((record) => record.product_name).filter((name) => !knownProductNames.has(name)))], [importRecords, knownProductNames])
   const mappedImportRecords = useMemo(() => {
     const blocked = new Set(importBlockedSettlementNos)
@@ -422,7 +433,8 @@ export function InventoryManager({ workerId, workerName, canOperate }: Props) {
       rows.slice(1).forEach((row, rowIndex) => {
         const sourceRow = rowIndex + 2
         const product = splitSourceProduct(row[3])
-        const riceCandidate = Boolean(product.packageType) || knownProductNames.has(product.productName) || /米|はじき/.test(product.productName)
+        const masterProductName = masterProductByReading.get(productReadingKey(product.productName)) ?? product.productName
+        const riceCandidate = Boolean(product.packageType) || knownProductNames.has(masterProductName) || /米|はじき/.test(masterProductName)
         if (!riceCandidate) return
 
         const settlementNo = excelCellText(row[10])
@@ -449,15 +461,15 @@ export function InventoryManager({ workerId, workerName, canOperate }: Props) {
 
         const detailNo = (detailCounts.get(settlementNo) ?? 0) + 1
         detailCounts.set(settlementNo, detailNo)
-        const grade = otherProductNames.has(product.productName) ? '対象外' : '未検査'
+        const grade = otherProductNames.has(masterProductName) ? '対象外' : '未検査'
         const parts: Array<{ quantity: number; unit: string }> = []
         if (product.packageType === 'FL' && sourceUnit === '俵' && (cropYear ?? 0) >= 2026) {
           const fullFlexcons = Math.floor(rawQuantity / 17)
           const remainderBales = rawQuantity % 17
           if (fullFlexcons > 0) parts.push({ quantity: fullFlexcons, unit: '本' })
           if (remainderBales > 0) parts.push({ quantity: remainderBales, unit: '俵' })
-        } else if (!product.packageType && sourceUnit === 'kg' && ['くず米', '飼料用玄米', '中米', '中米はじき', '色選はじき'].includes(product.productName)) {
-          const fullWeight = ['くず米', '飼料用玄米'].includes(product.productName) ? 1000 : 1020
+        } else if (!product.packageType && sourceUnit === 'kg' && ['くず米', '飼料用玄米', '中米', '中米はじき', '色選はじき'].includes(masterProductName)) {
+          const fullWeight = ['くず米', '飼料用玄米'].includes(masterProductName) ? 1000 : 1020
           const fullFlexcons = Math.floor(rawQuantity / fullWeight)
           const remainderKg = rawQuantity % fullWeight
           if (fullFlexcons > 0) parts.push({ quantity: fullFlexcons, unit: '本' })
@@ -475,7 +487,7 @@ export function InventoryManager({ workerId, workerName, canOperate }: Props) {
           purchased_at: purchasedAt,
           origin,
           raw_product_name: product.raw,
-          product_name: product.productName,
+          product_name: masterProductName,
           producer_name: producerName,
           raw_quantity: rawQuantity,
           raw_unit: sourceUnit,
