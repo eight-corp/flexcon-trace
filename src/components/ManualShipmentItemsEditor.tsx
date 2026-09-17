@@ -125,7 +125,7 @@ export function ManualShipmentItemsEditor({ kind, items, onChange, shipmentProdu
         </label>
         {kind === 'paper_bag' && <>
           <label className="manual-paper-moisture">水分
-            <input className={!moisture ? 'shipment-required-missing' : ''} type="number" min="0" max="100" step="0.1" value={moisture} onChange={(event) => { setMoisture(event.target.value); setError('') }} disabled={disabled} />
+            <input className={!moisture ? 'shipment-required-missing' : ''} type="number" min="0" max="100" step="1" value={moisture} onChange={(event) => { setMoisture(event.target.value); setError('') }} disabled={disabled} />
           </label>
           <label className="manual-paper-grade">等級
             <select className={!grade ? 'shipment-required-missing' : ''} value={grade} onChange={(event) => { const nextGrade = event.target.value; setGrade(nextGrade); if (nextGrade === '1等' || nextGrade === '合格') setReason(''); setError('') }} disabled={disabled || !productName}>
@@ -164,7 +164,7 @@ export function ManualShipmentItemsEditor({ kind, items, onChange, shipmentProdu
               </div>
               <button className="icon-button delete-icon" type="button" title="明細を削除" aria-label={`${item.productName}を削除`} onClick={() => onChange(items.filter((current) => current.key !== item.key))} disabled={disabled}><Trash2 size={18} /></button>
               {kind === 'paper_bag' && <div className="manual-item-inspection-row">
-                <label>水分<input className={!item.moisture ? 'shipment-required-missing' : ''} aria-label="水分" type="number" min="0" max="100" step="0.1" value={item.moisture} onChange={(event) => updateItem(item.key, { moisture: event.target.value })} disabled={disabled} /></label>
+                <label>水分<input className={!item.moisture ? 'shipment-required-missing' : ''} aria-label="水分" type="number" min="0" max="100" step="1" value={item.moisture} onChange={(event) => updateItem(item.key, { moisture: event.target.value })} disabled={disabled} /></label>
                 <label>等級<select className={!item.grade ? 'shipment-required-missing' : ''} aria-label="等級" value={item.grade} onChange={(event) => { const nextGrade = event.target.value; updateItem(item.key, { grade: nextGrade, reason: nextGrade === '1等' || nextGrade === '合格' ? '' : item.reason }) }} disabled={disabled}><option value="">選択</option>{gradeOptions.filter((option) => item.productName === '飼料用玄米' ? option.name === '合格' : option.name !== '合格').map((option) => <option key={option.id} value={option.name}>{option.name}</option>)}</select></label>
                 <label>理由<select className={item.grade && item.grade !== '1等' && item.grade !== '合格' && !item.reason ? 'shipment-required-missing' : ''} aria-label="理由" value={item.grade === '1等' || item.grade === '合格' ? '' : item.reason} onChange={(event) => updateItem(item.key, { reason: event.target.value })} disabled={disabled || !item.grade || item.grade === '1等' || item.grade === '合格'}><option value="">選択</option>{reasonOptions.map((option) => <option key={option.id} value={option.name}>{option.name}</option>)}</select></label>
               </div>}

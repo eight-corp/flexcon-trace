@@ -589,7 +589,7 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
 
             {notice?.type === 'error' && <div className="notice error">{notice.text}</div>}
 
-            <form className="shipment-registration-form" onSubmit={(event) => void registerShipment(event)}>
+            <form className="shipment-registration-form" noValidate onSubmit={(event) => void registerShipment(event)}>
               {manualShipmentKind && <ManualShipmentItemsEditor kind={manualShipmentKind} items={manualItems} onChange={setManualItems} shipmentProducts={shipmentProducts} disabled={busy} />}
               <div className="shipment-form-row worker-summary">
                 <span className="worker-summary-label"><UserRound size={18} />担当者</span>
@@ -610,7 +610,7 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
               </label>
               <label className="shipment-form-row"><span>ドライバー名</span><input className={!driverName.trim() ? 'shipment-required-missing' : ''} aria-invalid={!driverName.trim()} value={driverName} onChange={(e) => setDriverName(e.target.value)} required /></label>
               <label className="shipment-form-row"><span>車両番号</span><input className={!vehicleNo.trim() ? 'shipment-required-missing' : ''} aria-invalid={!vehicleNo.trim()} value={vehicleNo} onChange={(e) => setVehicleNo(e.target.value)} required placeholder="例：岩手 100 あ 12-34" /></label>
-              <label className="shipment-form-row"><span>仕入値（任意・1俵当たり）</span><input type="number" min="0" step="0.01" inputMode="decimal" value={purchasePrice} onChange={(e) => setPurchasePrice(e.target.value)} /></label>
+              <label className="shipment-form-row"><span>仕入値（任意・1俵当たり）</span><input type="number" min="0" step="1" inputMode="decimal" value={purchasePrice} onChange={(e) => setPurchasePrice(e.target.value)} /></label>
               <label className="shipment-form-row"><span>備考（任意）</span><textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="申し送りなど" /></label>
               <div className="modal-actions">
                 <button className="secondary-button" type="button" onClick={() => setRegistrationOpen(false)} disabled={busy}>戻る</button>

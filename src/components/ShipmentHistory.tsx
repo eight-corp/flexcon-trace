@@ -754,7 +754,7 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
               return <span className={`lot-tag ${mixed ? 'mixed-lot-tag' : ''}`} key={item.lot_number}>{mixed ? <><strong>混在№{mixed.mixedNo}</strong><span>{mixed.producerLabel}</span><code>{item.lot_number}</code></> : item.lot_number}</span>
             })}</div>}
 
-            <form className="form-grid" onSubmit={(event) => void saveEdit(event)}>
+            <form className="form-grid" noValidate onSubmit={(event) => void saveEdit(event)}>
               {editing.shipment_kind !== 'qr_flexcon' && <ManualShipmentItemsEditor key={editing.id} kind={editing.shipment_kind} items={manualItems} onChange={setManualItems} shipmentProducts={shipmentProducts} disabled={busy} />}
               <div className="form-grid two">
                 <label>出荷日時<input type="datetime-local" step={60} value={shippedAt} onChange={(e) => setShippedAt(e.target.value)} required /></label>
@@ -778,7 +778,7 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
                   <label>車両番号<input value={vehicleNo} onChange={(e) => setVehicleNo(e.target.value)} required /></label>
                 </div>
               </fieldset>
-              <label>仕入値（任意・1俵当たり）<input type="number" min="0" step="0.01" inputMode="decimal" value={purchasePrice} onChange={(e) => setPurchasePrice(e.target.value)} /></label>
+              <label>仕入値（任意・1俵当たり）<input type="number" min="0" step="1" inputMode="decimal" value={purchasePrice} onChange={(e) => setPurchasePrice(e.target.value)} /></label>
               <label>備考（任意）<textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} /></label>
               <div className="modal-actions">
                 <button className="secondary-button" type="button" onClick={() => setEditing(null)} disabled={busy}>取消</button>
