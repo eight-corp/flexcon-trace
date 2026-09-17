@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { AlertTriangle, ArrowDown, ArrowDownToLine, ArrowRightLeft, ArrowUp, ArrowUpFromLine, Boxes, Camera, FileUp, Filter, List, Pencil, Plus, Save, Search, Trash2, Warehouse, X } from 'lucide-react'
+import { AlertTriangle, ArrowDown, ArrowDownToLine, ArrowRightLeft, ArrowUp, ArrowUpFromLine, Camera, FileUp, Filter, Pencil, Plus, Save, Search, Trash2, Warehouse, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import type { InspectionOption } from '../types'
 
-type Props = { workerId: string; workerName: string; canOperate: boolean; isAdmin: boolean }
+type Props = { view: ViewMode; workerId: string; workerName: string; canOperate: boolean; isAdmin: boolean }
 type MovementMode = 'inbound' | 'outbound' | 'transfer'
 type InventoryMovementType = MovementMode | 'settlement'
 type ViewMode = 'history' | 'balance'
@@ -308,9 +308,8 @@ function FilterableColumnHeader<Key extends string>({
   </th>
 }
 
-export function InventoryManager({ workerId, workerName, canOperate, isAdmin }: Props) {
+export function InventoryManager({ view, workerId, workerName, canOperate, isAdmin }: Props) {
   const [movementMode, setMovementMode] = useState<MovementMode>('inbound')
-  const [viewMode, setViewMode] = useState<ViewMode>('history')
   const [warehouses, setWarehouses] = useState<InspectionOption[]>([])
   const [productOptions, setProductOptions] = useState<InspectionOption[]>([])
   const [movements, setMovements] = useState<InventoryMovement[]>([])
@@ -431,6 +430,8 @@ export function InventoryManager({ workerId, workerName, canOperate, isAdmin }: 
       || left.productName.localeCompare(right.productName, 'ja', { numeric: true })
       || left.unit.localeCompare(right.unit, 'ja', { numeric: true }))
   }, [balances])
+  const assignedBalanceRows = useMemo(() => balanceRows.filter((row) => row.warehouseId !== null), [balanceRows])
+  const unassignedBalanceRows = useMemo(() => balanceRows.filter((row) => row.warehouseId === null), [balanceRows])
   const balanceColumns = useMemo(() => [
     { key: 'warehouseName', label: '倉庫' },
     { key: 'origin', label: '産地' },
@@ -440,15 +441,20 @@ export function InventoryManager({ workerId, workerName, canOperate, isAdmin }: 
   ], [balanceGradeColumns])
   const balanceFilterValues = useMemo(() => Object.fromEntries(balanceColumns.map((column) => [
     column.key,
-    [...new Set(balanceRows.map((row) => balanceValue(row, column.key)))].sort((left, right) => left.localeCompare(right, 'ja', { numeric: true })),
-  ])) as Record<string, string[]>, [balanceColumns, balanceRows])
+    [...new Set(assignedBalanceRows.map((row) => balanceValue(row, column.key)))].sort((left, right) => left.localeCompare(right, 'ja', { numeric: true })),
+  ])) as Record<string, string[]>, [assignedBalanceRows, balanceColumns])
   const displayedBalanceRows = useMemo(() => {
     const term = balanceSearch.trim().toLowerCase()
-    return balanceRows.filter((row) => {
+    return assignedBalanceRows.filter((row) => {
       if (term && !balanceColumns.some((column) => balanceValue(row, column.key).toLowerCase().includes(term))) return false
       return balanceColumns.every((column) => balanceColumnFilters[column.key] === undefined || balanceColumnFilters[column.key].includes(balanceValue(row, column.key)))
     })
-  }, [balanceColumnFilters, balanceColumns, balanceRows, balanceSearch])
+  }, [assignedBalanceRows, balanceColumnFilters, balanceColumns, balanceSearch])
+  const displayedUnassignedBalanceRows = useMemo(() => {
+    const term = balanceSearch.trim().toLowerCase()
+    if (!term) return unassignedBalanceRows
+    return unassignedBalanceRows.filter((row) => balanceColumns.some((column) => balanceValue(row, column.key).toLowerCase().includes(term)))
+  }, [balanceColumns, balanceSearch, unassignedBalanceRows])
   const balanceTotals = useMemo(() => {
     const totals: Record<string, Record<string, number>> = {}
     displayedBalanceRows.forEach((row) => {
@@ -931,8 +937,8 @@ export function InventoryManager({ workerId, workerName, canOperate, isAdmin }: 
   }
 
   return <div className="inventory-page">
-    <div className="page-heading"><h1>在庫</h1><p>手動の入出庫と仕切り書Excelから米穀在庫を管理します。</p></div>
-    {canOperate && <section className="section-band inventory-entry-section">
+    <div className="page-heading"><h1>{view === 'history' ? '入出庫記録' : '在庫'}</h1><p>{view === 'history' ? '手動入力、仕切り書Excel、仕切書撮影から米穀の入出庫を記録します。' : '倉庫ごとの現在庫を産地、名称、等級別に表示します。'}</p></div>
+    {view === 'history' && canOperate && <section className="section-band inventory-entry-section">
       <div className="inventory-entry-toolbar">
         <div className="inventory-mode-switch" role="group" aria-label="移動区分">
           <button type="button" className={movementMode === 'inbound' ? 'active' : ''} onClick={() => changeMode('inbound')}><ArrowDownToLine size={18} />入庫</button>
@@ -949,11 +955,7 @@ export function InventoryManager({ workerId, workerName, canOperate, isAdmin }: 
       <form className={`inventory-entry-form ${movementMode === 'inbound' ? 'with-producer' : ''}`} noValidate onSubmit={(event) => void submit(event)}>{renderMovementFields(form, setForm, movementMode, addProductNames, addGrades)}<button className="primary-button" type="submit" disabled={busy || !warehouseRouteAvailable}><Plus size={18} />{busy ? '登録中...' : '記録を追加'}</button></form>
     </section>}
     {notice && <div className={`notice ${notice.type}`} role={notice.type === 'error' ? 'alert' : 'status'}>{notice.text}</div>}
-    <div className="inventory-view-tabs" role="tablist" aria-label="在庫表示">
-      <button type="button" role="tab" aria-selected={viewMode === 'history'} className={viewMode === 'history' ? 'active' : ''} onClick={() => setViewMode('history')}><List size={18} />入出庫記録</button>
-      <button type="button" role="tab" aria-selected={viewMode === 'balance'} className={viewMode === 'balance' ? 'active' : ''} onClick={() => setViewMode('balance')}><Boxes size={18} />倉庫別在庫</button>
-    </div>
-    {viewMode === 'history' ? <>
+    {view === 'history' ? <>
       <div className="search-row inventory-search-row">
         <div className="search-input-wrap"><Search size={18} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="入出庫記録を検索" /></div>
         {isAdmin && <button className="danger-button inventory-bulk-delete-button" type="button" disabled={busy || selectedMovements.length === 0} onClick={() => void bulkDeleteMovements()}><Trash2 size={17} />選択した{selectedMovements.length}件を削除</button>}
@@ -971,7 +973,7 @@ export function InventoryManager({ workerId, workerName, canOperate, isAdmin }: 
           </tr>
         })}{displayedMovements.length === 0 && <tr><td className="empty-state" colSpan={INVENTORY_COLUMNS.length + (canOperate ? 1 : 0) + (isAdmin ? 1 : 0)}>該当する入出庫記録はありません</td></tr>}</tbody>
       </table></div>
-    </> : <><div className="search-row inventory-search-row"><div className="search-input-wrap"><Search size={18} /><input value={balanceSearch} onChange={(event) => setBalanceSearch(event.target.value)} placeholder="倉庫別在庫を検索" /></div></div><div className="inventory-table-wrap"><table className="inventory-table inventory-balance-table" style={{ '--inventory-balance-mobile-width': `${358 + balanceGradeColumns.length * 62}px` } as React.CSSProperties}><colgroup><col className="inventory-balance-warehouse-col" /><col className="inventory-balance-origin-col" /><col className="inventory-balance-product-col" /><col className="inventory-balance-unit-col" />{balanceGradeColumns.map((grade) => <col className="inventory-balance-grade-col" key={grade} />)}</colgroup><thead><tr>{balanceColumns.map((column, index) => <FilterableColumnHeader key={column.key} column={column} values={balanceFilterValues[column.key]} selectedValues={balanceColumnFilters[column.key]} onFilterChange={changeBalanceColumnFilter} openRight={index === 0} />)}</tr></thead><tbody>{displayedBalanceRows.length > 0 && <tr className="inventory-balance-total"><td><span className="warehouse-name"><Warehouse size={17} />{balanceIsFiltered ? '絞り込み合計' : '全倉庫合計'}</span></td><td>{balanceIsFiltered ? '表示中' : '全産地'}</td><td>{balanceIsFiltered ? '表示中' : '全名称'}</td><td>単位別</td>{balanceGradeColumns.map((grade) => { const totals = balanceTotals[grade] ?? {}; const values = ['本', '袋', 'kg', '俵'].filter((unit) => totals[unit]).map((unit) => `${formatQuantity(totals[unit])}${unit}`); const negative = Object.values(totals).some((quantity) => quantity < 0); return <td className={`numeric-cell inventory-balance-grade ${negative ? 'inventory-negative' : ''}`} key={grade}>{values.join(' / ')}</td> })}</tr>}{displayedBalanceRows.map((row) => <tr key={`${row.warehouseId}-${row.origin}-${row.productName}-${row.unit}`}><td><span className="warehouse-name"><Warehouse size={17} />{row.warehouseName}</span></td><td>{row.origin}</td><td>{row.productName}</td><td>{row.unit}</td>{balanceGradeColumns.map((grade) => { const quantity = row.quantities[grade] ?? 0; return <td className={`numeric-cell inventory-balance-grade ${quantity < 0 ? 'inventory-negative' : ''}`} key={grade}>{quantity === 0 ? '' : formatQuantity(quantity)}</td> })}</tr>)}{displayedBalanceRows.length === 0 && <tr><td className="empty-state" colSpan={balanceColumns.length}>該当する倉庫在庫はありません</td></tr>}</tbody></table></div></>}
+    </> : <><div className="search-row inventory-search-row"><div className="search-input-wrap"><Search size={18} /><input value={balanceSearch} onChange={(event) => setBalanceSearch(event.target.value)} placeholder="在庫を検索" /></div></div><div className="inventory-subheading"><h2>倉庫別一覧</h2><span>{displayedBalanceRows.length}件</span></div><div className="inventory-table-wrap"><table className="inventory-table inventory-balance-table" style={{ '--inventory-balance-mobile-width': `${358 + balanceGradeColumns.length * 62}px` } as React.CSSProperties}><colgroup><col className="inventory-balance-warehouse-col" /><col className="inventory-balance-origin-col" /><col className="inventory-balance-product-col" /><col className="inventory-balance-unit-col" />{balanceGradeColumns.map((grade) => <col className="inventory-balance-grade-col" key={grade} />)}</colgroup><thead><tr>{balanceColumns.map((column, index) => <FilterableColumnHeader key={column.key} column={column} values={balanceFilterValues[column.key]} selectedValues={balanceColumnFilters[column.key]} onFilterChange={changeBalanceColumnFilter} openRight={index === 0} />)}</tr></thead><tbody>{displayedBalanceRows.length > 0 && <tr className="inventory-balance-total"><td><span className="warehouse-name"><Warehouse size={17} />{balanceIsFiltered ? '絞り込み合計' : '全倉庫合計'}</span></td><td>{balanceIsFiltered ? '表示中' : '全産地'}</td><td>{balanceIsFiltered ? '表示中' : '全名称'}</td><td>単位別</td>{balanceGradeColumns.map((grade) => { const totals = balanceTotals[grade] ?? {}; const values = ['本', '袋', 'kg', '俵'].filter((unit) => totals[unit]).map((unit) => `${formatQuantity(totals[unit])}${unit}`); const negative = Object.values(totals).some((quantity) => quantity < 0); return <td className={`numeric-cell inventory-balance-grade ${negative ? 'inventory-negative' : ''}`} key={grade}>{values.join(' / ')}</td> })}</tr>}{displayedBalanceRows.map((row) => <tr key={`${row.warehouseId}-${row.origin}-${row.productName}-${row.unit}`}><td><span className="warehouse-name"><Warehouse size={17} />{row.warehouseName}</span></td><td>{row.origin}</td><td>{row.productName}</td><td>{row.unit}</td>{balanceGradeColumns.map((grade) => { const quantity = row.quantities[grade] ?? 0; return <td className={`numeric-cell inventory-balance-grade ${quantity < 0 ? 'inventory-negative' : ''}`} key={grade}>{quantity === 0 ? '' : formatQuantity(quantity)}</td> })}</tr>)}{displayedBalanceRows.length === 0 && <tr><td className="empty-state" colSpan={balanceColumns.length}>該当する倉庫在庫はありません</td></tr>}</tbody></table></div><section className="inventory-unassigned-section"><div className="inventory-subheading"><h2>倉庫未設定</h2><span>{displayedUnassignedBalanceRows.length}件</span></div><div className="inventory-table-wrap"><table className="inventory-table inventory-balance-table inventory-unassigned-table" style={{ '--inventory-balance-mobile-width': `${246 + balanceGradeColumns.length * 62}px` } as React.CSSProperties}><colgroup><col className="inventory-balance-origin-col" /><col className="inventory-balance-product-col" /><col className="inventory-balance-unit-col" />{balanceGradeColumns.map((grade) => <col className="inventory-balance-grade-col" key={grade} />)}</colgroup><thead><tr><th>産地</th><th>名称</th><th>単位</th>{balanceGradeColumns.map((grade) => <th key={grade}>{grade}</th>)}</tr></thead><tbody>{displayedUnassignedBalanceRows.map((row) => <tr key={`${row.origin}-${row.productName}-${row.unit}`}><td>{row.origin}</td><td>{row.productName}</td><td>{row.unit}</td>{balanceGradeColumns.map((grade) => { const quantity = row.quantities[grade] ?? 0; return <td className={`numeric-cell inventory-balance-grade ${quantity < 0 ? 'inventory-negative' : ''}`} key={grade}>{quantity === 0 ? '' : formatQuantity(quantity)}</td> })}</tr>)}{displayedUnassignedBalanceRows.length === 0 && <tr><td className="empty-state" colSpan={3 + balanceGradeColumns.length}>倉庫未設定の在庫はありません</td></tr>}</tbody></table></div></section></>}
     {editing && <div className="modal-backdrop" role="presentation"><section className="registration-modal inventory-edit-modal" role="dialog" aria-modal="true" aria-labelledby="inventory-edit-title">
       <div className="modal-header"><div><h2 id="inventory-edit-title">入出庫記録を編集</h2><p>登録時の作業者：{editing.worker_name}</p></div><button className="icon-button" type="button" title="閉じる" aria-label="編集画面を閉じる" onClick={() => setEditing(null)} disabled={busy}><X size={20} /></button></div>
       {notice?.type === 'error' && <div className="notice error" role="alert">{notice.text}</div>}

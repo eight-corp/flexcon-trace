@@ -259,6 +259,11 @@
 .inventory-balance-table td.inventory-balance-grade { text-align: right; }
 .inventory-balance-table .inventory-balance-total { background: #e3eee6; font-weight: 700; }
 .inventory-balance-table .inventory-balance-total td { border-bottom: 2px solid #9aae9f; }
+.inventory-unassigned-section { margin-top: 18px; }
+.inventory-subheading { display: flex; align-items: baseline; gap: 10px; margin-bottom: 7px; }
+.inventory-subheading h2 { margin: 0; font-size: 18px; }
+.inventory-subheading span { color: var(--muted); font-size: 13px; font-weight: 700; }
+.inventory-unassigned-table th:first-child, .inventory-unassigned-table td:first-child { width: auto; }
 .warehouse-name { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; }
 .inventory-negative { color: var(--red); font-weight: 700; }
 .inventory-auto-label { display: inline-flex; align-items: center; justify-content: center; min-width: 46px; min-height: 26px; padding: 2px 6px; border: 1px solid #aab5ad; border-radius: 4px; background: #f0f3f1; color: #59635c; font-size: 12px; font-weight: 700; }
