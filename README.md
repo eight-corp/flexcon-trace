@@ -126,7 +126,7 @@ Gemini APIキーはGitHub Pagesの変数へ登録せず、Supabase Edge Function
 
 ```powershell
 npx supabase login
-npx supabase link --project-ref tkbsjmeszabnluwpeweh
+npx supabase link --project-ref gkazhcddknmgzglcdwtk
 npx supabase secrets set GEMINI_API_KEY=取得したAPIキー
 npx supabase functions deploy analyze-purchase-statement --no-verify-jwt
 ```
