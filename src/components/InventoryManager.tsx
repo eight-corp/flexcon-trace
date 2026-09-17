@@ -28,8 +28,8 @@ type InventoryMovement = {
   movement_from: string
   movement_to: string
 }
-type InventoryBalance = { warehouse_id: string; warehouse_name: string; origin: string; product_name: string; grade: string; quantity: number; unit: string }
-type InventoryBalanceRow = { warehouseId: string; warehouseName: string; origin: string; productName: string; unit: string; quantities: Record<string, number> }
+type InventoryBalance = { warehouse_id: string | null; warehouse_name: string; origin: string; product_name: string; grade: string; quantity: number; unit: string }
+type InventoryBalanceRow = { warehouseId: string | null; warehouseName: string; origin: string; productName: string; unit: string; quantities: Record<string, number> }
 type MovementForm = { movementDate: string; producerName: string; origin: string; productName: string; grade: string; quantity: string; unit: string; fromWarehouseId: string; toWarehouseId: string }
 type PurchaseImportRecord = {
   settlement_no: string
@@ -383,7 +383,8 @@ export function InventoryManager({ workerId, workerName, canOperate, isAdmin }: 
       row.quantities[grade] = (row.quantities[grade] ?? 0) + Number(balance.quantity)
       grouped.set(key, row)
     })
-    return [...grouped.values()].sort((left, right) => left.warehouseName.localeCompare(right.warehouseName, 'ja', { numeric: true })
+    return [...grouped.values()].sort((left, right) => (left.warehouseId === null ? -1 : 0) - (right.warehouseId === null ? -1 : 0)
+      || left.warehouseName.localeCompare(right.warehouseName, 'ja', { numeric: true })
       || left.origin.localeCompare(right.origin, 'ja', { numeric: true })
       || left.productName.localeCompare(right.productName, 'ja', { numeric: true })
       || left.unit.localeCompare(right.unit, 'ja', { numeric: true }))
