@@ -304,7 +304,7 @@ export function InventoryManager({ workerId, workerName, canOperate, isAdmin }: 
     void Promise.all([
       supabase.from('flexcon_inspection_options').select('*').eq('option_type', 'warehouse').order('sort_order').order('name'),
       supabase.from('flexcon_inspection_options').select('*').in('option_type', ['origin', 'brand', 'brand_aomori', 'brand_iwate', 'shipment_product', 'grade']).eq('active', true).order('sort_order').order('name'),
-      supabase.from('flexcon_inventory_ledger').select('*').order('movement_date', { ascending: false }).order('created_at', { ascending: false }).limit(1000),
+      supabase.from('flexcon_inventory_ledger').select('*').order('movement_date', { ascending: false }).order('created_at', { ascending: false }).order('id', { ascending: true }).limit(1000),
       supabase.from('flexcon_inventory_balances').select('*').order('warehouse_name').order('origin').order('product_name').order('grade').order('unit'),
     ]).then(([warehouseResult, productResult, movementResult, balanceResult]) => {
       if (warehouseResult.error || movementResult.error || balanceResult.error) return setNotice({ type: 'error', text: '在庫情報を取得できません。在庫管理用SQLを実行してください。' })
@@ -630,7 +630,7 @@ export function InventoryManager({ workerId, workerName, canOperate, isAdmin }: 
     setBusy(true); setNotice(null)
     const { data, error } = await supabase.from('flexcon_inventory_ledger').select('*')
       .eq('source_type', 'settlement').eq('settlement_no', movement.settlement_no)
-      .order('created_at', { ascending: true })
+      .order('created_at', { ascending: true }).order('id', { ascending: true })
     setBusy(false)
     if (error) return setNotice({ type: 'error', text: '同じ仕切り書の明細を取得できませんでした。' })
     const rows = (data ?? []) as InventoryMovement[]
