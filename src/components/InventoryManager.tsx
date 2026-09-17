@@ -47,15 +47,20 @@ type PurchaseImportRecord = {
   quantity: number
   unit: string
 }
-type StatementEditForm = {
-  movementDate: string
-  settlementNo: string
-  producerName: string
+type StatementEditRow = {
+  id: string
   origin: string
   productName: string
   quantity: string
   unit: string
+}
+type StatementEditForm = {
+  originalSettlementNo: string
+  movementDate: string
+  settlementNo: string
+  producerName: string
   toWarehouseId: string
+  rows: StatementEditRow[]
 }
 
 const INVENTORY_COLUMNS: Array<{ key: InventoryColumn; label: string }> = [
@@ -292,7 +297,6 @@ export function InventoryManager({ workerId, workerName, canOperate, isAdmin }: 
   const [importBlockedSettlementNos, setImportBlockedSettlementNos] = useState<string[]>([])
   const [importError, setImportError] = useState('')
   const [importProductMappings, setImportProductMappings] = useState<Record<string, string>>({})
-  const [statementEditing, setStatementEditing] = useState<InventoryMovement | null>(null)
   const [statementEditForm, setStatementEditForm] = useState<StatementEditForm | null>(null)
   const [selectedMovementKeys, setSelectedMovementKeys] = useState<Set<string>>(new Set())
 
@@ -621,49 +625,60 @@ export function InventoryManager({ workerId, workerName, canOperate, isAdmin }: 
     setVersion((value) => value + 1)
   }
 
-  const beginStatementEdit = (movement: InventoryMovement) => {
-    setStatementEditing(movement)
+  const beginStatementEdit = async (movement: InventoryMovement) => {
+    if (busy || !canOperate) return
+    setBusy(true); setNotice(null)
+    const { data, error } = await supabase.from('flexcon_inventory_ledger').select('*')
+      .eq('source_type', 'settlement').eq('settlement_no', movement.settlement_no)
+      .order('created_at', { ascending: true })
+    setBusy(false)
+    if (error) return setNotice({ type: 'error', text: '同じ仕切り書の明細を取得できませんでした。' })
+    const rows = (data ?? []) as InventoryMovement[]
+    if (rows.length === 0) return setNotice({ type: 'error', text: '同じ仕切り書の明細が見つかりません。' })
+    const first = rows[0]
     setStatementEditForm({
-      movementDate: movement.movement_date,
-      settlementNo: movement.settlement_no,
-      producerName: movement.producer_name,
-      origin: movement.origin,
-      productName: movement.product_name,
-      quantity: String(movement.quantity),
-      unit: movement.unit,
-      toWarehouseId: movement.to_warehouse_id ?? '',
+      originalSettlementNo: movement.settlement_no,
+      movementDate: first.movement_date,
+      settlementNo: first.settlement_no,
+      producerName: first.producer_name,
+      toWarehouseId: first.to_warehouse_id ?? '',
+      rows: rows.map((row) => ({ id: row.id, origin: row.origin, productName: row.product_name, quantity: String(row.quantity), unit: row.unit })),
     })
-    setNotice(null)
   }
+
+  const updateStatementEditRow = (index: number, changes: Partial<StatementEditRow>) => setStatementEditForm((current) => current ? {
+    ...current,
+    rows: current.rows.map((row, rowIndex) => rowIndex === index ? { ...row, ...changes } : row),
+  } : current)
 
   const saveStatementEdit = async (event: React.FormEvent) => {
     event.preventDefault()
-    if (!statementEditing || !statementEditForm || busy || !canOperate) return
+    if (!statementEditForm || busy || !canOperate) return
     if (!statementEditForm.movementDate) return setNotice({ type: 'error', text: '日付を入力してください。' })
     if (!statementEditForm.settlementNo.trim()) return setNotice({ type: 'error', text: '仕切り書№を入力してください。' })
     if (!statementEditForm.producerName.trim()) return setNotice({ type: 'error', text: '生産者名を入力してください。' })
-    if (!originOptions.some((item) => item.name === statementEditForm.origin)) return setNotice({ type: 'error', text: '産地をマスタから選択してください。' })
-    if (!productNamesFor(statementEditForm.origin).includes(statementEditForm.productName)) return setNotice({ type: 'error', text: '名称をマスタから選択してください。' })
-    const quantity = Number(statementEditForm.quantity)
-    if (!Number.isFinite(quantity) || quantity <= 0) return setNotice({ type: 'error', text: '数量は0より大きい数値で入力してください。' })
-    if (!['本', '袋', 'kg', '俵'].includes(statementEditForm.unit)) return setNotice({ type: 'error', text: '単位を選択してください。' })
+    for (const [index, row] of statementEditForm.rows.entries()) {
+      if (!originOptions.some((item) => item.name === row.origin)) return setNotice({ type: 'error', text: `${index + 1}行目の産地をマスタから選択してください。` })
+      if (!productNamesFor(row.origin).includes(row.productName)) return setNotice({ type: 'error', text: `${index + 1}行目の名称をマスタから選択してください。` })
+      const quantity = Number(row.quantity)
+      if (!Number.isFinite(quantity) || quantity <= 0) return setNotice({ type: 'error', text: `${index + 1}行目の数量は0より大きい数値で入力してください。` })
+      if (!['本', '袋', 'kg', '俵'].includes(row.unit)) return setNotice({ type: 'error', text: `${index + 1}行目の単位を選択してください。` })
+    }
     setBusy(true); setNotice(null)
-    const { error } = await supabase.rpc('flexcon_update_purchase_statement_line', {
+    const { data, error } = await supabase.rpc('flexcon_bulk_update_purchase_statement', {
       p_worker_id: workerId,
-      p_line_id: statementEditing.id,
+      p_original_settlement_no: statementEditForm.originalSettlementNo,
       p_movement_date: statementEditForm.movementDate,
       p_settlement_no: statementEditForm.settlementNo.trim(),
       p_producer_name: statementEditForm.producerName.trim(),
-      p_origin: statementEditForm.origin,
-      p_product_name: statementEditForm.productName,
-      p_quantity: quantity,
-      p_unit: statementEditForm.unit,
       p_to_warehouse_id: statementEditForm.toWarehouseId || null,
+      p_lines: statementEditForm.rows.map((row) => ({ id: row.id, origin: row.origin, product_name: row.productName, quantity: Number(row.quantity), unit: row.unit })),
     })
     setBusy(false)
     if (error) return setNotice({ type: 'error', text: error.message })
-    setStatementEditing(null); setStatementEditForm(null)
-    setNotice({ type: 'success', text: '仕切り書の在庫明細を更新しました。' })
+    const result = data as { updated_count?: number } | null
+    setStatementEditForm(null)
+    setNotice({ type: 'success', text: `仕切り書の在庫明細を${result?.updated_count ?? statementEditForm.rows.length}行まとめて更新しました。` })
     setVersion((value) => value + 1)
   }
 
@@ -791,7 +806,7 @@ export function InventoryManager({ workerId, workerName, canOperate, isAdmin }: 
           const selected = selectedMovementKeys.has(movementSelectionKey(movement))
           return <tr className={`inventory-movement-${mode} ${routeError ? 'inventory-movement-error' : ''} ${selected ? 'inventory-movement-selected' : ''}`} title={routeError ? 'エラー：移動先が未指定です' : undefined} key={movement.id}>
             {isAdmin && <td className="inventory-selection-cell"><input type="checkbox" checked={selected} onChange={() => toggleMovement(movement)} aria-label={`${movement.movement_date} ${movement.product_name}を選択`} /></td>}
-            <td>{movementValue(movement, 'movementDate')}</td><td><span className={`inventory-movement-badge ${movementBadgeClass(movement)}`}>{mode === 'inbound' ? <ArrowDownToLine size={14} /> : mode === 'outbound' ? <ArrowUpFromLine size={14} /> : <ArrowRightLeft size={14} />}{movementTypeLabel(movement)}</span></td><td>{movement.settlement_no}</td><td>{movement.worker_name}</td><td>{movement.producer_name}</td><td>{movement.origin}</td><td>{movement.product_name}</td><td>{movementValue(movement, 'grade')}</td><td className="numeric-cell">{formatQuantity(movement.quantity)}</td><td>{movement.unit}</td><td>{movement.movement_from}</td><td className={routeError ? 'inventory-route-error' : ''}>{routeError ? <span><AlertTriangle size={16} />移動先未指定</span> : movement.movement_to}</td>{canOperate && <td className="inventory-actions-cell"><div className="inventory-row-actions"><button className="icon-button" type="button" title={manual ? '入出庫記録を編集' : '仕切り書明細を編集'} aria-label={manual ? '入出庫記録を編集' : '仕切り書明細を編集'} disabled={busy} onClick={() => manual ? beginEdit(movement) : beginStatementEdit(movement)}><Pencil size={17} /></button><button className="icon-button delete-icon" type="button" title={manual ? '入出庫記録を削除' : '仕切り書明細を削除'} aria-label={manual ? '入出庫記録を削除' : '仕切り書明細を削除'} disabled={busy} onClick={() => manual ? void deleteMovement(movement) : void deleteStatementLine(movement)}><Trash2 size={17} /></button></div></td>}
+            <td>{movementValue(movement, 'movementDate')}</td><td><span className={`inventory-movement-badge ${movementBadgeClass(movement)}`}>{mode === 'inbound' ? <ArrowDownToLine size={14} /> : mode === 'outbound' ? <ArrowUpFromLine size={14} /> : <ArrowRightLeft size={14} />}{movementTypeLabel(movement)}</span></td><td>{movement.settlement_no}</td><td>{movement.worker_name}</td><td>{movement.producer_name}</td><td>{movement.origin}</td><td>{movement.product_name}</td><td>{movementValue(movement, 'grade')}</td><td className="numeric-cell">{formatQuantity(movement.quantity)}</td><td>{movement.unit}</td><td>{movement.movement_from}</td><td className={routeError ? 'inventory-route-error' : ''}>{routeError ? <span><AlertTriangle size={16} />移動先未指定</span> : movement.movement_to}</td>{canOperate && <td className="inventory-actions-cell"><div className="inventory-row-actions"><button className="icon-button" type="button" title={manual ? '入出庫記録を編集' : '仕切り書をまとめて編集'} aria-label={manual ? '入出庫記録を編集' : '仕切り書をまとめて編集'} disabled={busy} onClick={() => { if (manual) beginEdit(movement); else void beginStatementEdit(movement) }}><Pencil size={17} /></button><button className="icon-button delete-icon" type="button" title={manual ? '入出庫記録を削除' : '仕切り書明細を削除'} aria-label={manual ? '入出庫記録を削除' : '仕切り書明細を削除'} disabled={busy} onClick={() => manual ? void deleteMovement(movement) : void deleteStatementLine(movement)}><Trash2 size={17} /></button></div></td>}
           </tr>
         })}{displayedMovements.length === 0 && <tr><td className="empty-state" colSpan={INVENTORY_COLUMNS.length + (canOperate ? 1 : 0) + (isAdmin ? 1 : 0)}>該当する入出庫記録はありません</td></tr>}</tbody>
       </table></div>
@@ -802,19 +817,24 @@ export function InventoryManager({ workerId, workerName, canOperate, isAdmin }: 
       <div className="inventory-mode-switch" role="group" aria-label="移動区分">{(['inbound', 'outbound', 'transfer'] as MovementMode[]).map((mode) => <button key={mode} type="button" className={editMode === mode ? 'active' : ''} onClick={() => { setEditMode(mode); setEditForm((current) => ({ ...current, fromWarehouseId: mode === 'inbound' ? '' : current.fromWarehouseId, toWarehouseId: mode === 'outbound' ? '' : current.toWarehouseId })) }}>{mode === 'inbound' ? '入庫' : mode === 'outbound' ? '出庫' : '倉庫間移動'}</button>)}</div>
       <form className="form-grid inventory-edit-form" onSubmit={(event) => void saveEdit(event)}>{renderMovementFields(editForm, setEditForm, editMode, editProductNames, editGrades)}<div className="modal-actions"><button className="secondary-button" type="button" onClick={() => setEditing(null)} disabled={busy}>取消</button><button className="primary-button" type="submit" disabled={busy}><Save size={18} />{busy ? '保存中...' : '変更を保存'}</button></div></form>
     </section></div>}
-    {statementEditing && statementEditForm && <div className="modal-backdrop" role="presentation"><section className="registration-modal inventory-edit-modal" role="dialog" aria-modal="true" aria-labelledby="statement-edit-title">
-      <div className="modal-header"><div><h2 id="statement-edit-title">仕切り書明細を編集</h2><p>元の取込内容は監査情報として保持されます。</p></div><button className="icon-button" type="button" title="閉じる" aria-label="編集画面を閉じる" onClick={() => { setStatementEditing(null); setStatementEditForm(null) }} disabled={busy}><X size={20} /></button></div>
+    {statementEditForm && <div className="modal-backdrop" role="presentation"><section className="registration-modal inventory-statement-edit-modal" role="dialog" aria-modal="true" aria-labelledby="statement-edit-title">
+      <div className="modal-header"><div><h2 id="statement-edit-title">仕切り書をまとめて編集</h2><p>明細 {statementEditForm.rows.length}行</p></div><button className="icon-button" type="button" title="閉じる" aria-label="編集画面を閉じる" onClick={() => setStatementEditForm(null)} disabled={busy}><X size={20} /></button></div>
       {notice?.type === 'error' && <div className="notice error" role="alert">{notice.text}</div>}
-      <form className="form-grid inventory-edit-form" onSubmit={(event) => void saveStatementEdit(event)}>
-        <label>日付<input type="date" value={statementEditForm.movementDate} onChange={(event) => setStatementEditForm((current) => current ? { ...current, movementDate: event.target.value } : current)} required /></label>
-        <label>仕切り書№<input value={statementEditForm.settlementNo} maxLength={80} onChange={(event) => setStatementEditForm((current) => current ? { ...current, settlementNo: event.target.value } : current)} required /></label>
-        <label>生産者名<input value={statementEditForm.producerName} maxLength={120} onChange={(event) => setStatementEditForm((current) => current ? { ...current, producerName: event.target.value } : current)} required /></label>
-        <label>産地<select value={statementEditForm.origin} onChange={(event) => setStatementEditForm((current) => current ? { ...current, origin: event.target.value, productName: '' } : current)} required><option value="">選択</option>{originOptions.map((origin) => <option key={origin.id} value={origin.name}>{origin.name}</option>)}</select></label>
-        <label>名称<select value={statementEditForm.productName} onChange={(event) => setStatementEditForm((current) => current ? { ...current, productName: event.target.value } : current)} required><option value="">選択</option>{productNamesFor(statementEditForm.origin).map((product) => <option key={product} value={product}>{product}</option>)}</select></label>
-        <label>数量<input type="number" min="0.001" step="0.001" inputMode="decimal" value={statementEditForm.quantity} onChange={(event) => setStatementEditForm((current) => current ? { ...current, quantity: event.target.value } : current)} required /></label>
-        <label>単位<select value={statementEditForm.unit} onChange={(event) => setStatementEditForm((current) => current ? { ...current, unit: event.target.value } : current)} required><option value="本">本</option><option value="袋">袋</option><option value="kg">kg</option><option value="俵">俵</option></select></label>
-        <label>入庫先倉庫<select value={statementEditForm.toWarehouseId} onChange={(event) => setStatementEditForm((current) => current ? { ...current, toWarehouseId: event.target.value } : current)}><option value="">未指定</option>{warehouses.filter((warehouse) => warehouse.active || warehouse.id === statementEditForm.toWarehouseId).map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}{warehouse.active ? '' : '（無効）'}</option>)}</select></label>
-        <div className="modal-actions"><button className="secondary-button" type="button" onClick={() => { setStatementEditing(null); setStatementEditForm(null) }} disabled={busy}>取消</button><button className="primary-button" type="submit" disabled={busy}><Save size={18} />{busy ? '保存中...' : '変更を保存'}</button></div>
+      <form className="inventory-statement-edit-form" onSubmit={(event) => void saveStatementEdit(event)}>
+        <div className="inventory-statement-common-fields">
+          <label>日付<input type="date" value={statementEditForm.movementDate} onChange={(event) => setStatementEditForm((current) => current ? { ...current, movementDate: event.target.value } : current)} required /></label>
+          <label>仕切り書№<input value={statementEditForm.settlementNo} maxLength={80} onChange={(event) => setStatementEditForm((current) => current ? { ...current, settlementNo: event.target.value } : current)} required /></label>
+          <label>生産者名<input value={statementEditForm.producerName} maxLength={120} onChange={(event) => setStatementEditForm((current) => current ? { ...current, producerName: event.target.value } : current)} required /></label>
+          <label>入庫先倉庫<select value={statementEditForm.toWarehouseId} onChange={(event) => setStatementEditForm((current) => current ? { ...current, toWarehouseId: event.target.value } : current)}><option value="">未指定</option>{warehouses.filter((warehouse) => warehouse.active || warehouse.id === statementEditForm.toWarehouseId).map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}{warehouse.active ? '' : '（無効）'}</option>)}</select></label>
+        </div>
+        <div className="inventory-statement-lines-wrap"><table className="inventory-statement-lines"><thead><tr><th>行</th><th>産地</th><th>名称</th><th>数量</th><th>単位</th></tr></thead><tbody>{statementEditForm.rows.map((row, index) => <tr key={row.id}>
+          <td>{index + 1}</td>
+          <td><select value={row.origin} onChange={(event) => updateStatementEditRow(index, { origin: event.target.value, productName: '' })} required><option value="">選択</option>{originOptions.map((origin) => <option key={origin.id} value={origin.name}>{origin.name}</option>)}</select></td>
+          <td><select value={row.productName} onChange={(event) => updateStatementEditRow(index, { productName: event.target.value })} required><option value="">選択</option>{productNamesFor(row.origin).map((product) => <option key={product} value={product}>{product}</option>)}</select></td>
+          <td><input type="number" min="0.001" step="0.001" inputMode="decimal" value={row.quantity} onChange={(event) => updateStatementEditRow(index, { quantity: event.target.value })} required /></td>
+          <td><select value={row.unit} onChange={(event) => updateStatementEditRow(index, { unit: event.target.value })} required><option value="本">本</option><option value="袋">袋</option><option value="kg">kg</option><option value="俵">俵</option></select></td>
+        </tr>)}</tbody></table></div>
+        <div className="modal-actions"><button className="secondary-button" type="button" onClick={() => setStatementEditForm(null)} disabled={busy}>取消</button><button className="primary-button" type="submit" disabled={busy}><Save size={18} />{busy ? '保存中...' : `${statementEditForm.rows.length}行を保存`}</button></div>
       </form>
     </section></div>}
     {importOpen && <div className="modal-backdrop" role="presentation"><section className="registration-modal inventory-import-modal" role="dialog" aria-modal="true" aria-labelledby="inventory-import-title">
