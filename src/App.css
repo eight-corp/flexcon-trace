@@ -790,6 +790,21 @@ table thead th { text-align: center !important; }
   .inventory-import-warehouse-list > label { grid-template-columns: 1fr; gap: 5px; }
   .inventory-import-warehouse-list span { grid-template-columns: 82px minmax(0, 1fr); }
   .inventory-statement-common-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .inventory-statement-lines-wrap { max-height: min(52dvh, 460px); border: 0; background: transparent; }
+  .inventory-statement-lines { display: block; width: 100%; min-width: 0; }
+  .inventory-statement-lines thead { display: none; }
+  .inventory-statement-lines tbody { display: grid; gap: 8px; }
+  .inventory-statement-lines tr { display: grid; grid-template-columns: minmax(0, 1fr) minmax(92px, .55fr); gap: 6px 8px; padding: 8px; border: 1px solid var(--line); border-radius: 5px; background: #f7f9f7; }
+  .inventory-statement-lines td,
+  .inventory-statement-lines td:first-child,
+  .inventory-statement-lines td:nth-child(2),
+  .inventory-statement-lines td:nth-child(4),
+  .inventory-statement-lines td:nth-child(5) { display: grid; width: auto; height: auto; min-width: 0; padding: 0; border: 0; text-align: left; }
+  .inventory-statement-lines td::before { content: attr(data-label); margin-bottom: 2px; color: var(--muted); font-size: 11px; font-weight: 700; }
+  .inventory-statement-lines td:first-child { grid-column: 1 / -1; display: flex; align-items: center; gap: 5px; color: var(--green-dark); font-weight: 800; }
+  .inventory-statement-lines td:first-child::before { content: "明細"; margin: 0; color: inherit; font-size: 13px; }
+  .inventory-statement-lines td:nth-child(3) { grid-column: 1 / -1; }
+  .inventory-statement-lines input, .inventory-statement-lines select { width: 100%; height: 38px; min-height: 38px; font-size: 16px; }
   .inventory-balance-table { width: var(--inventory-balance-mobile-width); min-width: var(--inventory-balance-mobile-width); table-layout: fixed; }
   .inventory-balance-table .inventory-balance-warehouse-col { width: 112px; }
   .inventory-balance-table .inventory-balance-origin-col { width: 72px; }
