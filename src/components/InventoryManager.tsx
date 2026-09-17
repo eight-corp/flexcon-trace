@@ -11,6 +11,7 @@ type SortDirection = 'asc' | 'desc'
 type InventoryColumn = 'movementDate' | 'movementType' | 'settlementNo' | 'workerName' | 'producerName' | 'origin' | 'productName' | 'grade' | 'quantity' | 'unit' | 'movementFrom' | 'movementTo'
 type InventoryMovement = {
   id: string
+  registration_order?: number
   source_type: 'manual' | 'settlement'
   movement_type: InventoryMovementType
   movement_date: string
@@ -310,7 +311,11 @@ export function InventoryManager({ workerId, workerName, canOperate, isAdmin }: 
       if (warehouseResult.error || movementResult.error || balanceResult.error) return setNotice({ type: 'error', text: '在庫情報を取得できません。在庫管理用SQLを実行してください。' })
       setWarehouses((warehouseResult.data ?? []) as InspectionOption[])
       if (!productResult.error) setProductOptions((productResult.data ?? []) as InspectionOption[])
-      setMovements((movementResult.data ?? []) as InventoryMovement[])
+      const movementRows = (movementResult.data ?? []) as InventoryMovement[]
+      if (movementRows.every((movement) => Number.isFinite(Number(movement.registration_order)))) {
+        movementRows.sort((left, right) => Number(left.registration_order) - Number(right.registration_order))
+      }
+      setMovements(movementRows)
       setBalances((balanceResult.data ?? []) as InventoryBalance[])
     })
   }, [version])
@@ -634,6 +639,9 @@ export function InventoryManager({ workerId, workerName, canOperate, isAdmin }: 
     setBusy(false)
     if (error) return setNotice({ type: 'error', text: '同じ仕切り書の明細を取得できませんでした。' })
     const rows = (data ?? []) as InventoryMovement[]
+    if (rows.every((row) => Number.isFinite(Number(row.registration_order)))) {
+      rows.sort((left, right) => Number(left.registration_order) - Number(right.registration_order))
+    }
     if (rows.length === 0) return setNotice({ type: 'error', text: '同じ仕切り書の明細が見つかりません。' })
     const first = rows[0]
     setStatementEditForm({
