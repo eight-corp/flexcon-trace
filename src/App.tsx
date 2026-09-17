@@ -10,12 +10,16 @@ import { logoutBusinessSession, MANAGEMENT_MENU_URL, restoreBusinessSession } fr
 import type { Worker } from './types'
 import './App.css'
 
-type Tab = 'scan' | 'history' | 'inventory-history' | 'inventory' | 'authorizations' | 'inspections' | 'master'
+type Tab = 'scan' | 'history' | 'inventory-history' | 'inventory' | 'statement-reader' | 'authorizations' | 'inspections' | 'master'
+
+function initialTab(): Tab {
+  return new URLSearchParams(window.location.search).get('view') === 'statement-reader' ? 'statement-reader' : 'scan'
+}
 
 function App() {
   const [worker, setWorker] = useState<Worker | null>(null)
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState<Tab>('scan')
+  const [tab, setTab] = useState<Tab>(initialTab)
   const [historyVersion, setHistoryVersion] = useState(0)
   const [inspectionAuthorizationId, setInspectionAuthorizationId] = useState<string | null>(null)
   const [inspectionRegistrationId, setInspectionRegistrationId] = useState<string | null>(null)
@@ -118,7 +122,7 @@ function App() {
         <div className="brand-lockup">
           <span className="brand-mark"><Wheat size={21} aria-hidden="true" /></span>
           <div>
-            <strong>(株)エイト 米穀出荷管理</strong>
+            <strong>{tab === 'statement-reader' ? '(株)エイト 仕切書読込み' : '(株)エイト 米穀出荷管理'}</strong>
             <small>{roleName} / {worker.worker_name}</small>
           </div>
         </div>
@@ -133,7 +137,7 @@ function App() {
         </div>
       </header>
 
-      <main className={`app-main ${tab === 'history' || tab === 'inventory-history' || tab === 'inventory' || tab === 'authorizations' || tab === 'inspections' ? 'app-main-wide' : ''}`}>
+      <main className={`app-main ${tab === 'history' || tab === 'inventory-history' || tab === 'inventory' || tab === 'statement-reader' || tab === 'authorizations' || tab === 'inspections' ? 'app-main-wide' : ''}`}>
         {tab === 'scan' && canOperate && (
           <ShipmentScanner
             key={worker.worker_id}
@@ -145,6 +149,7 @@ function App() {
         {tab === 'history' && <ShipmentHistory refreshKey={historyVersion} workerId={worker.worker_id} isAdmin={worker.role === 'admin'} />}
         {tab === 'inventory-history' && <InventoryManager view="history" workerId={worker.worker_id} workerName={worker.worker_name} canOperate={canOperate} isAdmin={isAdmin} />}
         {tab === 'inventory' && <InventoryManager view="balance" workerId={worker.worker_id} workerName={worker.worker_name} canOperate={canOperate} isAdmin={isAdmin} />}
+        {tab === 'statement-reader' && canOperate && <InventoryManager view="statement-reader" workerId={worker.worker_id} workerName={worker.worker_name} canOperate={canOperate} isAdmin={isAdmin} />}
         {tab === 'authorizations' && canOperate && (
           <AuthorizationManager
             workerId={worker.worker_id}

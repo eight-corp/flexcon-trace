@@ -60,6 +60,7 @@ const responseSchema = {
     purchased_at: { type: 'STRING' },
     origin: { type: 'STRING' },
     producer_name: { type: 'STRING' },
+    purchase_price: { type: 'NUMBER' },
     lines: {
       type: 'ARRAY',
       items: {
@@ -75,7 +76,7 @@ const responseSchema = {
     },
     warnings: { type: 'ARRAY', items: { type: 'STRING' } },
   },
-  required: ['settlement_no', 'crop_year', 'purchased_at', 'origin', 'producer_name', 'lines', 'warnings'],
+  required: ['settlement_no', 'crop_year', 'purchased_at', 'origin', 'producer_name', 'purchase_price', 'lines', 'warnings'],
 }
 
 const prompt = `
@@ -86,7 +87,8 @@ const prompt = `
 - purchased_at: 仕入日を YYYY-MM-DD 形式で返す。見えなければ空文字。
 - origin: 産地の都道府県名。「青森県」のように都道府県まで付ける。見えなければ空文字。
 - producer_name: 仕入元、生産者、販売者に相当する氏名または名称。見えなければ空文字。
-- lines: 米穀の明細だけを上から順番に返す。金額、単価、税額、合計金額は含めない。
+- purchase_price: 仕切書全体の最終合計・支払額（税込）を数値だけで返す。単価や税抜小計ではない。見えない、または確信が持てない場合は0。
+- lines: 米穀の明細だけを上から順番に返す。金額、単価、税額は含めない。
 - product_name: 品名から包装表記を除いた名称。
 - package_type: フレコン、FL、フレキシブルコンテナは「FL」。紙袋は「紙袋」。判別できない場合は「その他」。
 - quantity と unit: 記載された数量と単位をそのまま返す。推測でkg換算しない。
