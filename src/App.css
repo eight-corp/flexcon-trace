@@ -179,6 +179,12 @@
 .inventory-history-table .inventory-movement-inbound:hover { background: #e0f1e5; }
 .inventory-history-table .inventory-movement-outbound:hover { background: #fbe3dc; }
 .inventory-history-table .inventory-movement-transfer:hover { background: #dfeaf6; }
+.inventory-history-table tr.inventory-movement-error,
+.inventory-history-table tr.inventory-movement-error:hover { background: #ffe9e4; }
+.inventory-history-table tr.inventory-movement-error td { border-bottom-color: #dc8d7b; }
+.inventory-history-table tr.inventory-movement-error td:first-child { box-shadow: inset 5px 0 #bd3b24; }
+.inventory-route-error { color: #a52d18; font-weight: 700; }
+.inventory-route-error > span { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
 .inventory-movement-badge { min-width: 82px; display: inline-flex; align-items: center; justify-content: center; gap: 4px; padding: 3px 6px; border: 1px solid; border-radius: 4px; font-size: 12px; font-weight: 700; white-space: nowrap; }
 .inventory-movement-badge.inbound { border-color: #83ac8d; background: #fff; color: #236139; }
 .inventory-movement-badge.outbound { border-color: #d69a87; background: #fff; color: #9b3d24; }
