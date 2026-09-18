@@ -157,7 +157,10 @@
 .purchase-statement-common h3 { margin: 0; }
 .purchase-statement-common-grid { display: grid; grid-template-columns: repeat(4, minmax(150px, 1fr)); gap: 9px; }
 .purchase-statement-common-grid label { min-width: 0; }
-.purchase-statement-common-grid input { width: 100%; }
+.purchase-statement-common-grid input, .purchase-statement-common-grid select { width: 100%; }
+.purchase-statement-common-grid small, .purchase-statement-table-wrap small { display: block; margin-top: 3px; font-size: 12px; }
+.purchase-statement-editor .calculation-mismatch, .purchase-statement-editor .calculation-mismatch input { color: #b91c1c; font-weight: 900; }
+.purchase-statement-editor .calculation-mismatch input { border-color: #b91c1c; background: #fff5f5; }
 .purchase-statement-table-wrap { overflow: auto; border: 1px solid var(--line); border-radius: 6px; }
 .purchase-statement-table-wrap table { width: 100%; min-width: 940px; border-collapse: collapse; }
 .purchase-statement-table-wrap th, .purchase-statement-table-wrap td { padding: 6px; border-right: 1px solid #e4e8e5; border-bottom: 1px solid var(--line); text-align: left; }
