@@ -142,6 +142,48 @@
 .statement-reader-callout p { margin: 0; color: var(--muted); }
 .statement-reader-icon { width: 68px; height: 68px; flex: 0 0 68px; display: grid; place-items: center; border-radius: 50%; color: #fff; background: var(--green); box-shadow: 0 7px 18px rgb(35 102 64 / 22%); }
 .statement-reader-button { min-width: 190px; min-height: 50px; font-size: 15px; }
+.purchase-statement-page { display: grid; gap: 14px; }
+.purchase-statement-actions { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: clamp(18px, 4vw, 30px); border-color: #a8c8b2; background: linear-gradient(135deg, #f7fbf8 0%, #eef7f1 100%); }
+.purchase-statement-actions h2, .purchase-statement-actions p { margin: 0; }
+.purchase-statement-actions p { margin-top: 5px; color: var(--muted); }
+.purchase-statement-actions > div:last-child { display: flex; gap: 9px; }
+.purchase-statement-editor { display: grid; gap: 14px; padding: 18px; border: 1px solid var(--line); border-radius: 8px; background: #fff; box-shadow: 0 8px 24px rgb(31 58 42 / 8%); }
+.purchase-statement-editor-heading, .purchase-statement-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.purchase-statement-editor-heading h2, .purchase-statement-editor-heading p, .purchase-statement-section-heading h3 { margin: 0; }
+.purchase-statement-editor-heading p { margin-top: 3px; color: var(--muted); }
+.purchase-statement-preview { width: min(100%, 680px); max-height: 52vh; justify-self: center; border: 1px solid var(--line); border-radius: 6px; object-fit: contain; background: #f4f5f4; }
+.purchase-statement-editor .notice.warning { display: grid; gap: 3px; border-color: #d9b26d; background: #fff8e8; color: #704d15; }
+.purchase-statement-common, .purchase-statement-details { display: grid; gap: 9px; }
+.purchase-statement-common h3 { margin: 0; }
+.purchase-statement-common-grid { display: grid; grid-template-columns: repeat(4, minmax(150px, 1fr)); gap: 9px; }
+.purchase-statement-common-grid label { min-width: 0; }
+.purchase-statement-common-grid input { width: 100%; }
+.purchase-statement-table-wrap { overflow: auto; border: 1px solid var(--line); border-radius: 6px; }
+.purchase-statement-table-wrap table { width: 100%; min-width: 940px; border-collapse: collapse; }
+.purchase-statement-table-wrap th, .purchase-statement-table-wrap td { padding: 6px; border-right: 1px solid #e4e8e5; border-bottom: 1px solid var(--line); text-align: left; }
+.purchase-statement-table-wrap th { background: #eef2ee; text-align: center; white-space: nowrap; }
+.purchase-statement-table-wrap input { width: 100%; min-width: 74px; height: 34px; margin: 0; }
+.purchase-statement-table-wrap td:first-child { width: 44px; text-align: center; }
+.purchase-statement-table-wrap td:last-child { width: 48px; text-align: center; }
+.purchase-statement-list { display: grid; gap: 9px; }
+.purchase-statement-card { overflow: hidden; border: 1px solid var(--line); border-radius: 7px; background: #fff; }
+.purchase-statement-card > summary { min-height: 52px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 10px 14px; cursor: pointer; list-style: none; }
+.purchase-statement-card > summary::-webkit-details-marker { display: none; }
+.purchase-statement-card > summary > span:first-child { min-width: 0; display: flex; align-items: center; gap: 14px; }
+.purchase-statement-card > summary > span:last-child { flex: 0 0 auto; color: var(--muted); }
+.purchase-statement-card[open] > summary { background: #edf5ef; border-bottom: 1px solid var(--line); }
+.purchase-statement-card-body { display: grid; gap: 12px; padding: 14px; }
+.purchase-statement-card-body dl { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px 14px; margin: 0; }
+.purchase-statement-card-body dl div { min-width: 0; display: grid; grid-template-columns: 90px minmax(0, 1fr); gap: 6px; }
+.purchase-statement-card-body dt { color: var(--muted); font-weight: 700; }
+.purchase-statement-card-body dd { min-width: 0; margin: 0; overflow-wrap: anywhere; }
+.purchase-statement-card-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.purchase-statement-master-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.purchase-statement-master-grid section { display: grid; gap: 10px; align-content: start; }
+.purchase-statement-master-grid h2 { margin: 0; }
+.purchase-statement-master-grid form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+.purchase-statement-master-list { display: grid; gap: 5px; }
+.purchase-statement-master-list > div { min-height: 40px; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 5px 8px 5px 11px; border: 1px solid var(--line); border-radius: 5px; background: #f8faf8; }
 .inventory-mode-switch, .inventory-view-tabs { display: inline-flex; align-items: center; gap: 4px; padding: 3px; border: 1px solid var(--line); border-radius: 6px; background: #eef2ee; }
 .inventory-mode-switch { margin-bottom: 0; }
 .inventory-entry-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
@@ -813,6 +855,24 @@ table thead th { text-align: center !important; }
   .statement-reader-callout { align-items: flex-start; }
   .statement-reader-icon { width: 54px; height: 54px; flex-basis: 54px; }
   .statement-reader-button { width: 100%; }
+  .purchase-statement-actions { align-items: stretch; flex-direction: column; }
+  .purchase-statement-actions > div:last-child { display: grid; grid-template-columns: 1fr 1fr; }
+  .purchase-statement-common-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .purchase-statement-editor { padding: 12px; }
+  .purchase-statement-table-wrap { overflow: visible; border: 0; }
+  .purchase-statement-editor .purchase-statement-table-wrap table { display: block; min-width: 0; }
+  .purchase-statement-editor .purchase-statement-table-wrap thead { display: none; }
+  .purchase-statement-editor .purchase-statement-table-wrap tbody { display: grid; gap: 9px; }
+  .purchase-statement-editor .purchase-statement-table-wrap tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; padding: 9px; border: 1px solid var(--line); border-radius: 6px; background: #f8faf8; }
+  .purchase-statement-editor .purchase-statement-table-wrap td, .purchase-statement-editor .purchase-statement-table-wrap td:first-child, .purchase-statement-editor .purchase-statement-table-wrap td:last-child { display: grid; width: auto; padding: 0; border: 0; text-align: left; }
+  .purchase-statement-editor .purchase-statement-table-wrap td::before { content: attr(data-label); margin-bottom: 2px; color: var(--muted); font-size: 11px; font-weight: 700; }
+  .purchase-statement-editor .purchase-statement-table-wrap td:first-child, .purchase-statement-editor .purchase-statement-table-wrap td:last-child { grid-column: 1 / -1; }
+  .purchase-statement-editor .purchase-statement-table-wrap td:first-child { display: block; color: var(--green-dark); font-weight: 800; }
+  .purchase-statement-editor .purchase-statement-table-wrap td:first-child::before { content: "明細 "; }
+  .purchase-statement-editor .purchase-statement-table-wrap td:last-child { justify-items: end; }
+  .purchase-statement-card > summary, .purchase-statement-card > summary > span:first-child { align-items: flex-start; flex-direction: column; gap: 4px; }
+  .purchase-statement-card-body dl { grid-template-columns: 1fr; }
+  .purchase-statement-master-grid { grid-template-columns: 1fr; }
   .inventory-entry-toolbar .inventory-mode-switch { width: 100%; }
   .inventory-import-actions { width: 100%; }
   .inventory-import-actions .secondary-button { flex: 1; min-width: 0; }

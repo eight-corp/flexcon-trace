@@ -107,44 +107,59 @@ async function requireRiceShippingOperator(request: Request) {
 const responseSchema = {
   type: 'OBJECT',
   properties: {
-    settlement_no: { type: 'STRING' },
-    crop_year: { type: 'STRING' },
-    purchased_at: { type: 'STRING' },
-    origin: { type: 'STRING' },
-    producer_name: { type: 'STRING' },
-    purchase_price: { type: 'NUMBER' },
+    statement_date: { type: 'STRING' },
+    document_number: { type: 'STRING' },
+    recipient: { type: 'STRING' },
+    issuer: { type: 'STRING' },
+    tax_rate: { type: 'NUMBER' },
+    tax_amount: { type: 'NUMBER' },
+    total_amount: { type: 'NUMBER' },
+    invoice_number: { type: 'STRING' },
     lines: {
       type: 'ARRAY',
       items: {
         type: 'OBJECT',
         properties: {
+          crop_year: { type: 'STRING' },
           product_name: { type: 'STRING' },
-          package_type: { type: 'STRING', enum: ['FL', '紙袋', 'その他'] },
+          package_type: { type: 'STRING' },
           quantity: { type: 'NUMBER' },
-          unit: { type: 'STRING', enum: ['俵', 'kg', '本', '袋'] },
+          unit: { type: 'STRING' },
+          unit_price: { type: 'NUMBER' },
+          amount: { type: 'NUMBER' },
         },
-        required: ['product_name', 'package_type', 'quantity', 'unit'],
+        required: ['crop_year', 'product_name', 'package_type', 'quantity', 'unit', 'unit_price', 'amount'],
       },
     },
     warnings: { type: 'ARRAY', items: { type: 'STRING' } },
   },
-  required: ['settlement_no', 'crop_year', 'purchased_at', 'origin', 'producer_name', 'purchase_price', 'lines', 'warnings'],
+  required: ['statement_date', 'document_number', 'recipient', 'issuer', 'tax_rate', 'tax_amount', 'total_amount', 'invoice_number', 'lines', 'warnings'],
 }
 
 const prompt = `
-この画像は日本の米穀の仕切書です。画像に書かれている情報だけを読み取り、指定されたJSON形式で返してください。
+この画像は日本の仕切書です。画像に書かれている情報だけを読み取り、指定されたJSON形式で返してください。
 
-- settlement_no: 仕切書番号。見えなければ空文字。
-- crop_year: 産年を西暦4桁で返す。和暦の場合は西暦へ変換する。見えなければ空文字。
-- purchased_at: 仕入日を YYYY-MM-DD 形式で返す。見えなければ空文字。
-- origin: 産地の都道府県名。「青森県」のように都道府県まで付ける。見えなければ空文字。
-- producer_name: 仕入元、生産者、販売者に相当する氏名または名称。見えなければ空文字。
-- purchase_price: 仕切書全体の最終合計・支払額（税込）を数値だけで返す。単価や税抜小計ではない。見えない、または確信が持てない場合は0。
-- lines: 米穀の明細だけを上から順番に返す。金額、単価、税額は含めない。
-- product_name: 品名から包装表記を除いた名称。
-- package_type: フレコン、FL、フレキシブルコンテナは「FL」。紙袋は「紙袋」。判別できない場合は「その他」。
-- quantity と unit: 記載された数量と単位をそのまま返す。推測でkg換算しない。
-- 読めない文字や確信の低い箇所は作り足さず、warningsへ日本語で記載する。
+共通項目:
+- statement_date: 日付を YYYY-MM-DD 形式で返す。見えなければ空文字。
+- document_number: 伝票番号。見えなければ空文字。
+- recipient: 宛先欄の「担当者」と「様」の間に記載された名称だけを返す。敬称は含めない。見えなければ空文字。
+- issuer: 発行元の会社名または氏名。見えなければ空文字。
+- tax_rate: 税率をパーセントの数値で返す（10%なら10）。見えなければ0。
+- tax_amount: 消費税額を数値だけで返す。見えなければ0。
+- total_amount: 税込合計金額または最終支払額を数値だけで返す。税抜小計ではない。見えなければ0。
+- invoice_number: 登録番号（インボイス番号）。Tから始まる表記をそのまま返す。見えなければ空文字。
+
+明細項目:
+- linesは明細を上から順番に返す。同じ明細の情報が複数行にまたがっている場合は、罫線と上下左右の位置関係を確認して1件に結合する。改行ごとに別明細へ分割しない。
+- crop_year: その明細に明記された産年を西暦4桁で返す。和暦は西暦へ変換する。省略されている行は推測せず空文字。
+- product_name: 品名。産年と荷姿は除く。
+- package_type: 荷姿の記載を返す（例: フレコン、紙袋、30kg袋）。見えなければ空文字。
+- quantity: 数量を数値だけで返す。見えなければ0。
+- unit: 数量の単位を返す（例: 本、袋、俵、kg）。見えなければ空文字。
+- unit_price: 単価を数値だけで返す。見えなければ0。
+- amount: その明細の金額を数値だけで返す。見えなければ0。
+
+明細ごとに数量×単価と金額を照合し、明細金額の合計、消費税額、税込合計金額の関係も確認する。不一致、読めない文字、確信の低い箇所は作り足さず、warningsへ日本語で記載する。
 `
 
 Deno.serve(async (request) => {

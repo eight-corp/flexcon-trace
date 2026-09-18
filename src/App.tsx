@@ -4,6 +4,7 @@ import { AuthorizationManager } from './components/AuthorizationManager'
 import { InspectionRecordManager, type InspectionRecordTarget } from './components/InspectionRecordManager'
 import { InspectionOptionManager } from './components/InspectionOptionManager'
 import { InventoryManager } from './components/InventoryManager'
+import { PurchaseStatementManager } from './components/PurchaseStatementManager'
 import { ShipmentHistory } from './components/ShipmentHistory'
 import { ShipmentScanner } from './components/ShipmentScanner'
 import { logoutBusinessSession, MANAGEMENT_MENU_URL, restoreBusinessSession } from './lib/businessAuth'
@@ -159,9 +160,9 @@ function App() {
         {!statementApplication && tab === 'history' && <ShipmentHistory refreshKey={historyVersion} workerId={worker.worker_id} isAdmin={worker.role === 'admin'} />}
         {!statementApplication && tab === 'inventory-history' && <InventoryManager view="history" workerId={worker.worker_id} workerName={worker.worker_name} canOperate={canOperate} isAdmin={isAdmin} />}
         {!statementApplication && tab === 'inventory' && <InventoryManager view="balance" workerId={worker.worker_id} workerName={worker.worker_name} canOperate={canOperate} isAdmin={isAdmin} />}
-        {statementApplication && tab === 'statement-reader' && canOperate && <InventoryManager view="statement-reader" workerId={worker.worker_id} workerName={worker.worker_name} canOperate={canOperate} isAdmin={isAdmin} />}
-        {statementApplication && tab === 'statement-list' && <InventoryManager view="statement-list" workerId={worker.worker_id} workerName={worker.worker_name} canOperate={canOperate} isAdmin={isAdmin} />}
-        {statementApplication && tab === 'statement-master' && isAdmin && <InspectionOptionManager workerId={worker.worker_id} scope="statement" />}
+        {statementApplication && tab === 'statement-reader' && canOperate && <PurchaseStatementManager mode="reader" workerId={worker.worker_id} canOperate={canOperate} isAdmin={isAdmin} />}
+        {statementApplication && tab === 'statement-list' && <PurchaseStatementManager mode="list" workerId={worker.worker_id} canOperate={canOperate} isAdmin={isAdmin} />}
+        {statementApplication && tab === 'statement-master' && isAdmin && <PurchaseStatementManager mode="master" workerId={worker.worker_id} canOperate={canOperate} isAdmin={isAdmin} />}
         {!statementApplication && tab === 'authorizations' && canOperate && (
           <AuthorizationManager
             workerId={worker.worker_id}
