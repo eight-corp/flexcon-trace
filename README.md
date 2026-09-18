@@ -122,7 +122,7 @@ https://eight-corp.github.io/flexcon-trace/
 
 ## Gemini仕切書読込み
 
-Gemini APIキーはGitHub Pagesの変数へ登録せず、Supabase Edge FunctionのSecret `GEMINI_API_KEY` として登録します。必要に応じて `GEMINI_MODEL` と `GEMINI_FALLBACK_MODEL` を設定できます。未設定時は `gemini-3.8-flash` を使用し、一時的な混雑が続く場合は `gemini-3.7-flash` へ自動的に切り替えます。
+Gemini APIキーはGitHub Pagesの変数へ登録せず、Supabase Edge FunctionのSecret `GEMINI_API_KEY` として登録します。必要に応じて `GEMINI_MODEL` と `GEMINI_FALLBACK_MODEL` を設定できます。未設定時は低遅延の `gemini-3.1-flash-lite` を最小思考量で使用し、一時的な混雑が発生した場合は低思考量の `gemini-3.7-flash` へ直ちに切り替えます。
 
 ```powershell
 npx supabase login

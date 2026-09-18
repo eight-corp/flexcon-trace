@@ -22,13 +22,8 @@ function jsonResponse(request: Request, body: unknown, status = 200) {
 }
 
 const retryableGeminiStatuses = new Set([429, 500, 502, 503, 504])
-const geminiRetryDelaysMs = [1_000]
 
 class GeminiUnavailableError extends Error {}
-
-function wait(milliseconds: number) {
-  return new Promise((resolve) => setTimeout(resolve, milliseconds))
-}
 
 async function generateStatement(
   models: string[],
@@ -36,51 +31,43 @@ async function generateStatement(
   mimeType: string,
   imageBase64: string,
 ) {
-  const requestBody = JSON.stringify({
-    contents: [{ role: 'user', parts: [{ text: prompt }, { inlineData: { mimeType, data: imageBase64 } }] }],
-    generationConfig: {
-      responseMimeType: 'application/json',
-      responseSchema,
-    },
-  })
-
   for (const [modelIndex, model] of models.entries()) {
-    for (let attempt = 0; attempt <= geminiRetryDelaysMs.length; attempt += 1) {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
-        method: 'POST',
-        headers: { 'x-goog-api-key': apiKey, 'Content-Type': 'application/json' },
-        body: requestBody,
-      })
-      const responseText = await response.text()
-      let data: {
-        error?: { message?: string }
-        candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>
-      } = {}
-      try { data = JSON.parse(responseText) } catch {}
+    const thinkingLevel = model === 'gemini-3.1-flash-lite' ? 'MINIMAL' : 'LOW'
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+      method: 'POST',
+      headers: { 'x-goog-api-key': apiKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts: [{ text: prompt }, { inlineData: { mimeType, data: imageBase64 } }] }],
+        generationConfig: {
+          responseMimeType: 'application/json',
+          responseSchema,
+          thinkingConfig: { thinkingLevel },
+        },
+      }),
+    })
+    const responseText = await response.text()
+    let data: {
+      error?: { message?: string }
+      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>
+    } = {}
+    try { data = JSON.parse(responseText) } catch {}
 
-      if (response.ok) return data
+    if (response.ok) return data
 
-      const retryable = retryableGeminiStatuses.has(response.status)
-      if (!retryable) throw new Error(data.error?.message ?? 'Geminiで画像を解析できませんでした。')
+    const retryable = retryableGeminiStatuses.has(response.status)
+    if (!retryable) throw new Error(data.error?.message ?? 'Geminiで画像を解析できませんでした。')
 
-      console.warn('Gemini request was temporarily unavailable.', {
-        model,
-        attempt: attempt + 1,
-        status: response.status,
-        message: data.error?.message,
-      })
-      const retryDelay = geminiRetryDelaysMs[attempt]
-      if (retryDelay !== undefined) {
-        await wait(retryDelay)
-        continue
-      }
-      const fallbackModel = models[modelIndex + 1]
-      if (fallbackModel) {
-        console.warn('Switching to fallback Gemini model.', { model, fallbackModel })
-        break
-      }
-      throw new GeminiUnavailableError('AI画像読取りサービスが混み合っています。少し時間をおいて、もう一度お試しください。仕切書の内容が原因ではありません。')
+    console.warn('Gemini request was temporarily unavailable.', {
+      model,
+      status: response.status,
+      message: data.error?.message,
+    })
+    const fallbackModel = models[modelIndex + 1]
+    if (fallbackModel) {
+      console.warn('Switching to fallback Gemini model.', { model, fallbackModel })
+      continue
     }
+    throw new GeminiUnavailableError('AI画像読取りサービスが混み合っています。少し時間をおいて、もう一度お試しください。仕切書の内容が原因ではありません。')
   }
 
   throw new GeminiUnavailableError('AI画像読取りサービスが混み合っています。少し時間をおいて、もう一度お試しください。')
@@ -175,7 +162,7 @@ Deno.serve(async (request) => {
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(mimeType)) return jsonResponse(request, { error: '対応していない画像形式です。' }, 400)
     if (!imageBase64 || imageBase64.length > 12_000_000) return jsonResponse(request, { error: '画像が大きすぎます。撮影し直してください。' }, 413)
 
-    const primaryModel = Deno.env.get('GEMINI_MODEL') || 'gemini-3.8-flash'
+    const primaryModel = Deno.env.get('GEMINI_MODEL') || 'gemini-3.1-flash-lite'
     const fallbackModel = Deno.env.get('GEMINI_FALLBACK_MODEL') || 'gemini-3.7-flash'
     const models = [...new Set([primaryModel, fallbackModel].filter(Boolean))]
     const geminiData = await generateStatement(models, geminiApiKey, mimeType, imageBase64)
