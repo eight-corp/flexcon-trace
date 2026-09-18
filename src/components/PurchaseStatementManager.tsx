@@ -20,6 +20,7 @@ type HeaderForm = {
 }
 type ItemForm = {
   cropYear: string
+  origin: string
   productName: string
   packageType: string
   quantity: string
@@ -32,6 +33,7 @@ type StoredItem = {
   id: string
   line_no: number
   crop_year: number | null
+  origin: string
   product_name: string
   package_type: string
   quantity: number | null
@@ -56,7 +58,7 @@ type StoredStatement = {
   created_by_worker_name: string
   items: StoredItem[]
 }
-type MasterType = 'recipient' | 'issuer' | 'product' | 'package'
+type MasterType = 'recipient' | 'issuer' | 'origin' | 'product' | 'package'
 type MasterValue = { id: string; value_type: MasterType; name: string; active: boolean; sort_order: number }
 type GeminiStatement = {
   statement_date: string
@@ -69,11 +71,11 @@ type GeminiStatement = {
   tax_amount: number
   total_amount: number
   invoice_number: string
-  lines: Array<{ crop_year: string; product_name: string; package_type: string; quantity: number; unit: string; unit_price: number; amount: number }>
+  lines: Array<{ crop_year: string; origin: string; product_name: string; package_type: string; quantity: number; unit: string; unit_price: number; amount: number }>
   warnings: string[]
 }
 
-const masterLabels: Record<MasterType, string> = { recipient: '担当者', issuer: '仕入元', product: '品名', package: '荷姿' }
+const masterLabels: Record<MasterType, string> = { recipient: '担当者', issuer: '仕入元', origin: '産地', product: '品名', package: '荷姿' }
 
 function today() {
   const date = new Date()
@@ -86,7 +88,7 @@ function emptyHeader(): HeaderForm {
 }
 
 function emptyItem(): ItemForm {
-  return { cropYear: '', productName: '', packageType: '', quantity: '', unit: '', unitPrice: '', amount: '' }
+  return { cropYear: '', origin: '', productName: '', packageType: '', quantity: '', unit: '', unitPrice: '', amount: '' }
 }
 
 function inputNumber(value: unknown) {
@@ -195,7 +197,7 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin }
   const cameraRef = useRef<HTMLInputElement>(null)
   const [statements, setStatements] = useState<StoredStatement[]>([])
   const [masters, setMasters] = useState<MasterValue[]>([])
-  const [masterDrafts, setMasterDrafts] = useState<Record<MasterType, string>>({ recipient: '', issuer: '', product: '', package: '' })
+  const [masterDrafts, setMasterDrafts] = useState<Record<MasterType, string>>({ recipient: '', issuer: '', origin: '', product: '', package: '' })
   const [editor, setEditor] = useState<Editor | null>(null)
   const [search, setSearch] = useState('')
   const [busy, setBusy] = useState(false)
@@ -227,7 +229,7 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin }
   const displayedStatements = useMemo(() => {
     const term = search.trim().toLowerCase()
     if (!term) return statements
-    return statements.filter((statement) => [statement.statement_date, statement.document_number, statement.recipient, statement.issuer, statement.invoice_number, ...statement.items.flatMap((item) => [item.product_name, item.package_type])].some((value) => String(value ?? '').toLowerCase().includes(term)))
+    return statements.filter((statement) => [statement.statement_date, statement.document_number, statement.recipient, statement.issuer, statement.invoice_number, ...statement.items.flatMap((item) => [item.origin, item.product_name, item.package_type])].some((value) => String(value ?? '').toLowerCase().includes(term)))
   }, [search, statements])
 
   const startManual = () => {
@@ -241,12 +243,14 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin }
     try {
       const image = await resizePhoto(file)
       const productMasterNames = masters.filter((item) => item.value_type === 'product' && item.active).map((item) => item.name)
+      const originMasterNames = masters.filter((item) => item.value_type === 'origin' && item.active).map((item) => item.name)
       const { data, error } = await supabase.functions.invoke('analyze-purchase-statement', { body: {
         imageBase64: image.imageBase64,
         taxRegionBase64: image.taxRegionBase64,
         paymentRegionBase64: image.paymentRegionBase64,
         detailRegionBase64: image.detailRegionBase64,
         productMasterNames,
+        originMasterNames,
         mimeType: image.mimeType,
       } })
       if (error) {
@@ -266,6 +270,7 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin }
         else if (!latestCropYear) warnings.push(`${index + 1}行目の産年を読み取れず、直前の産年もありません。`)
         return {
           cropYear: latestCropYear,
+          origin: line.origin?.trim() ?? '',
           productName: line.product_name?.trim() ?? '',
           packageType: line.package_type?.trim() ?? '',
           quantity: inputNumber(line.quantity),
@@ -324,6 +329,7 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin }
       },
       items: statement.items.map((item) => ({
         cropYear: item.crop_year == null ? '' : String(item.crop_year),
+        origin: item.origin ?? '',
         productName: item.product_name,
         packageType: item.package_type,
         quantity: item.quantity == null ? '' : String(item.quantity),
@@ -372,6 +378,7 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin }
       },
       p_items: editor.items.map((item) => ({
         crop_year: item.cropYear.trim() || null,
+        origin: item.origin.trim(),
         product_name: item.productName.trim(),
         package_type: item.packageType.trim(),
         quantity: item.productName.trim() === '免税' ? nullableNumber(item.quantity) : Number(item.quantity),
@@ -476,9 +483,10 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin }
       <label>登録番号（インボイス番号）<input value={editor.header.invoiceNumber} onChange={(event) => updateHeader('invoiceNumber', event.target.value)} /></label>
     </div></section>
     <section className="purchase-statement-details"><div className="purchase-statement-section-heading"><h3>明細情報</h3><button className="secondary-button" type="button" onClick={addItem} disabled={busy}><Plus size={17} />明細を追加</button></div>
-      <div className="purchase-statement-table-wrap"><table><thead><tr><th>行</th><th>産年</th><th>品名</th><th>荷姿</th><th>数量</th><th>単位</th><th>単価</th><th>金額</th><th></th></tr></thead><tbody>{editor.items.map((item, index) => <tr key={index}>
+      <div className="purchase-statement-table-wrap"><table><thead><tr><th>行</th><th>産年</th><th>産地</th><th>品名</th><th>荷姿</th><th>数量</th><th>単位</th><th>単価</th><th>金額</th><th></th></tr></thead><tbody>{editor.items.map((item, index) => <tr key={index}>
         <td data-label="行">{index + 1}</td>
         <td data-label="産年"><input type="number" min="1900" max="2100" step="1" value={item.cropYear} onChange={(event) => updateItem(index, 'cropYear', event.target.value)} /></td>
+        <td data-label="産地"><input list="statement-origin-list" value={item.origin} onChange={(event) => updateItem(index, 'origin', event.target.value)} /></td>
         <td data-label="品名"><input list="statement-product-list" value={item.productName} onChange={(event) => updateItem(index, 'productName', event.target.value)} required /></td>
         <td data-label="荷姿"><input list="statement-package-list" value={item.packageType} onChange={(event) => updateItem(index, 'packageType', event.target.value)} /></td>
         <td data-label="数量"><input type="number" min="0.001" step="0.001" inputMode="decimal" value={item.quantity} onChange={(event) => updateItem(index, 'quantity', event.target.value)} required={item.productName.trim() !== '免税'} /></td>
@@ -491,6 +499,7 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin }
     <div className="modal-actions"><button className="secondary-button" type="button" onClick={() => setEditor(null)} disabled={busy}>取消</button><button className="primary-button" type="submit" disabled={busy}><Save size={18} />{busy ? '保存中...' : '仕切書を保存'}</button></div>
     <datalist id="statement-recipient-list">{suggestions('recipient').map((value) => <option value={value} key={value} />)}</datalist>
     <datalist id="statement-issuer-list">{suggestions('issuer').map((value) => <option value={value} key={value} />)}</datalist>
+    <datalist id="statement-origin-list">{suggestions('origin').map((value) => <option value={value} key={value} />)}</datalist>
     <datalist id="statement-product-list">{suggestions('product').map((value) => <option value={value} key={value} />)}</datalist>
     <datalist id="statement-package-list">{suggestions('package').map((value) => <option value={value} key={value} />)}</datalist>
   </form>
@@ -504,11 +513,11 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin }
       {editorForm}
     </>}
     {mode === 'list' && <>
-      <div className="search-row"><div className="search-input-wrap"><Search size={18} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="日付・仕切書№・担当者・仕入元・品名を検索" /></div><button className="secondary-button" type="button" onClick={() => void loadStatements()} disabled={loadingStatements}><RefreshCw size={17} />{loadingStatements ? '読込中' : '再読込'}</button></div>
+      <div className="search-row"><div className="search-input-wrap"><Search size={18} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="日付・仕切書№・担当者・仕入元・産地・品名を検索" /></div><button className="secondary-button" type="button" onClick={() => void loadStatements()} disabled={loadingStatements}><RefreshCw size={17} />{loadingStatements ? '読込中' : '再読込'}</button></div>
       <div className="purchase-statement-list-count">{loadingStatements ? '一覧を読み込んでいます' : `${displayedStatements.length}仕切書・${displayedStatements.reduce((sum, statement) => sum + statement.items.length, 0)}明細`}</div>
       <div className="purchase-statement-list">{displayedStatements.map((statement) => <details className="purchase-statement-card" key={statement.id}><summary><span><strong>{statement.statement_date.replaceAll('-', '/')}</strong><b>{statement.document_number}</b><span>{statement.issuer || '仕入元未入力'}</span></span><span>{formatMoney(statement.total_amount)}　{statement.items.length}明細</span></summary><div className="purchase-statement-card-body">
         <dl><div><dt>担当者</dt><dd>{statement.recipient || '―'}</dd></div><div><dt>仕入元</dt><dd>{statement.issuer || '―'}</dd></div><div><dt>支払方法</dt><dd>{paymentMethodLabel(statement.payment_method)}</dd></div><div><dt>消費税区分</dt><dd>{taxTreatmentLabel(statement.tax_treatment)}</dd></div><div><dt>税率</dt><dd>{statement.tax_rate == null ? '―' : `${statement.tax_rate}%`}</dd></div><div><dt>消費税額</dt><dd>{formatMoney(statement.tax_amount) || '―'}</dd></div><div><dt>税込合計</dt><dd>{formatMoney(statement.total_amount) || '―'}</dd></div><div><dt>登録番号</dt><dd>{statement.invoice_number || '―'}</dd></div></dl>
-        <div className="purchase-statement-table-wrap"><table><thead><tr><th>産年</th><th>品名</th><th>荷姿</th><th>数量</th><th>単価</th><th>金額</th></tr></thead><tbody>{statement.items.map((item) => <tr key={item.id}><td>{item.crop_year ?? ''}</td><td>{item.product_name}</td><td>{item.package_type}</td><td>{item.quantity == null ? '' : Number(item.quantity).toLocaleString('ja-JP')}{item.unit}</td><td>{formatMoney(item.unit_price)}</td><td>{formatMoney(item.amount)}</td></tr>)}</tbody></table></div>
+        <div className="purchase-statement-table-wrap"><table><thead><tr><th>産年</th><th>産地</th><th>品名</th><th>荷姿</th><th>数量</th><th>単価</th><th>金額</th></tr></thead><tbody>{statement.items.map((item) => <tr key={item.id}><td>{item.crop_year ?? ''}</td><td>{item.origin}</td><td>{item.product_name}</td><td>{item.package_type}</td><td>{item.quantity == null ? '' : Number(item.quantity).toLocaleString('ja-JP')}{item.unit}</td><td>{formatMoney(item.unit_price)}</td><td>{formatMoney(item.amount)}</td></tr>)}</tbody></table></div>
         <div className="purchase-statement-card-actions">{statement.image_path && <button className="secondary-button" type="button" onClick={() => void openStatementImage(statement)} disabled={busy}><FileImage size={17} />画像を表示</button>}{canOperate && <button className="secondary-button" type="button" onClick={() => editStatement(statement)} disabled={busy}><Pencil size={17} />編集</button>}{isAdmin && <button className="danger-button" type="button" onClick={() => void deleteStatement(statement)} disabled={busy}><Trash2 size={17} />削除</button>}</div>
       </div></details>)}{!loadingStatements && displayedStatements.length === 0 && <div className="empty-state">登録された仕切書はありません</div>}</div>
       {editor && <div className="modal-backdrop purchase-statement-edit-backdrop" role="presentation"><section className="registration-modal purchase-statement-edit-modal" role="dialog" aria-modal="true" aria-label="仕切書を編集">{editorForm}</section></div>}

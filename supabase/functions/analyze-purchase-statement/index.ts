@@ -34,9 +34,13 @@ async function generateStatement(
   paymentRegionBase64: string,
   detailRegionBase64: string,
   productMasterNames: string[],
+  originMasterNames: string[],
 ) {
   const productMasterPrompt = productMasterNames.length > 0
     ? `\n品名マスタ候補: ${productMasterNames.map((name) => JSON.stringify(name)).join('、')}\n画像の筆跡と一致する候補がある場合だけ、その候補の正式表記をproduct_nameへ使う。似た別銘柄へ置き換えず、一致しない場合は画像どおりに読む。`
+    : ''
+  const originMasterPrompt = originMasterNames.length > 0
+    ? `\n産地マスタ候補: ${originMasterNames.map((name) => JSON.stringify(name)).join('、')}\n画像に一致する産地がある場合は正式表記をoriginへ使う。`
     : ''
   for (const [modelIndex, model] of models.entries()) {
     const thinkingLevel = model === 'gemini-3.1-flash-lite' ? 'MINIMAL' : 'LOW'
@@ -48,7 +52,7 @@ async function generateStatement(
       signal: AbortSignal.timeout(modelIndex === 0 ? 20_000 : 30_000),
       body: JSON.stringify({
         contents: [{ role: 'user', parts: [
-          { text: `${prompt}${productMasterPrompt}` },
+            { text: `${prompt}${productMasterPrompt}${originMasterPrompt}` },
           { text: '仕切書全体の画像:' },
           { inlineData: { mimeType, data: imageBase64 } },
           ...(taxRegionBase64 ? [
@@ -160,6 +164,7 @@ const responseSchema = {
         type: 'OBJECT',
         properties: {
           crop_year: { type: 'STRING' },
+          origin: { type: 'STRING' },
           product_name: { type: 'STRING' },
           package_type: { type: 'STRING' },
           quantity: { type: 'NUMBER' },
@@ -167,7 +172,7 @@ const responseSchema = {
           unit_price: { type: 'NUMBER' },
           amount: { type: 'NUMBER' },
         },
-        required: ['crop_year', 'product_name', 'package_type', 'quantity', 'unit', 'unit_price', 'amount'],
+        required: ['crop_year', 'origin', 'product_name', 'package_type', 'quantity', 'unit', 'unit_price', 'amount'],
       },
     },
     warnings: { type: 'ARRAY', items: { type: 'STRING' } },
@@ -182,15 +187,33 @@ function looksLikePackageDescription(value: string) {
     && /[×xX＋+]/.test(compact)
 }
 
-function normalizeStatementLines(statement: Record<string, unknown>) {
+const prefectureOrigins = [
+  '北海道', '青森', '岩手', '宮城', '秋田', '山形', '福島', '茨城', '栃木', '群馬', '埼玉', '千葉', '東京', '神奈川',
+  '新潟', '富山', '石川', '福井', '山梨', '長野', '岐阜', '静岡', '愛知', '三重', '滋賀', '京都', '大阪', '兵庫',
+  '奈良', '和歌山', '鳥取', '島根', '岡山', '広島', '山口', '徳島', '香川', '愛媛', '高知', '福岡', '佐賀', '長崎',
+  '熊本', '大分', '宮崎', '鹿児島', '沖縄',
+]
+
+function normalizeStatementLines(statement: Record<string, unknown>, originMasterNames: string[]) {
   if (!Array.isArray(statement.lines)) return statement
   const normalized: Array<Record<string, unknown>> = []
+  const originCandidates = [...new Set([...originMasterNames, ...prefectureOrigins])].sort((left, right) => right.length - left.length)
   let previousProductName = ''
+  let previousOrigin = ''
 
   for (const rawLine of statement.lines) {
     if (!rawLine || typeof rawLine !== 'object') continue
     const line = { ...(rawLine as Record<string, unknown>) }
-    const rawProductName = typeof line.product_name === 'string' ? line.product_name.trim() : ''
+    let rawProductName = typeof line.product_name === 'string' ? line.product_name.trim() : ''
+    let rawOrigin = typeof line.origin === 'string' ? line.origin.trim() : ''
+    if (!rawOrigin && rawProductName) {
+      const matchedOrigin = originCandidates.find((origin) => rawProductName.startsWith(origin) && rawProductName.slice(origin.length).replace(/^[\s　・:：-]+/, '').trim())
+      if (matchedOrigin) {
+        rawOrigin = matchedOrigin
+        rawProductName = rawProductName.slice(matchedOrigin.length).replace(/^[\s　・:：-]+/, '').trim()
+      }
+    }
+    line.origin = rawOrigin
     const rawPackageType = typeof line.package_type === 'string' ? line.package_type.trim() : ''
     const productIsPackageOnly = looksLikePackageDescription(rawProductName)
     const packageText = rawPackageType || (productIsPackageOnly ? rawProductName : '')
@@ -210,12 +233,14 @@ function normalizeStatementLines(statement: Record<string, unknown>) {
 
     if (hasQuantityAndUnitPrice && (productIsPackageOnly || !rawProductName) && previousProductName) {
       line.product_name = previousProductName
+      line.origin = rawOrigin || previousOrigin
       if (!rawPackageType && packageText) line.package_type = packageText
     } else {
       line.product_name = rawProductName
     }
 
     if (rawProductName && !productIsPackageOnly && rawProductName !== '免税') previousProductName = rawProductName
+    if (rawOrigin) previousOrigin = rawOrigin
     normalized.push(line)
   }
 
@@ -245,7 +270,8 @@ const prompt = `
 - 1つの品名や荷姿が複数の印刷行にまたがることがある。続きの行の数量・単価・金額がすべて空欄なら、その行の文字を直前の明細へ結合して1明細にする。
 - 数量列と単価列の両方に値がある行は必ず独立した明細にする。その行の品名欄が「18俵×2フレコン＋203kg」のような荷姿だけの場合は、直前の上の行にある品名をproduct_nameへ引き継ぎ、荷姿の文字はpackage_typeへ入れる。荷姿を品名として扱わない。
 - crop_year: その明細に明記された産年を西暦4桁で返す。和暦は西暦へ変換する。省略されている行は推測せず空文字。
-- product_name: 品名。産年と荷姿は除く。手書きの一文字ずつを確認し、特に米の銘柄を字形が似た別銘柄へ勝手に置き換えない。「青天のへきれき」は一つの正式な銘柄名であり、「萩のきらめき」と読み替えない。品名マスタ候補が提示され、画像の筆跡と一致する候補がある場合はその正式表記を使う。
+- origin: 品名欄に書かれた都道府県名や地域名などの産地だけを返す（例: 「青森 青天のへきれき」なら「青森」）。記載がなければ空文字。産地をproduct_nameへ含めない。
+- product_name: 産地を除いた品名だけを返す（例: 「青森 青天のへきれき」なら「青天のへきれき」）。産年と荷姿も除く。手書きの一文字ずつを確認し、特に米の銘柄を字形が似た別銘柄へ勝手に置き換えない。「青天のへきれき」は一つの正式な銘柄名であり、「萩のきらめき」と読み替えない。品名マスタ候補が提示され、画像の筆跡と一致する候補がある場合はその正式表記を使う。
 - 品名が「免税」の行は商品名ではなく、インボイス登録番号のない仕入元に対する金額を表す明細である。「免税」をproduct_nameへそのまま入れ、対応する金額の絶対値に必ずマイナス符号を付けてamountへ返し、他の商品明細へ合算しない。画像上ですでにマイナスならそのまま負数にする。数量が記載されていなければquantityは0とし、架空の数量を補わない。
 - package_type: 荷姿の記載を返す（例: フレコン、紙袋、30kg袋）。見えなければ空文字。
 - quantity: 印刷されたタイトル行「数量」の真下にある数量列の同じ行のセルだけから数値を返す。品名列や荷姿の括弧内にある「18俵×4フレコン」「50kg×6本」などの数値は、絶対にquantityへ使わない。数量列が空欄なら0。
@@ -265,13 +291,16 @@ Deno.serve(async (request) => {
     const geminiApiKey = Deno.env.get('GEMINI_API_KEY')
     if (!geminiApiKey) return jsonResponse(request, { error: 'Gemini APIキーが設定されていません。' }, 503)
 
-    const body = await request.json() as { imageBase64?: string; taxRegionBase64?: string; paymentRegionBase64?: string; detailRegionBase64?: string; productMasterNames?: unknown; mimeType?: string }
+    const body = await request.json() as { imageBase64?: string; taxRegionBase64?: string; paymentRegionBase64?: string; detailRegionBase64?: string; productMasterNames?: unknown; originMasterNames?: unknown; mimeType?: string }
     const imageBase64 = body.imageBase64 ?? ''
     const taxRegionBase64 = body.taxRegionBase64 ?? ''
     const paymentRegionBase64 = body.paymentRegionBase64 ?? ''
     const detailRegionBase64 = body.detailRegionBase64 ?? ''
     const productMasterNames = Array.isArray(body.productMasterNames)
       ? body.productMasterNames.filter((name): name is string => typeof name === 'string').map((name) => name.trim()).filter(Boolean).slice(0, 100)
+      : []
+    const originMasterNames = Array.isArray(body.originMasterNames)
+      ? body.originMasterNames.filter((name): name is string => typeof name === 'string').map((name) => name.trim()).filter(Boolean).slice(0, 100)
       : []
     const mimeType = body.mimeType ?? ''
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(mimeType)) return jsonResponse(request, { error: '対応していない画像形式です。' }, 400)
@@ -283,10 +312,10 @@ Deno.serve(async (request) => {
     const primaryModel = Deno.env.get('GEMINI_MODEL') || 'gemini-3.1-flash-lite'
     const fallbackModel = Deno.env.get('GEMINI_FALLBACK_MODEL') || 'gemini-3.7-flash'
     const models = [...new Set([primaryModel, fallbackModel].filter(Boolean))]
-    const geminiData = await generateStatement(models, geminiApiKey, mimeType, imageBase64, taxRegionBase64, paymentRegionBase64, detailRegionBase64, productMasterNames)
+    const geminiData = await generateStatement(models, geminiApiKey, mimeType, imageBase64, taxRegionBase64, paymentRegionBase64, detailRegionBase64, productMasterNames, originMasterNames)
     const responseText = geminiData.candidates?.[0]?.content?.parts?.find((part) => part.text)?.text
     if (!responseText) throw new Error('Geminiから読取結果が返りませんでした。')
-    const statement = normalizeStatementLines(JSON.parse(responseText) as Record<string, unknown>)
+    const statement = normalizeStatementLines(JSON.parse(responseText) as Record<string, unknown>, originMasterNames)
     return jsonResponse(request, { statement })
   } catch (error) {
     const status = error instanceof GeminiUnavailableError ? 503 : 400
