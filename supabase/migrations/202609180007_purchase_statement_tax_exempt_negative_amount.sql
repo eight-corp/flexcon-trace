@@ -1,4 +1,4 @@
--- 「免税」はインボイス番号のない仕入元に対する金額行として、数量なしでも保存できるようにします。
+-- 「免税」の金額をマイナス値で保存し、合計へそのまま反映できるようにします。
 
 begin;
 
@@ -11,6 +11,21 @@ alter table public.flexcon_purchase_statement_items
 alter table public.flexcon_purchase_statement_items
   add constraint flexcon_purchase_statement_items_quantity_check
   check (quantity is null or quantity > 0);
+
+alter table public.flexcon_purchase_statement_items
+  drop constraint if exists flexcon_purchase_statement_items_amount_check;
+
+update public.flexcon_purchase_statement_items
+set amount = -abs(amount)
+where product_name = '免税'
+  and amount is not null;
+
+alter table public.flexcon_purchase_statement_items
+  add constraint flexcon_purchase_statement_items_amount_check
+  check (
+    (product_name = '免税' and (amount is null or amount < 0))
+    or (product_name <> '免税' and (amount is null or amount >= 0))
+  );
 
 create or replace function public.flexcon_save_purchase_statement(
   p_worker_id text,

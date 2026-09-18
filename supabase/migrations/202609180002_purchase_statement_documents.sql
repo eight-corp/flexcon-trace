@@ -34,7 +34,10 @@ create table if not exists public.flexcon_purchase_statement_items (
   quantity numeric(14, 3) check (quantity is null or quantity > 0),
   unit text not null default '',
   unit_price numeric(14, 2) check (unit_price is null or unit_price >= 0),
-  amount numeric(14, 2) check (amount is null or amount >= 0),
+  amount numeric(14, 2) constraint flexcon_purchase_statement_items_amount_check check (
+    (product_name = '免税' and (amount is null or amount < 0))
+    or (product_name <> '免税' and (amount is null or amount >= 0))
+  ),
   created_at timestamptz not null default now(),
   unique (statement_id, line_no)
 );
@@ -147,7 +150,8 @@ begin
     if btrim(v_item->>'product_name') = '免税' and nullif(v_item->>'quantity', '') is not null and (v_item->>'quantity')::numeric <= 0 then raise exception '数量を確認してください。'; end if;
     if nullif(v_item->>'crop_year', '') is not null and (v_item->>'crop_year')::integer not between 1900 and 2100 then raise exception '産年を確認してください。'; end if;
     if nullif(v_item->>'unit_price', '') is not null and (v_item->>'unit_price')::numeric < 0 then raise exception '単価を確認してください。'; end if;
-    if nullif(v_item->>'amount', '') is not null and (v_item->>'amount')::numeric < 0 then raise exception '金額を確認してください。'; end if;
+    if btrim(v_item->>'product_name') = '免税' and coalesce(nullif(v_item->>'amount', '')::numeric, 0) >= 0 then raise exception '免税の金額はマイナスで入力してください。'; end if;
+    if btrim(v_item->>'product_name') <> '免税' and nullif(v_item->>'amount', '') is not null and (v_item->>'amount')::numeric < 0 then raise exception '金額を確認してください。'; end if;
   end loop;
 
   if p_statement_id is null then

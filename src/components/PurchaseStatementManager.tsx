@@ -90,6 +90,11 @@ function inputNumber(value: unknown) {
   return Number.isFinite(number) && number > 0 ? String(number) : ''
 }
 
+function taxExemptAmount(value: unknown) {
+  const number = Number(value)
+  return Number.isFinite(number) && number !== 0 ? String(-Math.abs(number)) : ''
+}
+
 function nullableNumber(value: string) {
   return value.trim() === '' ? null : Number(value)
 }
@@ -223,7 +228,7 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin }
           quantity: inputNumber(line.quantity),
           unit: line.unit?.trim() ?? '',
           unitPrice: inputNumber(line.unit_price),
-          amount: inputNumber(line.amount),
+          amount: line.product_name?.trim() === '免税' ? taxExemptAmount(line.amount) : inputNumber(line.amount),
         }
       })
       setEditor({
@@ -296,9 +301,12 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin }
     if (!editor.header.documentNumber.trim()) return setNotice({ type: 'error', text: '仕切書№を入力してください。' })
     if (editor.items.some((item) => {
       if (!item.productName.trim()) return true
-      if (item.productName.trim() === '免税') return item.quantity.trim() !== '' && (!Number.isFinite(Number(item.quantity)) || Number(item.quantity) <= 0)
-      return !Number.isFinite(Number(item.quantity)) || Number(item.quantity) <= 0
-    })) return setNotice({ type: 'error', text: '各明細の品名と数量を確認してください。免税行は数量を空欄にできます。' })
+      if (item.productName.trim() === '免税') {
+        const invalidQuantity = item.quantity.trim() !== '' && (!Number.isFinite(Number(item.quantity)) || Number(item.quantity) <= 0)
+        return invalidQuantity || nullableNumber(item.amount) == null || Number(item.amount) >= 0
+      }
+      return !Number.isFinite(Number(item.quantity)) || Number(item.quantity) <= 0 || (nullableNumber(item.amount) != null && Number(item.amount) < 0)
+    })) return setNotice({ type: 'error', text: '各明細の数量と金額を確認してください。免税行は金額をマイナスで入力し、数量を空欄にできます。' })
     setBusy(true)
     const { data: statementId, error } = await supabase.rpc('flexcon_save_purchase_statement', {
       p_worker_id: workerId,
@@ -428,7 +436,7 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin }
         <td data-label="数量"><input type="number" min="0.001" step="0.001" inputMode="decimal" value={item.quantity} onChange={(event) => updateItem(index, 'quantity', event.target.value)} required={item.productName.trim() !== '免税'} /></td>
         <td data-label="単位"><input value={item.unit} onChange={(event) => updateItem(index, 'unit', event.target.value)} /></td>
         <td data-label="単価"><input type="number" min="0" step="0.01" inputMode="decimal" value={item.unitPrice} onChange={(event) => updateItem(index, 'unitPrice', event.target.value)} /></td>
-        <td data-label="金額" className={editor.sourceType === 'camera' && itemAmountMismatch(item) ? 'calculation-mismatch' : ''}><input type="number" min="0" step="0.01" inputMode="decimal" value={item.amount} onChange={(event) => updateItem(index, 'amount', event.target.value)} />{editor.sourceType === 'camera' && itemAmountMismatch(item) && <small>数量×単価と不一致</small>}</td>
+        <td data-label="金額" className={editor.sourceType === 'camera' && itemAmountMismatch(item) ? 'calculation-mismatch' : ''}><input type="number" min={item.productName.trim() === '免税' ? undefined : 0} max={item.productName.trim() === '免税' ? -0.01 : undefined} step="0.01" inputMode="decimal" value={item.amount} onChange={(event) => updateItem(index, 'amount', event.target.value)} required={item.productName.trim() === '免税'} />{item.productName.trim() === '免税' && <small>マイナス金額で入力</small>}{editor.sourceType === 'camera' && itemAmountMismatch(item) && <small>数量×単価と不一致</small>}</td>
         <td><button className="icon-button delete-icon" type="button" title="明細を削除" aria-label={`${index + 1}行目を削除`} onClick={() => removeItem(index)} disabled={busy || editor.items.length === 1}><Trash2 size={17} /></button></td>
       </tr>)}</tbody></table></div>
     </section>
