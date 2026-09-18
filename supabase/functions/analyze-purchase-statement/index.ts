@@ -112,6 +112,7 @@ const responseSchema = {
     recipient: { type: 'STRING' },
     issuer: { type: 'STRING' },
     payment_method: { type: 'STRING' },
+    tax_treatment: { type: 'STRING' },
     tax_rate: { type: 'NUMBER' },
     tax_amount: { type: 'NUMBER' },
     total_amount: { type: 'NUMBER' },
@@ -134,7 +135,7 @@ const responseSchema = {
     },
     warnings: { type: 'ARRAY', items: { type: 'STRING' } },
   },
-  required: ['statement_date', 'document_number', 'recipient', 'issuer', 'payment_method', 'tax_rate', 'tax_amount', 'total_amount', 'invoice_number', 'lines', 'warnings'],
+  required: ['statement_date', 'document_number', 'recipient', 'issuer', 'payment_method', 'tax_treatment', 'tax_rate', 'tax_amount', 'total_amount', 'invoice_number', 'lines', 'warnings'],
 }
 
 const prompt = `
@@ -146,6 +147,7 @@ const prompt = `
 - recipient: 宛先欄の「担当者」と「様」の間に記載された名称だけを返す。敬称は含めない。見えなければ空文字。
 - issuer: 発行元の会社名または氏名。見えなければ空文字。
 - payment_method: 仕切書の左下に印刷された「（現金払い・振込払い）」だけを確認する。手書きの丸で囲まれている方が現金払いならcash、振込払いならtransferを返す。括弧や印刷文字を丸印と誤認しない。両方・丸なし・判別不能なら空文字にしてwarningsへ確認事項を追加する。
+- tax_treatment: 仕切書の右上に印刷された「金額（税抜・税込）」だけを確認する。手書きの丸で囲まれている方が税抜ならexclusive（外税）、税込ならinclusive（内税）を返す。括弧や印刷文字を丸印と誤認せず、金額計算から推測しない。両方・丸なし・判別不能なら空文字にしてwarningsへ確認事項を追加する。
 - tax_rate: 税率をパーセントの数値で返す（10%なら10）。見えなければ0。
 - tax_amount: 消費税額を数値だけで返す。見えなければ0。
 - total_amount: 税込合計金額または最終支払額を数値だけで返す。税抜小計ではない。見えなければ0。

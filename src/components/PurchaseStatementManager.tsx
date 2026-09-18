@@ -5,12 +5,14 @@ import { supabase } from '../lib/supabase'
 type Mode = 'reader' | 'list' | 'master'
 type Props = { mode: Mode; workerId: string; canOperate: boolean; isAdmin: boolean }
 type SourceType = 'camera' | 'manual'
+type TaxTreatment = '' | 'exclusive' | 'inclusive'
 type HeaderForm = {
   statementDate: string
   documentNumber: string
   recipient: string
   issuer: string
   paymentMethod: '' | 'cash' | 'transfer'
+  taxTreatment: TaxTreatment
   taxRate: string
   taxAmount: string
   totalAmount: string
@@ -44,6 +46,7 @@ type StoredStatement = {
   recipient: string
   issuer: string
   payment_method: '' | 'cash' | 'transfer'
+  tax_treatment: TaxTreatment
   tax_rate: number | null
   tax_amount: number | null
   total_amount: number | null
@@ -61,6 +64,7 @@ type GeminiStatement = {
   recipient: string
   issuer: string
   payment_method: string
+  tax_treatment: string
   tax_rate: number
   tax_amount: number
   total_amount: number
@@ -78,7 +82,7 @@ function today() {
 }
 
 function emptyHeader(): HeaderForm {
-  return { statementDate: today(), documentNumber: '', recipient: '', issuer: '', paymentMethod: '', taxRate: '', taxAmount: '', totalAmount: '', invoiceNumber: '' }
+  return { statementDate: today(), documentNumber: '', recipient: '', issuer: '', paymentMethod: '', taxTreatment: '', taxRate: '', taxAmount: '', totalAmount: '', invoiceNumber: '' }
 }
 
 function emptyItem(): ItemForm {
@@ -107,9 +111,13 @@ function paymentMethodLabel(value: StoredStatement['payment_method']) {
   return value === 'cash' ? '現金' : value === 'transfer' ? '振込' : '―'
 }
 
-function calculatedTotal(items: ItemForm[], taxAmount: string) {
+function taxTreatmentLabel(value: TaxTreatment) {
+  return value === 'exclusive' ? '外税（税抜）' : value === 'inclusive' ? '内税（税込）' : '―'
+}
+
+function calculatedTotal(items: ItemForm[], taxAmount: string, taxTreatment: TaxTreatment) {
   const detailTotal = items.reduce((sum, item) => sum + (nullableNumber(item.amount) ?? 0), 0)
-  return detailTotal + (nullableNumber(taxAmount) ?? 0)
+  return detailTotal + (taxTreatment === 'inclusive' ? 0 : (nullableNumber(taxAmount) ?? 0))
 }
 
 function itemAmountMismatch(item: ItemForm) {
@@ -122,9 +130,9 @@ function itemAmountMismatch(item: ItemForm) {
 function importedTotalMismatch(editor: Editor) {
   if (editor.sourceType !== 'camera') return false
   const total = nullableNumber(editor.header.totalAmount)
-  const tax = nullableNumber(editor.header.taxAmount) ?? 0
-  if (total == null || editor.items.some((item) => nullableNumber(item.quantity) == null || nullableNumber(item.unitPrice) == null)) return false
-  const expected = editor.items.reduce((sum, item) => sum + Number(item.quantity) * Number(item.unitPrice), 0) + tax
+  const tax = editor.header.taxTreatment === 'inclusive' ? 0 : (nullableNumber(editor.header.taxAmount) ?? 0)
+  if (total == null || editor.items.some((item) => nullableNumber(item.amount) == null)) return false
+  const expected = editor.items.reduce((sum, item) => sum + Number(item.amount), 0) + tax
   return Math.abs(total - expected) >= 0.5
 }
 
@@ -243,6 +251,7 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin }
           recipient: statement.recipient?.trim() ?? '',
           issuer: statement.issuer?.trim() ?? '',
           paymentMethod: statement.payment_method === 'cash' || statement.payment_method === 'transfer' ? statement.payment_method : '',
+          taxTreatment: statement.tax_treatment === 'exclusive' || statement.tax_treatment === 'inclusive' ? statement.tax_treatment : '',
           taxRate: inputNumber(statement.tax_rate),
           taxAmount: inputNumber(statement.tax_amount),
           totalAmount: inputNumber(statement.total_amount),
@@ -272,6 +281,7 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin }
         recipient: statement.recipient,
         issuer: statement.issuer,
         paymentMethod: statement.payment_method ?? '',
+        taxTreatment: statement.tax_treatment ?? '',
         taxRate: statement.tax_rate == null ? '' : String(statement.tax_rate),
         taxAmount: statement.tax_amount == null ? '' : String(statement.tax_amount),
         totalAmount: statement.total_amount == null ? '' : String(statement.total_amount),
@@ -299,6 +309,7 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin }
     if (!editor || busy) return
     if (!editor.header.statementDate) return setNotice({ type: 'error', text: '日付を入力してください。' })
     if (!editor.header.documentNumber.trim()) return setNotice({ type: 'error', text: '仕切書№を入力してください。' })
+    if (!editor.header.taxTreatment) return setNotice({ type: 'error', text: '右上の「金額（税抜・税込）」の丸印を確認し、消費税区分を選択してください。' })
     if (editor.items.some((item) => {
       if (!item.productName.trim()) return true
       if (item.productName.trim() === '免税') {
@@ -318,9 +329,10 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin }
         recipient: editor.header.recipient.trim(),
         issuer: editor.header.issuer.trim(),
         payment_method: editor.header.paymentMethod,
+        tax_treatment: editor.header.taxTreatment,
         tax_rate: nullableNumber(editor.header.taxRate),
         tax_amount: nullableNumber(editor.header.taxAmount),
-        total_amount: editor.sourceType === 'manual' ? calculatedTotal(editor.items, editor.header.taxAmount) : nullableNumber(editor.header.totalAmount),
+        total_amount: editor.sourceType === 'manual' ? calculatedTotal(editor.items, editor.header.taxAmount, editor.header.taxTreatment) : nullableNumber(editor.header.totalAmount),
         invoice_number: editor.header.invoiceNumber.trim(),
       },
       p_items: editor.items.map((item) => ({
@@ -422,9 +434,10 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin }
       <label>担当者<input list="statement-recipient-list" value={editor.header.recipient} onChange={(event) => updateHeader('recipient', event.target.value)} /></label>
       <label>仕入元<input list="statement-issuer-list" value={editor.header.issuer} onChange={(event) => updateHeader('issuer', event.target.value)} /></label>
       <label>支払方法<select value={editor.header.paymentMethod} onChange={(event) => updateHeader('paymentMethod', event.target.value)}><option value=""></option><option value="cash">現金</option><option value="transfer">振込</option></select></label>
+      <label>消費税区分<select value={editor.header.taxTreatment} onChange={(event) => updateHeader('taxTreatment', event.target.value)} required><option value=""></option><option value="exclusive">外税（税抜に丸）</option><option value="inclusive">内税（税込に丸）</option></select></label>
       <label>税率（%）<input type="number" min="0" step="0.001" inputMode="decimal" value={editor.header.taxRate} onChange={(event) => updateHeader('taxRate', event.target.value)} /></label>
       <label>消費税額<input type="number" min="0" step="1" inputMode="decimal" value={editor.header.taxAmount} onChange={(event) => updateHeader('taxAmount', event.target.value)} /></label>
-      <label className={importedTotalMismatch(editor) ? 'calculation-mismatch' : ''}>税込合計金額<input type="number" min="0" step="1" inputMode="decimal" value={editor.sourceType === 'manual' ? calculatedTotal(editor.items, editor.header.taxAmount) : editor.header.totalAmount} onChange={(event) => updateHeader('totalAmount', event.target.value)} readOnly={editor.sourceType === 'manual'} />{editor.sourceType === 'manual' && <small>明細金額＋消費税額を自動計算</small>}{importedTotalMismatch(editor) && <small>数量×単価の合計＋消費税額と一致しません</small>}</label>
+      <label className={importedTotalMismatch(editor) ? 'calculation-mismatch' : ''}>税込合計金額<input type="number" min="0" step="1" inputMode="decimal" value={editor.sourceType === 'manual' ? calculatedTotal(editor.items, editor.header.taxAmount, editor.header.taxTreatment) : editor.header.totalAmount} onChange={(event) => updateHeader('totalAmount', event.target.value)} readOnly={editor.sourceType === 'manual'} />{editor.sourceType === 'manual' && <small>{editor.header.taxTreatment === 'inclusive' ? '税込明細金額を合計' : '税抜明細金額＋消費税額を自動計算'}</small>}{importedTotalMismatch(editor) && <small>税区分に基づく明細金額の合計と一致しません</small>}</label>
       <label>登録番号（インボイス番号）<input value={editor.header.invoiceNumber} onChange={(event) => updateHeader('invoiceNumber', event.target.value)} /></label>
     </div></section>
     <section className="purchase-statement-details"><div className="purchase-statement-section-heading"><h3>明細情報</h3><button className="secondary-button" type="button" onClick={addItem} disabled={busy}><Plus size={17} />明細を追加</button></div>
@@ -459,7 +472,7 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin }
       <div className="search-row"><div className="search-input-wrap"><Search size={18} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="日付・仕切書№・担当者・仕入元・品名を検索" /></div><button className="secondary-button" type="button" onClick={() => void loadStatements()} disabled={loadingStatements}><RefreshCw size={17} />{loadingStatements ? '読込中' : '再読込'}</button></div>
       <div className="purchase-statement-list-count">{loadingStatements ? '一覧を読み込んでいます' : `${displayedStatements.length}仕切書・${displayedStatements.reduce((sum, statement) => sum + statement.items.length, 0)}明細`}</div>
       <div className="purchase-statement-list">{displayedStatements.map((statement) => <details className="purchase-statement-card" key={statement.id}><summary><span><strong>{statement.statement_date.replaceAll('-', '/')}</strong><b>{statement.document_number}</b><span>{statement.issuer || '仕入元未入力'}</span></span><span>{formatMoney(statement.total_amount)}　{statement.items.length}明細</span></summary><div className="purchase-statement-card-body">
-        <dl><div><dt>担当者</dt><dd>{statement.recipient || '―'}</dd></div><div><dt>仕入元</dt><dd>{statement.issuer || '―'}</dd></div><div><dt>支払方法</dt><dd>{paymentMethodLabel(statement.payment_method)}</dd></div><div><dt>税率</dt><dd>{statement.tax_rate == null ? '―' : `${statement.tax_rate}%`}</dd></div><div><dt>消費税額</dt><dd>{formatMoney(statement.tax_amount) || '―'}</dd></div><div><dt>税込合計</dt><dd>{formatMoney(statement.total_amount) || '―'}</dd></div><div><dt>登録番号</dt><dd>{statement.invoice_number || '―'}</dd></div></dl>
+        <dl><div><dt>担当者</dt><dd>{statement.recipient || '―'}</dd></div><div><dt>仕入元</dt><dd>{statement.issuer || '―'}</dd></div><div><dt>支払方法</dt><dd>{paymentMethodLabel(statement.payment_method)}</dd></div><div><dt>消費税区分</dt><dd>{taxTreatmentLabel(statement.tax_treatment)}</dd></div><div><dt>税率</dt><dd>{statement.tax_rate == null ? '―' : `${statement.tax_rate}%`}</dd></div><div><dt>消費税額</dt><dd>{formatMoney(statement.tax_amount) || '―'}</dd></div><div><dt>税込合計</dt><dd>{formatMoney(statement.total_amount) || '―'}</dd></div><div><dt>登録番号</dt><dd>{statement.invoice_number || '―'}</dd></div></dl>
         <div className="purchase-statement-table-wrap"><table><thead><tr><th>産年</th><th>品名</th><th>荷姿</th><th>数量</th><th>単価</th><th>金額</th></tr></thead><tbody>{statement.items.map((item) => <tr key={item.id}><td>{item.crop_year ?? ''}</td><td>{item.product_name}</td><td>{item.package_type}</td><td>{item.quantity == null ? '' : Number(item.quantity).toLocaleString('ja-JP')}{item.unit}</td><td>{formatMoney(item.unit_price)}</td><td>{formatMoney(item.amount)}</td></tr>)}</tbody></table></div>
         <div className="purchase-statement-card-actions">{statement.image_path && <button className="secondary-button" type="button" onClick={() => void openStatementImage(statement)} disabled={busy}><FileImage size={17} />画像を表示</button>}{canOperate && <button className="secondary-button" type="button" onClick={() => editStatement(statement)} disabled={busy}><Pencil size={17} />編集</button>}{isAdmin && <button className="danger-button" type="button" onClick={() => void deleteStatement(statement)} disabled={busy}><Trash2 size={17} />削除</button>}</div>
       </div></details>)}{!loadingStatements && displayedStatements.length === 0 && <div className="empty-state">登録された仕切書はありません</div>}</div>

@@ -9,6 +9,7 @@ create table if not exists public.flexcon_purchase_statements (
   recipient text not null default '',
   issuer text not null default '',
   payment_method text not null default '' check (payment_method in ('', 'cash', 'transfer')),
+  tax_treatment text not null default '' check (tax_treatment in ('', 'exclusive', 'inclusive')),
   tax_rate numeric(6, 3),
   tax_amount numeric(14, 2),
   total_amount numeric(14, 2),
@@ -89,6 +90,7 @@ begin
     'recipient', statement.recipient,
     'issuer', statement.issuer,
     'payment_method', statement.payment_method,
+    'tax_treatment', statement.tax_treatment,
     'tax_rate', statement.tax_rate,
     'tax_amount', statement.tax_amount,
     'total_amount', statement.total_amount,
@@ -141,6 +143,7 @@ begin
   if coalesce(p_source_type, '') not in ('camera', 'manual') then raise exception '登録方法が不正です。'; end if;
   if nullif(btrim(p_header->>'statement_date'), '') is null then raise exception '日付を入力してください。'; end if;
   if nullif(btrim(p_header->>'document_number'), '') is null then raise exception '仕切書№を入力してください。'; end if;
+  if coalesce(p_header->>'tax_treatment', '') not in ('exclusive', 'inclusive') then raise exception '消費税区分を選択してください。'; end if;
   if jsonb_typeof(p_items) <> 'array' or jsonb_array_length(p_items) = 0 then raise exception '明細を1行以上入力してください。'; end if;
 
   for v_item in select value from jsonb_array_elements(p_items)
@@ -156,7 +159,7 @@ begin
 
   if p_statement_id is null then
     insert into public.flexcon_purchase_statements (
-      statement_date, document_number, recipient, issuer, payment_method, tax_rate, tax_amount,
+      statement_date, document_number, recipient, issuer, payment_method, tax_treatment, tax_rate, tax_amount,
       total_amount, invoice_number, source_type, created_by_worker_id, created_by_worker_name
     ) values (
       (p_header->>'statement_date')::date,
@@ -164,6 +167,7 @@ begin
       btrim(coalesce(p_header->>'recipient', '')),
       btrim(coalesce(p_header->>'issuer', '')),
       case when coalesce(p_header->>'payment_method', '') in ('cash', 'transfer') then p_header->>'payment_method' else '' end,
+      case when coalesce(p_header->>'tax_treatment', '') in ('exclusive', 'inclusive') then p_header->>'tax_treatment' else '' end,
       nullif(p_header->>'tax_rate', '')::numeric,
       nullif(p_header->>'tax_amount', '')::numeric,
       nullif(p_header->>'total_amount', '')::numeric,
@@ -180,6 +184,7 @@ begin
         recipient = btrim(coalesce(p_header->>'recipient', '')),
         issuer = btrim(coalesce(p_header->>'issuer', '')),
         payment_method = case when coalesce(p_header->>'payment_method', '') in ('cash', 'transfer') then p_header->>'payment_method' else '' end,
+        tax_treatment = case when coalesce(p_header->>'tax_treatment', '') in ('exclusive', 'inclusive') then p_header->>'tax_treatment' else '' end,
         tax_rate = nullif(p_header->>'tax_rate', '')::numeric,
         tax_amount = nullif(p_header->>'tax_amount', '')::numeric,
         total_amount = nullif(p_header->>'total_amount', '')::numeric,
