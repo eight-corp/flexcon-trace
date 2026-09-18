@@ -6,7 +6,7 @@ import { DestinationManager } from './DestinationManager'
 import { ToggleSwitch } from './ToggleSwitch'
 import { TransportManager } from './TransportManager'
 
-type Props = { workerId: string }
+type Props = { workerId: string; scope?: 'all' | 'statement' }
 type OptionType = InspectionOption['option_type']
 type Notice = { type: 'success' | 'error'; text: string } | null
 type WeightValues = Record<InspectionWeight['weight_type'], number>
@@ -245,7 +245,7 @@ function InspectionWeightSection({
   )
 }
 
-export function InspectionOptionManager({ workerId }: Props) {
+export function InspectionOptionManager({ workerId, scope = 'all' }: Props) {
   const [destinationCount, setDestinationCount] = useState(0)
   const [transportCount, setTransportCount] = useState(0)
   const [items, setItems] = useState<InspectionOption[]>([])
@@ -291,20 +291,20 @@ export function InspectionOptionManager({ workerId }: Props) {
     <div>
       <div className="page-heading"><h1>マスタ</h1><p>各項目を選択して登録内容を管理します。</p></div>
       <div className="inspection-master-grid">
-        <details className="master-accordion">
+        {scope === 'all' && <details className="master-accordion">
           <summary className="master-accordion-summary">
             <span><Building2 size={20} />納品先</span>
             <span>{destinationCount}件使用中<ChevronDown className="master-accordion-chevron" size={20} /></span>
           </summary>
           <div className="master-accordion-content"><DestinationManager workerId={workerId} embedded onCountChange={setDestinationCount} /></div>
-        </details>
-        <details className="master-accordion">
+        </details>}
+        {scope === 'all' && <details className="master-accordion">
           <summary className="master-accordion-summary">
             <span><Truck size={20} />運送会社</span>
             <span>{transportCount}件使用中<ChevronDown className="master-accordion-chevron" size={20} /></span>
           </summary>
           <div className="master-accordion-content"><TransportManager workerId={workerId} embedded onCountChange={setTransportCount} /></div>
-        </details>
+        </details>}
         <OptionSection
           workerId={workerId}
           optionType="warehouse"
@@ -321,22 +321,22 @@ export function InspectionOptionManager({ workerId }: Props) {
           onChanged={changed}
           onError={failed}
         />
-        <OptionSection
+        {scope === 'all' && <OptionSection
           workerId={workerId}
           optionType="location"
           title="検査場所"
           items={items.filter((item) => item.option_type === 'location')}
           onChanged={changed}
           onError={failed}
-        />
-        <OptionSection
+        />}
+        {scope === 'all' && <OptionSection
           workerId={workerId}
           optionType="inspector"
           title="検査員"
           items={items.filter((item) => item.option_type === 'inspector')}
           onChanged={changed}
           onError={failed}
-        />
+        />}
         <OptionSection
           workerId={workerId}
           optionType="brand_aomori"
@@ -379,13 +379,13 @@ export function InspectionOptionManager({ workerId }: Props) {
           onChanged={changed}
           onError={failed}
         />
-        <InspectionWeightSection
+        {scope === 'all' && <InspectionWeightSection
           key={`${weights.branded_rice}-${weights.feed_rice}`}
           workerId={workerId}
           weights={weights}
           onChanged={changed}
           onError={failed}
-        />
+        />}
       </div>
       {notice?.type === 'error' && <div className="notice error" role="alert">{notice.text}</div>}
     </div>

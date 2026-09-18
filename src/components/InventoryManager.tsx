@@ -6,7 +6,7 @@ import type { InspectionOption } from '../types'
 type Props = { view: ViewMode; workerId: string; workerName: string; canOperate: boolean; isAdmin: boolean }
 type MovementMode = 'inbound' | 'outbound' | 'transfer'
 type InventoryMovementType = MovementMode | 'settlement'
-type ViewMode = 'history' | 'balance' | 'statement-reader'
+type ViewMode = 'history' | 'balance' | 'statement-reader' | 'statement-list'
 type SortDirection = 'asc' | 'desc'
 type InventoryColumn = 'movementDate' | 'movementType' | 'settlementNo' | 'workerName' | 'producerName' | 'origin' | 'productName' | 'grade' | 'quantity' | 'unit' | 'purchasePrice' | 'movementFrom' | 'movementTo'
 type InventoryMovement = {
@@ -867,10 +867,11 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
     setVersion((value) => value + 1)
   }
 
-  const filterValues = useMemo(() => Object.fromEntries(INVENTORY_COLUMNS.map((column) => [column.key, [...new Set(movements.map((movement) => movementValue(movement, column.key)))].sort((a, b) => a.localeCompare(b, 'ja', { numeric: true }))])) as Record<InventoryColumn, string[]>, [movements])
+  const listMovements = useMemo(() => view === 'statement-list' ? movements.filter((movement) => movement.source_type === 'settlement') : movements, [movements, view])
+  const filterValues = useMemo(() => Object.fromEntries(INVENTORY_COLUMNS.map((column) => [column.key, [...new Set(listMovements.map((movement) => movementValue(movement, column.key)))].sort((a, b) => a.localeCompare(b, 'ja', { numeric: true }))])) as Record<InventoryColumn, string[]>, [listMovements])
   const displayedMovements = useMemo(() => {
     const term = search.trim().toLowerCase()
-    const rows = movements.filter((movement) => {
+    const rows = listMovements.filter((movement) => {
       if (term && !INVENTORY_COLUMNS.some((column) => movementValue(movement, column.key).toLowerCase().includes(term))) return false
       return INVENTORY_COLUMNS.every((column) => columnFilters[column.key] === undefined || columnFilters[column.key]!.includes(movementValue(movement, column.key)))
     })
@@ -881,9 +882,9 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
       const comparison = typeof leftValue === 'number' && typeof rightValue === 'number' ? leftValue - rightValue : String(leftValue).localeCompare(String(rightValue), 'ja', { numeric: true })
       return sort.direction === 'asc' ? comparison : -comparison
     })
-  }, [columnFilters, movements, search, sort])
+  }, [columnFilters, listMovements, search, sort])
 
-  const selectedMovements = movements.filter((movement) => selectedMovementKeys.has(movementSelectionKey(movement)))
+  const selectedMovements = listMovements.filter((movement) => selectedMovementKeys.has(movementSelectionKey(movement)))
   const displayedMovementKeys = displayedMovements.map(movementSelectionKey)
   const allDisplayedMovementsSelected = displayedMovementKeys.length > 0 && displayedMovementKeys.every((key) => selectedMovementKeys.has(key))
   const toggleDisplayedMovements = () => setSelectedMovementKeys((current) => {
@@ -947,7 +948,7 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
   }
 
   return <div className="inventory-page">
-    <div className="page-heading"><h1>{view === 'history' ? '入出庫記録' : view === 'statement-reader' ? '仕切書読込み' : '在庫'}</h1><p>{view === 'history' ? '手動入力と仕切り書Excelから米穀の入出庫を記録します。' : view === 'statement-reader' ? '仕切書を撮影し、米穀明細と仕入価格を読み取って在庫へ登録します。' : '倉庫ごとの現在庫を産地、名称、等級別に表示します。'}</p></div>
+    <div className="page-heading"><h1>{view === 'history' ? '入出庫記録' : view === 'statement-reader' ? '仕切書読込み' : view === 'statement-list' ? '仕切書一覧' : '在庫'}</h1><p>{view === 'history' ? '手動入力と仕切り書Excelから米穀の入出庫を記録します。' : view === 'statement-reader' ? '仕切書を撮影し、米穀明細と仕入価格を読み取って登録します。' : view === 'statement-list' ? '撮影して登録した仕切書の明細を確認・編集します。' : '倉庫ごとの現在庫を産地、名称、等級別に表示します。'}</p></div>
     {view === 'history' && canOperate && <section className="section-band inventory-entry-section">
       <div className="inventory-entry-toolbar">
         <div className="inventory-mode-switch" role="group" aria-label="移動区分">
@@ -968,9 +969,9 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
       <button className="primary-button statement-reader-button" type="button" onClick={() => cameraFileRef.current?.click()} disabled={busy}><Camera size={20} />{busy ? '読取中...' : '撮影・画像を選択'}</button>
     </section>}
     {notice && <div className={`notice ${notice.type}`} role={notice.type === 'error' ? 'alert' : 'status'}>{notice.text}</div>}
-    {view === 'history' ? <>
+    {view === 'history' || view === 'statement-list' ? <>
       <div className="search-row inventory-search-row">
-        <div className="search-input-wrap"><Search size={18} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="入出庫記録を検索" /></div>
+        <div className="search-input-wrap"><Search size={18} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={view === 'statement-list' ? '仕切書を検索' : '入出庫記録を検索'} /></div>
         {isAdmin && <button className="danger-button inventory-bulk-delete-button" type="button" disabled={busy || selectedMovements.length === 0} onClick={() => void bulkDeleteMovements()}><Trash2 size={17} />選択した{selectedMovements.length}件を削除</button>}
       </div>
       <div className="inventory-table-wrap"><table className={`inventory-table inventory-history-table ${isAdmin ? 'with-selection' : ''}`}>
@@ -984,7 +985,7 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
             {isAdmin && <td className="inventory-selection-cell"><input type="checkbox" checked={selected} onChange={() => toggleMovement(movement)} aria-label={`${movement.movement_date} ${movement.product_name}を選択`} /></td>}
             <td>{movementValue(movement, 'movementDate')}</td><td><span className={`inventory-movement-badge ${movementBadgeClass(movement)}`}>{mode === 'inbound' ? <ArrowDownToLine size={14} /> : mode === 'outbound' ? <ArrowUpFromLine size={14} /> : <ArrowRightLeft size={14} />}{movementTypeLabel(movement)}</span></td><td>{movement.settlement_no}</td><td>{movement.worker_name}</td><td>{movement.producer_name}</td><td>{movement.origin}</td><td>{movement.product_name}</td><td>{movementValue(movement, 'grade')}</td><td className="numeric-cell">{formatQuantity(movement.quantity)}</td><td>{movement.unit}</td><td className="numeric-cell">{movementValue(movement, 'purchasePrice')}</td><td>{movement.movement_from}</td><td className={routeError ? 'inventory-route-error' : ''}>{routeError ? <span><AlertTriangle size={16} />移動先未指定</span> : movement.movement_to}</td>{canOperate && <td className="inventory-actions-cell"><div className="inventory-row-actions"><button className="icon-button" type="button" title={manual ? '入出庫記録を編集' : '仕切り書をまとめて編集'} aria-label={manual ? '入出庫記録を編集' : '仕切り書をまとめて編集'} disabled={busy} onClick={() => { if (manual) beginEdit(movement); else void beginStatementEdit(movement) }}><Pencil size={17} /></button><button className="icon-button delete-icon" type="button" title={manual ? '入出庫記録を削除' : '仕切り書明細を削除'} aria-label={manual ? '入出庫記録を削除' : '仕切り書明細を削除'} disabled={busy} onClick={() => manual ? void deleteMovement(movement) : void deleteStatementLine(movement)}><Trash2 size={17} /></button></div></td>}
           </tr>
-        })}{displayedMovements.length === 0 && <tr><td className="empty-state" colSpan={INVENTORY_COLUMNS.length + (canOperate ? 1 : 0) + (isAdmin ? 1 : 0)}>該当する入出庫記録はありません</td></tr>}</tbody>
+        })}{displayedMovements.length === 0 && <tr><td className="empty-state" colSpan={INVENTORY_COLUMNS.length + (canOperate ? 1 : 0) + (isAdmin ? 1 : 0)}>{view === 'statement-list' ? '登録された仕切書はありません' : '該当する入出庫記録はありません'}</td></tr>}</tbody>
       </table></div>
     </> : view === 'balance' ? <><div className="search-row inventory-search-row"><div className="search-input-wrap"><Search size={18} /><input value={balanceSearch} onChange={(event) => setBalanceSearch(event.target.value)} placeholder="在庫を検索" /></div></div><div className="inventory-subheading"><h2>倉庫別一覧</h2><span>{displayedBalanceRows.length}件</span></div><div className="inventory-table-wrap"><table className="inventory-table inventory-balance-table" style={{ '--inventory-balance-mobile-width': `${358 + balanceGradeColumns.length * 62}px` } as React.CSSProperties}><colgroup><col className="inventory-balance-warehouse-col" /><col className="inventory-balance-origin-col" /><col className="inventory-balance-product-col" /><col className="inventory-balance-unit-col" />{balanceGradeColumns.map((grade) => <col className="inventory-balance-grade-col" key={grade} />)}</colgroup><thead><tr>{balanceColumns.map((column, index) => <FilterableColumnHeader key={column.key} column={column} values={balanceFilterValues[column.key]} selectedValues={balanceColumnFilters[column.key]} onFilterChange={changeBalanceColumnFilter} openRight={index === 0} />)}</tr></thead><tbody>{displayedBalanceRows.length > 0 && <tr className="inventory-balance-total"><td><span className="warehouse-name"><Warehouse size={17} />{balanceIsFiltered ? '絞り込み合計' : '全倉庫合計'}</span></td><td>{balanceIsFiltered ? '表示中' : '全産地'}</td><td>{balanceIsFiltered ? '表示中' : '全名称'}</td><td>単位別</td>{balanceGradeColumns.map((grade) => { const totals = balanceTotals[grade] ?? {}; const values = ['本', '袋', 'kg', '俵'].filter((unit) => totals[unit]).map((unit) => `${formatQuantity(totals[unit])}${unit}`); const negative = Object.values(totals).some((quantity) => quantity < 0); return <td className={`numeric-cell inventory-balance-grade ${negative ? 'inventory-negative' : ''}`} key={grade}>{values.join(' / ')}</td> })}</tr>}{displayedBalanceRows.map((row) => <tr key={`${row.warehouseId}-${row.origin}-${row.productName}-${row.unit}`}><td><span className="warehouse-name"><Warehouse size={17} />{row.warehouseName}</span></td><td>{row.origin}</td><td>{row.productName}</td><td>{row.unit}</td>{balanceGradeColumns.map((grade) => { const quantity = row.quantities[grade] ?? 0; return <td className={`numeric-cell inventory-balance-grade ${quantity < 0 ? 'inventory-negative' : ''}`} key={grade}>{quantity === 0 ? '' : formatQuantity(quantity)}</td> })}</tr>)}{displayedBalanceRows.length === 0 && <tr><td className="empty-state" colSpan={balanceColumns.length}>該当する倉庫在庫はありません</td></tr>}</tbody></table></div><section className="inventory-unassigned-section"><div className="inventory-subheading"><h2>倉庫未設定</h2><span>{displayedUnassignedBalanceRows.length}件</span></div><div className="inventory-table-wrap"><table className="inventory-table inventory-balance-table inventory-unassigned-table" style={{ '--inventory-balance-mobile-width': `${246 + balanceGradeColumns.length * 62}px` } as React.CSSProperties}><colgroup><col className="inventory-balance-origin-col" /><col className="inventory-balance-product-col" /><col className="inventory-balance-unit-col" />{balanceGradeColumns.map((grade) => <col className="inventory-balance-grade-col" key={grade} />)}</colgroup><thead><tr><th>産地</th><th>名称</th><th>単位</th>{balanceGradeColumns.map((grade) => <th key={grade}>{grade}</th>)}</tr></thead><tbody>{displayedUnassignedBalanceRows.map((row) => <tr key={`${row.origin}-${row.productName}-${row.unit}`}><td>{row.origin}</td><td>{row.productName}</td><td>{row.unit}</td>{balanceGradeColumns.map((grade) => { const quantity = row.quantities[grade] ?? 0; return <td className={`numeric-cell inventory-balance-grade ${quantity < 0 ? 'inventory-negative' : ''}`} key={grade}>{quantity === 0 ? '' : formatQuantity(quantity)}</td> })}</tr>)}{displayedUnassignedBalanceRows.length === 0 && <tr><td className="empty-state" colSpan={3 + balanceGradeColumns.length}>倉庫未設定の在庫はありません</td></tr>}</tbody></table></div></section></> : null}
     {editing && <div className="modal-backdrop" role="presentation"><section className="registration-modal inventory-edit-modal" role="dialog" aria-modal="true" aria-labelledby="inventory-edit-title">

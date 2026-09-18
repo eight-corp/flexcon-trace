@@ -1,5 +1,5 @@
 import { useEffect, useState, type CSSProperties } from 'react'
-import { Boxes, ClipboardList, FileSignature, History, House, List, LogOut, ScanLine, Settings2, Wheat } from 'lucide-react'
+import { Boxes, Camera, ClipboardList, FileSignature, History, House, List, LogOut, ScanLine, Settings2, Wheat } from 'lucide-react'
 import { AuthorizationManager } from './components/AuthorizationManager'
 import { InspectionRecordManager, type InspectionRecordTarget } from './components/InspectionRecordManager'
 import { InspectionOptionManager } from './components/InspectionOptionManager'
@@ -10,13 +10,19 @@ import { logoutBusinessSession, MANAGEMENT_MENU_URL, restoreBusinessSession } fr
 import type { Worker } from './types'
 import './App.css'
 
-type Tab = 'scan' | 'history' | 'inventory-history' | 'inventory' | 'statement-reader' | 'authorizations' | 'inspections' | 'master'
+type Tab = 'scan' | 'history' | 'inventory-history' | 'inventory' | 'statement-reader' | 'statement-list' | 'statement-master' | 'authorizations' | 'inspections' | 'master'
+
+function isStatementApplication() {
+  const params = new URLSearchParams(window.location.search)
+  return params.get('app') === 'statements' || params.get('view') === 'statement-reader'
+}
 
 function initialTab(): Tab {
-  return new URLSearchParams(window.location.search).get('view') === 'statement-reader' ? 'statement-reader' : 'scan'
+  return isStatementApplication() ? 'statement-reader' : 'scan'
 }
 
 function App() {
+  const statementApplication = isStatementApplication()
   const [worker, setWorker] = useState<Worker | null>(null)
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<Tab>(initialTab)
@@ -27,6 +33,10 @@ function App() {
   const [inspectionReadOnly, setInspectionReadOnly] = useState(false)
 
   useEffect(() => {
+    document.title = statementApplication ? '(株)エイト 仕切書読込み' : '(株)エイト 米穀出荷管理'
+  }, [statementApplication])
+
+  useEffect(() => {
     void restoreBusinessSession()
       .then((sessionWorker) => {
         if (!sessionWorker) {
@@ -34,10 +44,10 @@ function App() {
           return
         }
         setWorker(sessionWorker)
-        if (sessionWorker.role === 'viewer') setTab('history')
+        if (sessionWorker.role === 'viewer') setTab(statementApplication ? 'statement-list' : 'history')
       })
       .finally(() => setLoading(false))
-  }, [])
+  }, [statementApplication])
 
   useEffect(() => {
     const root = document.documentElement
@@ -114,7 +124,7 @@ function App() {
   const canOperate = worker.role !== 'viewer'
   const isAdmin = worker.role === 'admin'
   const roleName = isAdmin ? '管理者' : canOperate ? '作業者' : '閲覧者'
-  const navStyle = { '--nav-count': isAdmin ? 7 : canOperate ? 6 : 3 } as CSSProperties
+  const navStyle = { '--nav-count': statementApplication ? (isAdmin ? 3 : canOperate ? 2 : 1) : isAdmin ? 7 : canOperate ? 6 : 3 } as CSSProperties
 
   return (
     <div className="app-shell">
@@ -122,7 +132,7 @@ function App() {
         <div className="brand-lockup">
           <span className="brand-mark"><Wheat size={21} aria-hidden="true" /></span>
           <div>
-            <strong>{tab === 'statement-reader' ? '(株)エイト 仕切書読込み' : '(株)エイト 米穀出荷管理'}</strong>
+            <strong>{statementApplication ? '(株)エイト 仕切書読込み' : '(株)エイト 米穀出荷管理'}</strong>
             <small>{roleName} / {worker.worker_name}</small>
           </div>
         </div>
@@ -137,8 +147,8 @@ function App() {
         </div>
       </header>
 
-      <main className={`app-main ${tab === 'history' || tab === 'inventory-history' || tab === 'inventory' || tab === 'statement-reader' || tab === 'authorizations' || tab === 'inspections' ? 'app-main-wide' : ''}`}>
-        {tab === 'scan' && canOperate && (
+      <main className={`app-main ${statementApplication || tab === 'history' || tab === 'inventory-history' || tab === 'inventory' || tab === 'authorizations' || tab === 'inspections' ? 'app-main-wide' : ''}`}>
+        {!statementApplication && tab === 'scan' && canOperate && (
           <ShipmentScanner
             key={worker.worker_id}
             workerId={worker.worker_id}
@@ -146,11 +156,13 @@ function App() {
             onRegistered={() => setHistoryVersion((value) => value + 1)}
           />
         )}
-        {tab === 'history' && <ShipmentHistory refreshKey={historyVersion} workerId={worker.worker_id} isAdmin={worker.role === 'admin'} />}
-        {tab === 'inventory-history' && <InventoryManager view="history" workerId={worker.worker_id} workerName={worker.worker_name} canOperate={canOperate} isAdmin={isAdmin} />}
-        {tab === 'inventory' && <InventoryManager view="balance" workerId={worker.worker_id} workerName={worker.worker_name} canOperate={canOperate} isAdmin={isAdmin} />}
-        {tab === 'statement-reader' && canOperate && <InventoryManager view="statement-reader" workerId={worker.worker_id} workerName={worker.worker_name} canOperate={canOperate} isAdmin={isAdmin} />}
-        {tab === 'authorizations' && canOperate && (
+        {!statementApplication && tab === 'history' && <ShipmentHistory refreshKey={historyVersion} workerId={worker.worker_id} isAdmin={worker.role === 'admin'} />}
+        {!statementApplication && tab === 'inventory-history' && <InventoryManager view="history" workerId={worker.worker_id} workerName={worker.worker_name} canOperate={canOperate} isAdmin={isAdmin} />}
+        {!statementApplication && tab === 'inventory' && <InventoryManager view="balance" workerId={worker.worker_id} workerName={worker.worker_name} canOperate={canOperate} isAdmin={isAdmin} />}
+        {statementApplication && tab === 'statement-reader' && canOperate && <InventoryManager view="statement-reader" workerId={worker.worker_id} workerName={worker.worker_name} canOperate={canOperate} isAdmin={isAdmin} />}
+        {statementApplication && tab === 'statement-list' && <InventoryManager view="statement-list" workerId={worker.worker_id} workerName={worker.worker_name} canOperate={canOperate} isAdmin={isAdmin} />}
+        {statementApplication && tab === 'statement-master' && isAdmin && <InspectionOptionManager workerId={worker.worker_id} scope="statement" />}
+        {!statementApplication && tab === 'authorizations' && canOperate && (
           <AuthorizationManager
             workerId={worker.worker_id}
             onOpenInspections={(authorizationId) => {
@@ -162,7 +174,7 @@ function App() {
             }}
           />
         )}
-        {tab === 'inspections' && canOperate && (
+        {!statementApplication && tab === 'inspections' && canOperate && (
           <div className="inspection-workspace">
             <div className="inspection-workspace-content">
               <InspectionRecordManager
@@ -185,10 +197,21 @@ function App() {
             </div>
           </div>
         )}
-        {tab === 'master' && isAdmin && <InspectionOptionManager workerId={worker.worker_id} />}
+        {!statementApplication && tab === 'master' && isAdmin && <InspectionOptionManager workerId={worker.worker_id} />}
       </main>
 
       <nav className="bottom-nav" aria-label="メインメニュー" style={navStyle}>
+        {statementApplication ? <>
+          {canOperate && <button className={tab === 'statement-reader' ? 'active' : ''} onClick={() => setTab('statement-reader')}>
+            <Camera size={22} /><span>仕切書読込</span>
+          </button>}
+          <button className={tab === 'statement-list' ? 'active' : ''} onClick={() => setTab('statement-list')}>
+            <List size={22} /><span>仕切書一覧</span>
+          </button>
+          {isAdmin && <button className={tab === 'statement-master' ? 'active' : ''} onClick={() => setTab('statement-master')}>
+            <Settings2 size={22} /><span>マスタ</span>
+          </button>}
+        </> : <>
         {canOperate && <button className={tab === 'scan' ? 'active' : ''} onClick={() => setTab('scan')}>
           <ScanLine size={22} /><span>出荷作業</span>
         </button>}
@@ -210,6 +233,7 @@ function App() {
         {isAdmin && <button className={tab === 'master' ? 'active' : ''} onClick={() => setTab('master')}>
           <Settings2 size={22} /><span>マスタ</span>
         </button>}
+        </>}
       </nav>
     </div>
   )
