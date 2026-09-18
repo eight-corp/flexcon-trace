@@ -175,6 +175,54 @@ const responseSchema = {
   required: ['statement_date', 'document_number', 'recipient', 'issuer', 'payment_method', 'tax_treatment', 'tax_rate', 'tax_amount', 'total_amount', 'invoice_number', 'lines', 'warnings'],
 }
 
+function looksLikePackageDescription(value: string) {
+  const compact = value.replace(/\s/g, '')
+  return /[（(].*[)）]/.test(compact)
+    && /(?:俵|kg|㎏|袋|本|フレコン)/i.test(compact)
+    && /[×xX＋+]/.test(compact)
+}
+
+function normalizeStatementLines(statement: Record<string, unknown>) {
+  if (!Array.isArray(statement.lines)) return statement
+  const normalized: Array<Record<string, unknown>> = []
+  let previousProductName = ''
+
+  for (const rawLine of statement.lines) {
+    if (!rawLine || typeof rawLine !== 'object') continue
+    const line = { ...(rawLine as Record<string, unknown>) }
+    const rawProductName = typeof line.product_name === 'string' ? line.product_name.trim() : ''
+    const rawPackageType = typeof line.package_type === 'string' ? line.package_type.trim() : ''
+    const productIsPackageOnly = looksLikePackageDescription(rawProductName)
+    const packageText = rawPackageType || (productIsPackageOnly ? rawProductName : '')
+    const quantity = Number(line.quantity) || 0
+    const unitPrice = Number(line.unit_price) || 0
+    const amount = Number(line.amount) || 0
+    const hasNumbers = quantity !== 0 || unitPrice !== 0 || amount !== 0
+    const hasQuantityAndUnitPrice = quantity !== 0 && unitPrice !== 0
+    const continuationOnly = !hasNumbers && (productIsPackageOnly || (!rawProductName && Boolean(rawPackageType)))
+
+    if (continuationOnly && normalized.length > 0) {
+      const previous = normalized[normalized.length - 1]
+      const previousPackage = typeof previous.package_type === 'string' ? previous.package_type.trim() : ''
+      previous.package_type = [previousPackage, packageText].filter(Boolean).join(' / ')
+      continue
+    }
+
+    if (hasQuantityAndUnitPrice && (productIsPackageOnly || !rawProductName) && previousProductName) {
+      line.product_name = previousProductName
+      if (!rawPackageType && packageText) line.package_type = packageText
+    } else {
+      line.product_name = rawProductName
+    }
+
+    if (rawProductName && !productIsPackageOnly && rawProductName !== '免税') previousProductName = rawProductName
+    normalized.push(line)
+  }
+
+  statement.lines = normalized
+  return statement
+}
+
 const prompt = `
 この画像は日本の仕切書です。画像に書かれている情報だけを読み取り、指定されたJSON形式で返してください。
 
@@ -193,7 +241,9 @@ const prompt = `
 - invoice_number: 登録番号（インボイス番号）。Tから始まる表記をそのまま返す。見えなければ空文字。
 
 明細項目:
-- linesは明細を上から順番に返す。同じ明細の情報が複数行にまたがり、続きの行の数量・単価・金額の各列がすべて空欄なら1件に結合する。続きに見える行でも数量、単価、金額のいずれかの列に値があれば独立した明細として扱う。
+- 基本は、印刷された表の1行を1明細として上から順番に返す。
+- 1つの品名や荷姿が複数の印刷行にまたがることがある。続きの行の数量・単価・金額がすべて空欄なら、その行の文字を直前の明細へ結合して1明細にする。
+- 数量列と単価列の両方に値がある行は必ず独立した明細にする。その行の品名欄が「18俵×2フレコン＋203kg」のような荷姿だけの場合は、直前の上の行にある品名をproduct_nameへ引き継ぎ、荷姿の文字はpackage_typeへ入れる。荷姿を品名として扱わない。
 - crop_year: その明細に明記された産年を西暦4桁で返す。和暦は西暦へ変換する。省略されている行は推測せず空文字。
 - product_name: 品名。産年と荷姿は除く。手書きの一文字ずつを確認し、特に米の銘柄を字形が似た別銘柄へ勝手に置き換えない。「青天のへきれき」は一つの正式な銘柄名であり、「萩のきらめき」と読み替えない。品名マスタ候補が提示され、画像の筆跡と一致する候補がある場合はその正式表記を使う。
 - 品名が「免税」の行は商品名ではなく、インボイス登録番号のない仕入元に対する金額を表す明細である。「免税」をproduct_nameへそのまま入れ、対応する金額の絶対値に必ずマイナス符号を付けてamountへ返し、他の商品明細へ合算しない。画像上ですでにマイナスならそのまま負数にする。数量が記載されていなければquantityは0とし、架空の数量を補わない。
@@ -236,7 +286,7 @@ Deno.serve(async (request) => {
     const geminiData = await generateStatement(models, geminiApiKey, mimeType, imageBase64, taxRegionBase64, paymentRegionBase64, detailRegionBase64, productMasterNames)
     const responseText = geminiData.candidates?.[0]?.content?.parts?.find((part) => part.text)?.text
     if (!responseText) throw new Error('Geminiから読取結果が返りませんでした。')
-    const statement = JSON.parse(responseText)
+    const statement = normalizeStatementLines(JSON.parse(responseText) as Record<string, unknown>)
     return jsonResponse(request, { statement })
   } catch (error) {
     const status = error instanceof GeminiUnavailableError ? 503 : 400
