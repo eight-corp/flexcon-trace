@@ -181,9 +181,9 @@ async function resizePhoto(file: File) {
     }
 
     const [taxRegionBase64, paymentRegionBase64, detailRegionBase64] = await Promise.all([
-      cropRegion(0.58, 0.24, 0.4, 0.2, 1500),
-      cropRegion(0.02, 0.7, 0.58, 0.22, 1500),
-      cropRegion(0.05, 0.3, 0.9, 0.43, 1900),
+      cropRegion(0.58, 0.24, 0.4, 0.2, 1000),
+      cropRegion(0.02, 0.7, 0.58, 0.22, 1000),
+      cropRegion(0.05, 0.3, 0.9, 0.43, 1500),
     ])
     return { imageBase64, taxRegionBase64, paymentRegionBase64, detailRegionBase64, mimeType: 'image/jpeg', previewUrl: `data:image/jpeg;base64,${imageBase64}` }
   } finally {

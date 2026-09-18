@@ -40,9 +40,12 @@ async function generateStatement(
     : ''
   for (const [modelIndex, model] of models.entries()) {
     const thinkingLevel = model === 'gemini-3.1-flash-lite' ? 'MINIMAL' : 'LOW'
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+    let response: Response
+    try {
+      response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
       method: 'POST',
       headers: { 'x-goog-api-key': apiKey, 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(modelIndex === 0 ? 20_000 : 30_000),
       body: JSON.stringify({
         contents: [{ role: 'user', parts: [
           { text: `${prompt}${productMasterPrompt}` },
@@ -67,7 +70,18 @@ async function generateStatement(
           thinkingConfig: { thinkingLevel },
         },
       }),
-    })
+      })
+    } catch (error) {
+      const fallbackModel = models[modelIndex + 1]
+      if (fallbackModel && error instanceof DOMException && error.name === 'TimeoutError') {
+        console.warn('Gemini request timed out; switching models.', { model, fallbackModel })
+        continue
+      }
+      if (error instanceof DOMException && error.name === 'TimeoutError') {
+        throw new GeminiUnavailableError('AI画像読取りが時間内に完了しませんでした。もう一度お試しください。')
+      }
+      throw error
+    }
     const responseText = await response.text()
     let data: {
       error?: { message?: string }
@@ -216,8 +230,8 @@ Deno.serve(async (request) => {
     if (paymentRegionBase64.length > 4_000_000) return jsonResponse(request, { error: '支払方法の拡大画像が大きすぎます。撮影し直してください。' }, 413)
     if (detailRegionBase64.length > 6_000_000) return jsonResponse(request, { error: '明細の拡大画像が大きすぎます。撮影し直してください。' }, 413)
 
-    const primaryModel = Deno.env.get('GEMINI_FALLBACK_MODEL') || 'gemini-3.7-flash'
-    const fallbackModel = Deno.env.get('GEMINI_MODEL') || 'gemini-3.1-flash-lite'
+    const primaryModel = Deno.env.get('GEMINI_MODEL') || 'gemini-3.1-flash-lite'
+    const fallbackModel = Deno.env.get('GEMINI_FALLBACK_MODEL') || 'gemini-3.7-flash'
     const models = [...new Set([primaryModel, fallbackModel].filter(Boolean))]
     const geminiData = await generateStatement(models, geminiApiKey, mimeType, imageBase64, taxRegionBase64, paymentRegionBase64, detailRegionBase64, productMasterNames)
     const responseText = geminiData.candidates?.[0]?.content?.parts?.find((part) => part.text)?.text
