@@ -136,6 +136,14 @@ function importedTotalMismatch(editor: Editor) {
   return Math.abs(total - expected) >= 0.5
 }
 
+async function canvasJpegBase64(canvas: HTMLCanvasElement, quality: number) {
+  const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob((result) => result ? resolve(result) : reject(new Error('撮影画像を変換できませんでした。')), 'image/jpeg', quality))
+  const bytes = new Uint8Array(await blob.arrayBuffer())
+  let binary = ''
+  for (let index = 0; index < bytes.length; index += 0x8000) binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000))
+  return btoa(binary)
+}
+
 async function resizePhoto(file: File) {
   const objectUrl = URL.createObjectURL(file)
   try {
@@ -153,12 +161,21 @@ async function resizePhoto(file: File) {
     const context = canvas.getContext('2d')
     if (!context) throw new Error('撮影画像を処理できませんでした。')
     context.drawImage(source, 0, 0, canvas.width, canvas.height)
-    const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob((result) => result ? resolve(result) : reject(new Error('撮影画像を変換できませんでした。')), 'image/jpeg', 0.86))
-    const bytes = new Uint8Array(await blob.arrayBuffer())
-    let binary = ''
-    for (let index = 0; index < bytes.length; index += 0x8000) binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000))
-    const imageBase64 = btoa(binary)
-    return { imageBase64, mimeType: 'image/jpeg', previewUrl: `data:image/jpeg;base64,${imageBase64}` }
+    const imageBase64 = await canvasJpegBase64(canvas, 0.86)
+
+    const cropX = Math.round(canvas.width * 0.45)
+    const cropY = Math.round(canvas.height * 0.12)
+    const cropWidth = Math.max(1, Math.round(canvas.width * 0.53))
+    const cropHeight = Math.max(1, Math.round(canvas.height * 0.32))
+    const cropScale = Math.min(2, 1400 / cropWidth)
+    const taxRegionCanvas = document.createElement('canvas')
+    taxRegionCanvas.width = Math.max(1, Math.round(cropWidth * cropScale))
+    taxRegionCanvas.height = Math.max(1, Math.round(cropHeight * cropScale))
+    const taxRegionContext = taxRegionCanvas.getContext('2d')
+    if (!taxRegionContext) throw new Error('税区分の画像を処理できませんでした。')
+    taxRegionContext.drawImage(canvas, cropX, cropY, cropWidth, cropHeight, 0, 0, taxRegionCanvas.width, taxRegionCanvas.height)
+    const taxRegionBase64 = await canvasJpegBase64(taxRegionCanvas, 0.9)
+    return { imageBase64, taxRegionBase64, mimeType: 'image/jpeg', previewUrl: `data:image/jpeg;base64,${imageBase64}` }
   } finally {
     URL.revokeObjectURL(objectUrl)
   }
@@ -213,7 +230,7 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin }
     setNotice(null)
     try {
       const image = await resizePhoto(file)
-      const { data, error } = await supabase.functions.invoke('analyze-purchase-statement', { body: { imageBase64: image.imageBase64, mimeType: image.mimeType } })
+      const { data, error } = await supabase.functions.invoke('analyze-purchase-statement', { body: { imageBase64: image.imageBase64, taxRegionBase64: image.taxRegionBase64, mimeType: image.mimeType } })
       if (error) {
         let message = error.message
         const context = (error as { context?: Response }).context
@@ -476,7 +493,7 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin }
         <div className="purchase-statement-table-wrap"><table><thead><tr><th>産年</th><th>品名</th><th>荷姿</th><th>数量</th><th>単価</th><th>金額</th></tr></thead><tbody>{statement.items.map((item) => <tr key={item.id}><td>{item.crop_year ?? ''}</td><td>{item.product_name}</td><td>{item.package_type}</td><td>{item.quantity == null ? '' : Number(item.quantity).toLocaleString('ja-JP')}{item.unit}</td><td>{formatMoney(item.unit_price)}</td><td>{formatMoney(item.amount)}</td></tr>)}</tbody></table></div>
         <div className="purchase-statement-card-actions">{statement.image_path && <button className="secondary-button" type="button" onClick={() => void openStatementImage(statement)} disabled={busy}><FileImage size={17} />画像を表示</button>}{canOperate && <button className="secondary-button" type="button" onClick={() => editStatement(statement)} disabled={busy}><Pencil size={17} />編集</button>}{isAdmin && <button className="danger-button" type="button" onClick={() => void deleteStatement(statement)} disabled={busy}><Trash2 size={17} />削除</button>}</div>
       </div></details>)}{!loadingStatements && displayedStatements.length === 0 && <div className="empty-state">登録された仕切書はありません</div>}</div>
-      {editorForm}
+      {editor && <div className="modal-backdrop purchase-statement-edit-backdrop" role="presentation"><section className="registration-modal purchase-statement-edit-modal" role="dialog" aria-modal="true" aria-label="仕切書を編集">{editorForm}</section></div>}
     </>}
     {mode === 'master' && isAdmin && <div className="purchase-statement-master-grid">{(Object.keys(masterLabels) as MasterType[]).map((type) => <section className="section-band" key={type}><h2>{masterLabels[type]}</h2><form onSubmit={(event) => { event.preventDefault(); void saveMaster(type) }}><input value={masterDrafts[type]} onChange={(event) => setMasterDrafts((current) => ({ ...current, [type]: event.target.value }))} placeholder={`${masterLabels[type]}を入力`} required /><button className="primary-button" disabled={busy}><Plus size={17} />追加</button></form><div className="purchase-statement-master-list">{masters.filter((item) => item.value_type === type).map((item) => <div key={item.id}><span>{item.name}</span><button className="icon-button delete-icon" type="button" title="削除" aria-label={`${item.name}を削除`} onClick={() => void deleteMaster(item)} disabled={busy}><Trash2 size={17} /></button></div>)}{masters.every((item) => item.value_type !== type) && <p className="empty-state">登録されていません</p>}</div></section>)}</div>}
     {viewingImageUrl && <div className="modal-backdrop purchase-statement-image-backdrop" role="presentation" onClick={() => setViewingImageUrl('')}><section className="registration-modal purchase-statement-image-modal" role="dialog" aria-modal="true" aria-label="保存した仕切書画像" onClick={(event) => event.stopPropagation()}><div className="modal-header"><h2>保存した仕切書画像</h2><button className="icon-button" type="button" title="閉じる" aria-label="画像を閉じる" onClick={() => setViewingImageUrl('')}><X size={20} /></button></div><img src={viewingImageUrl} alt="保存した仕切書" /></section></div>}

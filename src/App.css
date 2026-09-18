@@ -184,6 +184,8 @@
 .purchase-statement-card-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .purchase-statement-image-modal { width: min(100%, 980px); }
 .purchase-statement-image-modal img { width: 100%; max-height: calc(var(--visual-viewport-height, 100dvh) - 120px); object-fit: contain; border: 1px solid var(--line); border-radius: 6px; background: #f4f5f4; }
+.purchase-statement-edit-modal { width: min(96vw, 1220px); max-height: calc(var(--visual-viewport-height, 100dvh) - 28px); padding: 10px; }
+.purchase-statement-edit-modal .purchase-statement-editor { width: 100%; min-width: 0; border: 0; box-shadow: none; }
 .purchase-statement-master-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .purchase-statement-master-grid section { display: grid; gap: 10px; align-content: start; }
 .purchase-statement-master-grid h2 { margin: 0; }
@@ -879,6 +881,7 @@ table thead th { text-align: center !important; }
   .purchase-statement-card > summary, .purchase-statement-card > summary > span:first-child { align-items: flex-start; flex-direction: column; gap: 4px; }
   .purchase-statement-card-body dl { grid-template-columns: 1fr; }
   .purchase-statement-master-grid { grid-template-columns: 1fr; }
+  .purchase-statement-edit-modal { width: 100%; padding: 0; }
   .inventory-entry-toolbar .inventory-mode-switch { width: 100%; }
   .inventory-import-actions { width: 100%; }
   .inventory-import-actions .secondary-button { flex: 1; min-width: 0; }
