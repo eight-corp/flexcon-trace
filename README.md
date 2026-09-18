@@ -120,19 +120,20 @@ https://eight-corp.github.io/flexcon-trace/
 
 カメラ利用にはHTTPSが必要ですが、GitHub Pagesの公開URLはHTTPSに対応しています。
 
-## Gemini仕切書読込み
+## 仕切書のAI読込み
 
-Gemini APIキーはGitHub Pagesの変数へ登録せず、Supabase Edge FunctionのSecret `GEMINI_API_KEY` として登録します。必要に応じて `GEMINI_MODEL` と `GEMINI_FALLBACK_MODEL` を設定できます。未設定時は低遅延の `gemini-3.1-flash-lite` を最小思考量で使用し、一時的な混雑が発生した場合は低思考量の `gemini-3.7-flash` へ直ちに切り替えます。
+APIキーはGitHub Pagesの変数へ登録せず、Supabase Edge FunctionのSecretへ登録します。`OPENAI_API_KEY` が設定されている場合はChatGPT（初期値 `gpt-4o`）で読み取り、未設定の間は既存のGemini読取りを継続します。ChatGPTのモデルを変更する場合は `OPENAI_OCR_MODEL` を設定します。Gemini側は必要に応じて `GEMINI_MODEL` と `GEMINI_FALLBACK_MODEL` を設定できます。
 
 ```powershell
 npx supabase login
 npx supabase link --project-ref gkazhcddknmgzglcdwtk
 npx supabase secrets set GEMINI_API_KEY=取得したAPIキー
+npx supabase secrets set OPENAI_API_KEY=取得したOpenAI_APIキー
 npx supabase functions deploy analyze-purchase-statement --no-verify-jwt
 npx supabase functions deploy purchase-statement-image --no-verify-jwt
 ```
 
-`--no-verify-jwt` で公開された関数内でも、米穀出荷管理の業務ログイン情報を確認し、管理者または作業者だけが画像解析を実行できます。画像は最大辺1,800pxのJPEGへ端末内で縮小してGeminiへ送信し、登録時にSupabaseの非公開Storageへ保存して仕切書IDと紐付けます。保存画像はログインと権限を確認して発行する10分間の署名付きURLで表示します。
+`--no-verify-jwt` で公開された関数内でも、米穀出荷管理の業務ログイン情報を確認し、管理者または作業者だけが画像解析を実行できます。画像は最大辺1,800pxのJPEGへ端末内で縮小して選択中のAIへ送信し、登録時にSupabaseの非公開Storageへ保存して仕切書IDと紐付けます。保存画像はログインと権限を確認して発行する10分間の署名付きURLで表示します。
 
 業務管理メニューからは `?app=statements` を付けて専用画面を開きます。専用画面は「仕切書読込」「仕切書一覧」「マスタ」のみを表示し、通常の米穀出荷管理画面とはナビゲーションと保存先を分離します。既存の `?view=statement-reader` も互換URLとして同じ専用画面を開きます。
 
