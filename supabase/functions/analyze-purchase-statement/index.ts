@@ -523,7 +523,8 @@ Deno.serve(async (request) => {
     if (paymentRegionBase64.length > 4_000_000) return jsonResponse(request, { error: '支払方法の拡大画像が大きすぎます。撮影し直してください。' }, 413)
     if (detailRegionBase64.length > 6_000_000) return jsonResponse(request, { error: '明細の拡大画像が大きすぎます。撮影し直してください。' }, 413)
 
-    let provider = openAIApiKey ? 'openai' : 'gemini'
+    const preferredProvider = (Deno.env.get('OCR_PROVIDER') || 'gemini').toLowerCase()
+    let provider = preferredProvider === 'openai' && openAIApiKey ? 'openai' : 'gemini'
     let providerFallbackWarning = ''
     const primaryModel = Deno.env.get('GEMINI_MODEL') || 'gemini-3.1-flash-lite'
     const fallbackModel = Deno.env.get('GEMINI_FALLBACK_MODEL') || 'gemini-3.7-flash'

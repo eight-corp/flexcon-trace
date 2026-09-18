@@ -122,13 +122,14 @@ https://eight-corp.github.io/flexcon-trace/
 
 ## 仕切書のAI読込み
 
-APIキーはGitHub Pagesの変数へ登録せず、Supabase Edge FunctionのSecretへ登録します。`OPENAI_API_KEY` が設定されている場合はChatGPT（初期値 `gpt-4o`）で読み取り、未設定の間は既存のGemini読取りを継続します。ChatGPTのモデルを変更する場合は `OPENAI_OCR_MODEL` を設定します。Gemini側は必要に応じて `GEMINI_MODEL` と `GEMINI_FALLBACK_MODEL` を設定できます。
+APIキーはGitHub Pagesの変数へ登録せず、Supabase Edge FunctionのSecretへ登録します。通常はGeminiで読み取り、`OCR_PROVIDER=openai` を設定した場合だけChatGPT（初期値 `gpt-4o`）へ切り替えます。ChatGPTのモデルを変更する場合は `OPENAI_OCR_MODEL` を設定します。Gemini側は必要に応じて `GEMINI_MODEL` と `GEMINI_FALLBACK_MODEL` を設定できます。
 
 ```powershell
 npx supabase login
 npx supabase link --project-ref gkazhcddknmgzglcdwtk
 npx supabase secrets set GEMINI_API_KEY=取得したAPIキー
 npx supabase secrets set OPENAI_API_KEY=取得したOpenAI_APIキー
+npx supabase secrets set OCR_PROVIDER=gemini
 npx supabase functions deploy analyze-purchase-statement --no-verify-jwt
 npx supabase functions deploy purchase-statement-image --no-verify-jwt
 ```
