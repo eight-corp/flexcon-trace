@@ -171,6 +171,76 @@ type VisionAnnotation = {
   error?: { code?: number; message?: string; status?: string }
 }
 
+type GoogleServiceAccount = {
+  client_email?: string
+  private_key?: string
+  project_id?: string
+  token_uri?: string
+}
+
+let visionAccessTokenCache: { token: string; expiresAt: number; projectId: string } | null = null
+
+function base64Url(value: string | Uint8Array) {
+  const bytes = typeof value === 'string' ? new TextEncoder().encode(value) : value
+  let binary = ''
+  for (const byte of bytes) binary += String.fromCharCode(byte)
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+}
+
+async function googleServiceAccountAccessToken(credentialsJson: string) {
+  let credentials: GoogleServiceAccount
+  try {
+    credentials = JSON.parse(credentialsJson) as GoogleServiceAccount
+  } catch {
+    throw new Error('Google CloudサービスアカウントのJSON設定を確認してください。')
+  }
+  if (!credentials.client_email || !credentials.private_key || !credentials.project_id) {
+    throw new Error('Google CloudサービスアカウントのJSONに必要な項目がありません。')
+  }
+  if (visionAccessTokenCache && visionAccessTokenCache.expiresAt > Date.now() + 60_000) return visionAccessTokenCache
+
+  const now = Math.floor(Date.now() / 1000)
+  const tokenUri = credentials.token_uri || 'https://oauth2.googleapis.com/token'
+  const header = base64Url(JSON.stringify({ alg: 'RS256', typ: 'JWT' }))
+  const payload = base64Url(JSON.stringify({
+    iss: credentials.client_email,
+    scope: 'https://www.googleapis.com/auth/cloud-vision',
+    aud: tokenUri,
+    iat: now,
+    exp: now + 3600,
+  }))
+  const signingInput = `${header}.${payload}`
+  const pemBody = credentials.private_key.replace(/-----BEGIN PRIVATE KEY-----|-----END PRIVATE KEY-----|\s/g, '')
+  const keyBytes = Uint8Array.from(atob(pemBody), (character) => character.charCodeAt(0))
+  const privateKey = await crypto.subtle.importKey(
+    'pkcs8',
+    keyBytes,
+    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  )
+  const signature = new Uint8Array(await crypto.subtle.sign('RSASSA-PKCS1-v1_5', privateKey, new TextEncoder().encode(signingInput)))
+  const assertion = `${signingInput}.${base64Url(signature)}`
+  const tokenResponse = await fetch(tokenUri, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+      assertion,
+    }),
+  })
+  const tokenData = await tokenResponse.json() as { access_token?: string; expires_in?: number; error_description?: string }
+  if (!tokenResponse.ok || !tokenData.access_token) {
+    throw new Error(tokenData.error_description ?? 'Google Cloudの認証に失敗しました。')
+  }
+  visionAccessTokenCache = {
+    token: tokenData.access_token,
+    expiresAt: Date.now() + (tokenData.expires_in ?? 3600) * 1000,
+    projectId: credentials.project_id,
+  }
+  return visionAccessTokenCache
+}
+
 function visionAnnotationText(label: string, annotation: VisionAnnotation) {
   const plainText = annotation.fullTextAnnotation?.text?.trim() ?? annotation.textAnnotations?.[0]?.description?.trim() ?? ''
   const positionedWords = (annotation.textAnnotations ?? []).slice(1).map((item) => {
@@ -187,7 +257,7 @@ function visionAnnotationText(label: string, annotation: VisionAnnotation) {
 }
 
 async function recognizeStatementWithVision(
-  apiKey: string,
+  credentialsJson: string,
   imageBase64: string,
   detailRegionBase64: string,
 ) {
@@ -195,11 +265,16 @@ async function recognizeStatementWithVision(
     { label: '仕切書全体', data: imageBase64 },
     ...(detailRegionBase64 ? [{ label: '明細表拡大', data: detailRegionBase64 }] : []),
   ]
+  const authorization = await googleServiceAccountAccessToken(credentialsJson)
   let response: Response
   try {
-    response = await fetch(`https://vision.googleapis.com/v1/images:annotate?key=${encodeURIComponent(apiKey)}`, {
+    response = await fetch('https://vision.googleapis.com/v1/images:annotate', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        Authorization: `Bearer ${authorization.token}`,
+        'x-goog-user-project': authorization.projectId,
+        'Content-Type': 'application/json',
+      },
       signal: AbortSignal.timeout(30_000),
       body: JSON.stringify({
         requests: images.map((image) => ({
@@ -658,7 +733,7 @@ Deno.serve(async (request) => {
     await requireRiceShippingOperator(request)
     const openAIApiKey = Deno.env.get('OPENAI_API_KEY')
     const geminiApiKey = Deno.env.get('GEMINI_API_KEY')
-    const visionApiKey = Deno.env.get('GOOGLE_CLOUD_VISION_API_KEY') || geminiApiKey
+    const visionCredentialsJson = Deno.env.get('GOOGLE_CLOUD_VISION_SERVICE_ACCOUNT_JSON')
     if (!openAIApiKey && !geminiApiKey) return jsonResponse(request, { error: 'AI画像読取りのAPIキーが設定されていません。' }, 503)
 
     const body = await request.json() as { imageBase64?: string; taxRegionBase64?: string; paymentRegionBase64?: string; detailRegionBase64?: string; productMasterNames?: unknown; originMasterNames?: unknown; mimeType?: string }
@@ -682,7 +757,7 @@ Deno.serve(async (request) => {
     const preferredProvider = (Deno.env.get('OCR_PROVIDER') || 'gemini').toLowerCase()
     let provider = preferredProvider === 'openai' && openAIApiKey
       ? 'openai'
-      : preferredProvider === 'vision' && visionApiKey && geminiApiKey
+      : preferredProvider === 'vision' && geminiApiKey
       ? 'vision'
       : 'gemini'
     let providerFallbackWarning = ''
@@ -700,7 +775,9 @@ Deno.serve(async (request) => {
       ])
     } else if (provider === 'vision') {
       const [visionResult, visionTaxResult, visionPaymentResult] = await Promise.allSettled([
-        recognizeStatementWithVision(visionApiKey!, imageBase64, detailRegionBase64),
+        visionCredentialsJson
+          ? recognizeStatementWithVision(visionCredentialsJson, imageBase64, detailRegionBase64)
+          : Promise.reject(new Error('Google Cloud Vision OCR用サービスアカウントJSONが設定されていません。')),
         classifyTaxTreatment(models.at(-1) ?? models[0], geminiApiKey!, mimeType, taxRegionBase64),
         classifyPaymentMethod(models.at(-1) ?? models[0], geminiApiKey!, mimeType, paymentRegionBase64),
       ])
