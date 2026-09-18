@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Camera, Keyboard, Pencil, Plus, Save, Search, Trash2, X } from 'lucide-react'
+import { Camera, Keyboard, Pencil, Plus, RefreshCw, Save, Search, Trash2, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
 type Mode = 'reader' | 'list' | 'master'
@@ -157,10 +157,13 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin }
   const [editor, setEditor] = useState<Editor | null>(null)
   const [search, setSearch] = useState('')
   const [busy, setBusy] = useState(false)
+  const [loadingStatements, setLoadingStatements] = useState(mode === 'list')
   const [notice, setNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
   const loadStatements = useCallback(async () => {
+    setLoadingStatements(true)
     const { data, error } = await supabase.rpc('flexcon_list_purchase_statements', { p_worker_id: workerId })
+    setLoadingStatements(false)
     if (error) return setNotice({ type: 'error', text: error.message })
     setStatements((data ?? []) as StoredStatement[])
   }, [workerId])
@@ -395,12 +398,13 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin }
       {editorForm}
     </>}
     {mode === 'list' && <>
-      <div className="search-row"><div className="search-input-wrap"><Search size={18} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="日付・仕切書№・担当者・仕入元・品名を検索" /></div></div>
+      <div className="search-row"><div className="search-input-wrap"><Search size={18} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="日付・仕切書№・担当者・仕入元・品名を検索" /></div><button className="secondary-button" type="button" onClick={() => void loadStatements()} disabled={loadingStatements}><RefreshCw size={17} />{loadingStatements ? '読込中' : '再読込'}</button></div>
+      <div className="purchase-statement-list-count">{loadingStatements ? '一覧を読み込んでいます' : `${displayedStatements.length}仕切書・${displayedStatements.reduce((sum, statement) => sum + statement.items.length, 0)}明細`}</div>
       <div className="purchase-statement-list">{displayedStatements.map((statement) => <details className="purchase-statement-card" key={statement.id}><summary><span><strong>{statement.statement_date.replaceAll('-', '/')}</strong><b>{statement.document_number}</b><span>{statement.issuer || '仕入元未入力'}</span></span><span>{formatMoney(statement.total_amount)}　{statement.items.length}明細</span></summary><div className="purchase-statement-card-body">
         <dl><div><dt>担当者</dt><dd>{statement.recipient || '―'}</dd></div><div><dt>仕入元</dt><dd>{statement.issuer || '―'}</dd></div><div><dt>支払方法</dt><dd>{paymentMethodLabel(statement.payment_method)}</dd></div><div><dt>税率</dt><dd>{statement.tax_rate == null ? '―' : `${statement.tax_rate}%`}</dd></div><div><dt>消費税額</dt><dd>{formatMoney(statement.tax_amount) || '―'}</dd></div><div><dt>税込合計</dt><dd>{formatMoney(statement.total_amount) || '―'}</dd></div><div><dt>登録番号</dt><dd>{statement.invoice_number || '―'}</dd></div></dl>
         <div className="purchase-statement-table-wrap"><table><thead><tr><th>産年</th><th>品名</th><th>荷姿</th><th>数量</th><th>単価</th><th>金額</th></tr></thead><tbody>{statement.items.map((item) => <tr key={item.id}><td>{item.crop_year ?? ''}</td><td>{item.product_name}</td><td>{item.package_type}</td><td>{Number(item.quantity).toLocaleString('ja-JP')}{item.unit}</td><td>{formatMoney(item.unit_price)}</td><td>{formatMoney(item.amount)}</td></tr>)}</tbody></table></div>
         {canOperate && <div className="purchase-statement-card-actions"><button className="secondary-button" type="button" onClick={() => editStatement(statement)} disabled={busy}><Pencil size={17} />編集</button>{isAdmin && <button className="danger-button" type="button" onClick={() => void deleteStatement(statement)} disabled={busy}><Trash2 size={17} />削除</button>}</div>}
-      </div></details>)}{displayedStatements.length === 0 && <div className="empty-state">登録された仕切書はありません</div>}</div>
+      </div></details>)}{!loadingStatements && displayedStatements.length === 0 && <div className="empty-state">登録された仕切書はありません</div>}</div>
       {editorForm}
     </>}
     {mode === 'master' && isAdmin && <div className="purchase-statement-master-grid">{(Object.keys(masterLabels) as MasterType[]).map((type) => <section className="section-band" key={type}><h2>{masterLabels[type]}</h2><form onSubmit={(event) => { event.preventDefault(); void saveMaster(type) }}><input value={masterDrafts[type]} onChange={(event) => setMasterDrafts((current) => ({ ...current, [type]: event.target.value }))} placeholder={`${masterLabels[type]}を入力`} required /><button className="primary-button" disabled={busy}><Plus size={17} />追加</button></form><div className="purchase-statement-master-list">{masters.filter((item) => item.value_type === type).map((item) => <div key={item.id}><span>{item.name}</span><button className="icon-button delete-icon" type="button" title="削除" aria-label={`${item.name}を削除`} onClick={() => void deleteMaster(item)} disabled={busy}><Trash2 size={17} /></button></div>)}{masters.every((item) => item.value_type !== type) && <p className="empty-state">登録されていません</p>}</div></section>)}</div>}

@@ -169,6 +169,7 @@
 .purchase-statement-table-wrap td:first-child { width: 44px; text-align: center; }
 .purchase-statement-table-wrap td:last-child { width: 48px; text-align: center; }
 .purchase-statement-list { display: grid; gap: 9px; }
+.purchase-statement-list-count { color: var(--muted); font-size: 13px; font-weight: 700; text-align: right; }
 .purchase-statement-card { overflow: hidden; border: 1px solid var(--line); border-radius: 7px; background: #fff; }
 .purchase-statement-card > summary { min-height: 52px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 10px 14px; cursor: pointer; list-style: none; }
 .purchase-statement-card > summary::-webkit-details-marker { display: none; }
