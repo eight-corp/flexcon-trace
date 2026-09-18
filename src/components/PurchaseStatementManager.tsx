@@ -96,6 +96,34 @@ function inputNumber(value: unknown) {
   return Number.isFinite(number) && number > 0 ? String(number) : ''
 }
 
+function groupedNumber(value: string | number) {
+  const raw = String(value)
+  if (!raw) return ''
+  const negative = raw.startsWith('-')
+  const unsigned = negative ? raw.slice(1) : raw
+  const [integer, decimal] = unsigned.split('.', 2)
+  const groupedInteger = (integer || '0').replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+  return `${negative ? '-' : ''}${groupedInteger}${raw.includes('.') ? `.${decimal ?? ''}` : ''}`
+}
+
+function MoneyInput({ value, onChange, readOnly = false, required = false }: { value: string | number; onChange: (value: string) => void; readOnly?: boolean; required?: boolean }) {
+  const [focused, setFocused] = useState(false)
+  const raw = String(value)
+  return <input
+    type="text"
+    inputMode="decimal"
+    value={focused && !readOnly ? raw : groupedNumber(raw)}
+    onFocus={() => setFocused(true)}
+    onBlur={() => setFocused(false)}
+    onChange={(event) => {
+      const next = event.target.value.replaceAll(',', '').trim()
+      if (/^-?\d*(?:\.\d*)?$/.test(next)) onChange(next)
+    }}
+    readOnly={readOnly}
+    required={required}
+  />
+}
+
 function taxExemptAmount(value: unknown) {
   const number = Number(value)
   return Number.isFinite(number) && number !== 0 ? String(-Math.abs(number)) : ''
@@ -478,8 +506,8 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin }
       <label>支払方法<select value={editor.header.paymentMethod} onChange={(event) => updateHeader('paymentMethod', event.target.value)}><option value=""></option><option value="cash">現金</option><option value="transfer">振込</option></select></label>
       <label>消費税区分<select value={editor.header.taxTreatment} onChange={(event) => updateHeader('taxTreatment', event.target.value)} required><option value=""></option><option value="exclusive">外税（税抜に丸）</option><option value="inclusive">内税（税込に丸）</option></select></label>
       <label>税率（%）<input type="number" min="0" step="0.001" inputMode="decimal" value={editor.header.taxRate} onChange={(event) => updateHeader('taxRate', event.target.value)} /></label>
-      <label>消費税額<input type="number" min="0" step="1" inputMode="decimal" value={editor.header.taxAmount} onChange={(event) => updateHeader('taxAmount', event.target.value)} /></label>
-      <label className={importedTotalMismatch(editor) ? 'calculation-mismatch' : ''}>税込合計金額<input type="number" min="0" step="1" inputMode="decimal" value={editor.sourceType === 'manual' ? calculatedTotal(editor.items, editor.header.taxAmount, editor.header.taxTreatment) : editor.header.totalAmount} onChange={(event) => updateHeader('totalAmount', event.target.value)} readOnly={editor.sourceType === 'manual'} />{editor.sourceType === 'manual' && <small>{editor.header.taxTreatment === 'inclusive' ? '税込明細金額を合計' : '税抜明細金額＋消費税額を自動計算'}</small>}{importedTotalMismatch(editor) && <small>税区分に基づく明細金額の合計と一致しません</small>}</label>
+      <label>消費税額<MoneyInput value={editor.header.taxAmount} onChange={(value) => updateHeader('taxAmount', value)} /></label>
+      <label className={importedTotalMismatch(editor) ? 'calculation-mismatch' : ''}>税込合計金額<MoneyInput value={editor.sourceType === 'manual' ? calculatedTotal(editor.items, editor.header.taxAmount, editor.header.taxTreatment) : editor.header.totalAmount} onChange={(value) => updateHeader('totalAmount', value)} readOnly={editor.sourceType === 'manual'} />{editor.sourceType === 'manual' && <small>{editor.header.taxTreatment === 'inclusive' ? '税込明細金額を合計' : '税抜明細金額＋消費税額を自動計算'}</small>}{importedTotalMismatch(editor) && <small>税区分に基づく明細金額の合計と一致しません</small>}</label>
       <label>登録番号（インボイス番号）<input value={editor.header.invoiceNumber} onChange={(event) => updateHeader('invoiceNumber', event.target.value)} /></label>
     </div></section>
     <section className="purchase-statement-details"><div className="purchase-statement-section-heading"><h3>明細情報</h3><button className="secondary-button" type="button" onClick={addItem} disabled={busy}><Plus size={17} />明細を追加</button></div>
@@ -491,8 +519,8 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin }
         <td data-label="荷姿"><input list="statement-package-list" value={item.packageType} onChange={(event) => updateItem(index, 'packageType', event.target.value)} /></td>
         <td data-label="数量"><input type="number" min="0.001" step="0.001" inputMode="decimal" value={item.quantity} onChange={(event) => updateItem(index, 'quantity', event.target.value)} required={item.productName.trim() !== '免税'} /></td>
         <td data-label="単位"><input value={item.unit} onChange={(event) => updateItem(index, 'unit', event.target.value)} /></td>
-        <td data-label="単価"><input type="number" min="0" step="0.01" inputMode="decimal" value={item.unitPrice} onChange={(event) => updateItem(index, 'unitPrice', event.target.value)} /></td>
-        <td data-label="金額" className={editor.sourceType === 'camera' && itemAmountMismatch(item) ? 'calculation-mismatch' : ''}><input type="number" min={item.productName.trim() === '免税' ? undefined : 0} max={item.productName.trim() === '免税' ? -0.01 : undefined} step="0.01" inputMode="decimal" value={item.amount} onChange={(event) => updateItem(index, 'amount', event.target.value)} required={item.productName.trim() === '免税'} />{item.productName.trim() === '免税' && <small>マイナス金額で入力</small>}{editor.sourceType === 'camera' && itemAmountMismatch(item) && <small>数量×単価と不一致</small>}</td>
+        <td data-label="単価"><MoneyInput value={item.unitPrice} onChange={(value) => updateItem(index, 'unitPrice', value)} /></td>
+        <td data-label="金額" className={editor.sourceType === 'camera' && itemAmountMismatch(item) ? 'calculation-mismatch' : ''}><MoneyInput value={item.amount} onChange={(value) => updateItem(index, 'amount', value)} required={item.productName.trim() === '免税'} />{item.productName.trim() === '免税' && <small>マイナス金額で入力</small>}{editor.sourceType === 'camera' && itemAmountMismatch(item) && <small>数量×単価と不一致</small>}</td>
         <td><button className="icon-button delete-icon" type="button" title="明細を削除" aria-label={`${index + 1}行目を削除`} onClick={() => removeItem(index)} disabled={busy || editor.items.length === 1}><Trash2 size={17} /></button></td>
       </tr>)}</tbody></table></div>
     </section>
