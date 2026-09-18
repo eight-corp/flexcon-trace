@@ -523,12 +523,13 @@ Deno.serve(async (request) => {
     if (paymentRegionBase64.length > 4_000_000) return jsonResponse(request, { error: '支払方法の拡大画像が大きすぎます。撮影し直してください。' }, 413)
     if (detailRegionBase64.length > 6_000_000) return jsonResponse(request, { error: '明細の拡大画像が大きすぎます。撮影し直してください。' }, 413)
 
-    const provider = openAIApiKey ? 'openai' : 'gemini'
+    let provider = openAIApiKey ? 'openai' : 'gemini'
+    let providerFallbackWarning = ''
     const primaryModel = Deno.env.get('GEMINI_MODEL') || 'gemini-3.1-flash-lite'
     const fallbackModel = Deno.env.get('GEMINI_FALLBACK_MODEL') || 'gemini-3.7-flash'
     const models = [...new Set([primaryModel, fallbackModel].filter(Boolean))]
     const openAIModel = Deno.env.get('OPENAI_OCR_MODEL') || 'gpt-4o'
-    const [statementResult, taxResult] = provider === 'openai'
+    let [statementResult, taxResult] = provider === 'openai'
       ? await Promise.allSettled([
         generateStatementWithOpenAI(openAIModel, openAIApiKey!, mimeType, imageBase64, taxRegionBase64, paymentRegionBase64, detailRegionBase64, productMasterNames, originMasterNames),
         classifyTaxTreatmentWithOpenAI(openAIModel, openAIApiKey!, mimeType, taxRegionBase64),
@@ -537,12 +538,27 @@ Deno.serve(async (request) => {
         generateStatement(models, geminiApiKey!, mimeType, imageBase64, taxRegionBase64, paymentRegionBase64, detailRegionBase64, productMasterNames, originMasterNames),
         classifyTaxTreatment(models.at(-1) ?? models[0], geminiApiKey!, mimeType, taxRegionBase64),
       ])
+    if (provider === 'openai' && statementResult.status === 'rejected' && geminiApiKey) {
+      console.warn('OpenAI OCR failed; falling back to Gemini.', {
+        message: statementResult.reason instanceof Error ? statementResult.reason.message : String(statementResult.reason),
+      })
+      provider = 'gemini'
+      providerFallbackWarning = 'ChatGPTを利用できなかったため、今回は既存のAI読取りへ切り替えました。'
+      ;[statementResult, taxResult] = await Promise.allSettled([
+        generateStatement(models, geminiApiKey, mimeType, imageBase64, taxRegionBase64, paymentRegionBase64, detailRegionBase64, productMasterNames, originMasterNames),
+        classifyTaxTreatment(models.at(-1) ?? models[0], geminiApiKey, mimeType, taxRegionBase64),
+      ])
+    }
     if (statementResult.status === 'rejected') throw statementResult.reason
     const responseText = provider === 'openai'
       ? openAIOutputText(statementResult.value as OpenAIResponse)
       : (statementResult.value as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> }).candidates?.[0]?.content?.parts?.find((part) => part.text)?.text ?? ''
     if (!responseText) throw new Error(`${provider === 'openai' ? 'ChatGPT' : 'Gemini'}から読取結果が返りませんでした。`)
     const statement = normalizeStatementLines(JSON.parse(responseText) as Record<string, unknown>, originMasterNames)
+    if (providerFallbackWarning) {
+      if (!Array.isArray(statement.warnings)) statement.warnings = []
+      statement.warnings.push(providerFallbackWarning)
+    }
     const taxTreatment = taxResult.status === 'fulfilled' ? taxResult.value : ''
     if (taxTreatment) {
       const originalTaxTreatment = statement.tax_treatment
