@@ -31,7 +31,13 @@ async function generateStatement(
   mimeType: string,
   imageBase64: string,
   taxRegionBase64: string,
+  paymentRegionBase64: string,
+  detailRegionBase64: string,
+  productMasterNames: string[],
 ) {
+  const productMasterPrompt = productMasterNames.length > 0
+    ? `\n品名マスタ候補: ${productMasterNames.map((name) => JSON.stringify(name)).join('、')}\n画像の筆跡と一致する候補がある場合だけ、その候補の正式表記をproduct_nameへ使う。似た別銘柄へ置き換えず、一致しない場合は画像どおりに読む。`
+    : ''
   for (const [modelIndex, model] of models.entries()) {
     const thinkingLevel = model === 'gemini-3.1-flash-lite' ? 'MINIMAL' : 'LOW'
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
@@ -39,12 +45,20 @@ async function generateStatement(
       headers: { 'x-goog-api-key': apiKey, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [{ role: 'user', parts: [
-          { text: prompt },
+          { text: `${prompt}${productMasterPrompt}` },
           { text: '仕切書全体の画像:' },
           { inlineData: { mimeType, data: imageBase64 } },
           ...(taxRegionBase64 ? [
             { text: '同じ画像の右上側を拡大した補助画像。金額列見出しの「税抜・税込」の囲みは、この画像を優先して判定する:' },
             { inlineData: { mimeType, data: taxRegionBase64 } },
+          ] : []),
+          ...(paymentRegionBase64 ? [
+            { text: '同じ画像の左下側を拡大した補助画像。「現金払い・振込払い」の手書きの囲みは、この画像だけを優先して支払方法として判定する:' },
+            { inlineData: { mimeType, data: paymentRegionBase64 } },
+          ] : []),
+          ...(detailRegionBase64 ? [
+            { text: '同じ画像の明細表を拡大した補助画像。品名、数量、単価、金額はこの画像を優先し、筆跡を一文字ずつ確認する:' },
+            { inlineData: { mimeType, data: detailRegionBase64 } },
           ] : []),
         ] }],
         generationConfig: {
@@ -157,7 +171,7 @@ const prompt = `
 - document_number: 伝票番号。見えなければ空文字。
 - recipient: 宛先欄の「担当者」と「様」の間に記載された名称だけを返す。敬称は含めない。見えなければ空文字。
 - issuer: 発行元の会社名または氏名。見えなければ空文字。
-- payment_method: 仕切書の左下に印刷された「（現金払い・振込払い）」だけを確認する。手書きの丸で囲まれている方が現金払いならcash、振込払いならtransferを返す。括弧や印刷文字を丸印と誤認しない。両方・丸なし・判別不能なら空文字にしてwarningsへ確認事項を追加する。
+- payment_method: 仕切書の左下に印刷された「（現金払い・振込払い）」だけを確認する。税抜・税込の丸は支払方法と無関係である。左下の拡大画像で、手書きの丸または下線を伴う囲みが現金払いに付いていればcash、振込払いに付いていればtransferを返す。丸が文字全体を閉じていなくても、片方だけを明確に囲む筆跡なら選択済みとする。両方・印なし・判別不能なら空文字にしてwarningsへ確認事項を追加する。
 - tax_treatment: 明細表の最上段右端にある金額列の見出し「金額（税抜・税込）」だけを拡大して確認する。「税抜」「税込」の文字そのものを囲む手書きの楕円を探す。税込を囲んでいればinclusive（内税）、税抜を囲んでいればexclusive（外税）を返す。下部の「税込合計金額」という印刷文字は判定に使わない。括弧や印刷文字を丸印と誤認せず、金額計算から推測しない。両方・丸なし・判別不能なら空文字にしてwarningsへ確認事項を追加する。
 - tax_rate: 税率をパーセントの数値で返す（10%なら10）。見えなければ0。
 - tax_amount: 消費税額を数値だけで返す。見えなければ0。
@@ -167,7 +181,7 @@ const prompt = `
 明細項目:
 - linesは明細を上から順番に返す。同じ明細の情報が複数行にまたがり、続きの行の数量・単価・金額の各列がすべて空欄なら1件に結合する。続きに見える行でも数量、単価、金額のいずれかの列に値があれば独立した明細として扱う。
 - crop_year: その明細に明記された産年を西暦4桁で返す。和暦は西暦へ変換する。省略されている行は推測せず空文字。
-- product_name: 品名。産年と荷姿は除く。
+- product_name: 品名。産年と荷姿は除く。手書きの一文字ずつを確認し、特に米の銘柄を字形が似た別銘柄へ勝手に置き換えない。「青天のへきれき」は一つの正式な銘柄名であり、「萩のきらめき」と読み替えない。品名マスタ候補が提示され、画像の筆跡と一致する候補がある場合はその正式表記を使う。
 - 品名が「免税」の行は商品名ではなく、インボイス登録番号のない仕入元に対する金額を表す明細である。「免税」をproduct_nameへそのまま入れ、対応する金額の絶対値に必ずマイナス符号を付けてamountへ返し、他の商品明細へ合算しない。画像上ですでにマイナスならそのまま負数にする。数量が記載されていなければquantityは0とし、架空の数量を補わない。
 - package_type: 荷姿の記載を返す（例: フレコン、紙袋、30kg袋）。見えなければ空文字。
 - quantity: 印刷されたタイトル行「数量」の真下にある数量列の同じ行のセルだけから数値を返す。品名列や荷姿の括弧内にある「18俵×4フレコン」「50kg×6本」などの数値は、絶対にquantityへ使わない。数量列が空欄なら0。
@@ -187,18 +201,25 @@ Deno.serve(async (request) => {
     const geminiApiKey = Deno.env.get('GEMINI_API_KEY')
     if (!geminiApiKey) return jsonResponse(request, { error: 'Gemini APIキーが設定されていません。' }, 503)
 
-    const body = await request.json() as { imageBase64?: string; taxRegionBase64?: string; mimeType?: string }
+    const body = await request.json() as { imageBase64?: string; taxRegionBase64?: string; paymentRegionBase64?: string; detailRegionBase64?: string; productMasterNames?: unknown; mimeType?: string }
     const imageBase64 = body.imageBase64 ?? ''
     const taxRegionBase64 = body.taxRegionBase64 ?? ''
+    const paymentRegionBase64 = body.paymentRegionBase64 ?? ''
+    const detailRegionBase64 = body.detailRegionBase64 ?? ''
+    const productMasterNames = Array.isArray(body.productMasterNames)
+      ? body.productMasterNames.filter((name): name is string => typeof name === 'string').map((name) => name.trim()).filter(Boolean).slice(0, 100)
+      : []
     const mimeType = body.mimeType ?? ''
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(mimeType)) return jsonResponse(request, { error: '対応していない画像形式です。' }, 400)
     if (!imageBase64 || imageBase64.length > 12_000_000) return jsonResponse(request, { error: '画像が大きすぎます。撮影し直してください。' }, 413)
     if (taxRegionBase64.length > 4_000_000) return jsonResponse(request, { error: '税区分の拡大画像が大きすぎます。撮影し直してください。' }, 413)
+    if (paymentRegionBase64.length > 4_000_000) return jsonResponse(request, { error: '支払方法の拡大画像が大きすぎます。撮影し直してください。' }, 413)
+    if (detailRegionBase64.length > 6_000_000) return jsonResponse(request, { error: '明細の拡大画像が大きすぎます。撮影し直してください。' }, 413)
 
-    const primaryModel = Deno.env.get('GEMINI_MODEL') || 'gemini-3.1-flash-lite'
-    const fallbackModel = Deno.env.get('GEMINI_FALLBACK_MODEL') || 'gemini-3.7-flash'
+    const primaryModel = Deno.env.get('GEMINI_FALLBACK_MODEL') || 'gemini-3.7-flash'
+    const fallbackModel = Deno.env.get('GEMINI_MODEL') || 'gemini-3.1-flash-lite'
     const models = [...new Set([primaryModel, fallbackModel].filter(Boolean))]
-    const geminiData = await generateStatement(models, geminiApiKey, mimeType, imageBase64, taxRegionBase64)
+    const geminiData = await generateStatement(models, geminiApiKey, mimeType, imageBase64, taxRegionBase64, paymentRegionBase64, detailRegionBase64, productMasterNames)
     const responseText = geminiData.candidates?.[0]?.content?.parts?.find((part) => part.text)?.text
     if (!responseText) throw new Error('Geminiから読取結果が返りませんでした。')
     const statement = JSON.parse(responseText)

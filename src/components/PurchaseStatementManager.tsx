@@ -161,21 +161,31 @@ async function resizePhoto(file: File) {
     const context = canvas.getContext('2d')
     if (!context) throw new Error('撮影画像を処理できませんでした。')
     context.drawImage(source, 0, 0, canvas.width, canvas.height)
-    const imageBase64 = await canvasJpegBase64(canvas, 0.86)
+    const imageBase64 = await canvasJpegBase64(canvas, 0.9)
 
-    const cropX = Math.round(canvas.width * 0.45)
-    const cropY = Math.round(canvas.height * 0.12)
-    const cropWidth = Math.max(1, Math.round(canvas.width * 0.53))
-    const cropHeight = Math.max(1, Math.round(canvas.height * 0.32))
-    const cropScale = Math.min(2, 1400 / cropWidth)
-    const taxRegionCanvas = document.createElement('canvas')
-    taxRegionCanvas.width = Math.max(1, Math.round(cropWidth * cropScale))
-    taxRegionCanvas.height = Math.max(1, Math.round(cropHeight * cropScale))
-    const taxRegionContext = taxRegionCanvas.getContext('2d')
-    if (!taxRegionContext) throw new Error('税区分の画像を処理できませんでした。')
-    taxRegionContext.drawImage(canvas, cropX, cropY, cropWidth, cropHeight, 0, 0, taxRegionCanvas.width, taxRegionCanvas.height)
-    const taxRegionBase64 = await canvasJpegBase64(taxRegionCanvas, 0.9)
-    return { imageBase64, taxRegionBase64, mimeType: 'image/jpeg', previewUrl: `data:image/jpeg;base64,${imageBase64}` }
+    const cropRegion = async (x: number, y: number, width: number, height: number, targetWidth: number) => {
+      const cropX = Math.round(canvas.width * x)
+      const cropY = Math.round(canvas.height * y)
+      const cropWidth = Math.max(1, Math.min(canvas.width - cropX, Math.round(canvas.width * width)))
+      const cropHeight = Math.max(1, Math.min(canvas.height - cropY, Math.round(canvas.height * height)))
+      const cropScale = Math.min(2.5, targetWidth / cropWidth)
+      const regionCanvas = document.createElement('canvas')
+      regionCanvas.width = Math.max(1, Math.round(cropWidth * cropScale))
+      regionCanvas.height = Math.max(1, Math.round(cropHeight * cropScale))
+      const regionContext = regionCanvas.getContext('2d')
+      if (!regionContext) throw new Error('仕切書の拡大画像を処理できませんでした。')
+      regionContext.imageSmoothingEnabled = true
+      regionContext.imageSmoothingQuality = 'high'
+      regionContext.drawImage(canvas, cropX, cropY, cropWidth, cropHeight, 0, 0, regionCanvas.width, regionCanvas.height)
+      return canvasJpegBase64(regionCanvas, 0.94)
+    }
+
+    const [taxRegionBase64, paymentRegionBase64, detailRegionBase64] = await Promise.all([
+      cropRegion(0.58, 0.24, 0.4, 0.2, 1500),
+      cropRegion(0.02, 0.7, 0.58, 0.22, 1500),
+      cropRegion(0.05, 0.3, 0.9, 0.43, 1900),
+    ])
+    return { imageBase64, taxRegionBase64, paymentRegionBase64, detailRegionBase64, mimeType: 'image/jpeg', previewUrl: `data:image/jpeg;base64,${imageBase64}` }
   } finally {
     URL.revokeObjectURL(objectUrl)
   }
@@ -230,7 +240,15 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin }
     setNotice(null)
     try {
       const image = await resizePhoto(file)
-      const { data, error } = await supabase.functions.invoke('analyze-purchase-statement', { body: { imageBase64: image.imageBase64, taxRegionBase64: image.taxRegionBase64, mimeType: image.mimeType } })
+      const productMasterNames = masters.filter((item) => item.value_type === 'product' && item.active).map((item) => item.name)
+      const { data, error } = await supabase.functions.invoke('analyze-purchase-statement', { body: {
+        imageBase64: image.imageBase64,
+        taxRegionBase64: image.taxRegionBase64,
+        paymentRegionBase64: image.paymentRegionBase64,
+        detailRegionBase64: image.detailRegionBase64,
+        productMasterNames,
+        mimeType: image.mimeType,
+      } })
       if (error) {
         let message = error.message
         const context = (error as { context?: Response }).context
