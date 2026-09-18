@@ -193,7 +193,7 @@ async function resizePhoto(file: File) {
     context.drawImage(source, 0, 0, canvas.width, canvas.height)
     const imageBase64 = await canvasJpegBase64(canvas, 0.9)
 
-    const cropRegion = async (x: number, y: number, width: number, height: number, targetWidth: number) => {
+    const cropRegion = async (x: number, y: number, width: number, height: number, targetWidth: number, filter = 'none') => {
       const cropX = Math.round(canvas.width * x)
       const cropY = Math.round(canvas.height * y)
       const cropWidth = Math.max(1, Math.min(canvas.width - cropX, Math.round(canvas.width * width)))
@@ -206,12 +206,13 @@ async function resizePhoto(file: File) {
       if (!regionContext) throw new Error('仕切書の拡大画像を処理できませんでした。')
       regionContext.imageSmoothingEnabled = true
       regionContext.imageSmoothingQuality = 'high'
+      regionContext.filter = filter
       regionContext.drawImage(canvas, cropX, cropY, cropWidth, cropHeight, 0, 0, regionCanvas.width, regionCanvas.height)
       return canvasJpegBase64(regionCanvas, 0.94)
     }
 
     const [taxRegionBase64, paymentRegionBase64, detailRegionBase64] = await Promise.all([
-      cropRegion(0.58, 0.24, 0.4, 0.2, 1000),
+      cropRegion(0.6, 0.27, 0.38, 0.16, 1200, 'grayscale(1) contrast(1.5)'),
       cropRegion(0.02, 0.7, 0.58, 0.22, 1000),
       cropRegion(0.05, 0.3, 0.9, 0.43, 1500),
     ])

@@ -25,6 +25,36 @@ const retryableGeminiStatuses = new Set([429, 500, 502, 503, 504])
 
 class GeminiUnavailableError extends Error {}
 
+async function classifyTaxTreatment(model: string, apiKey: string, mimeType: string, taxRegionBase64: string) {
+  if (!taxRegionBase64) return ''
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+    method: 'POST',
+    headers: { 'x-goog-api-key': apiKey, 'Content-Type': 'application/json' },
+    signal: AbortSignal.timeout(15_000),
+    body: JSON.stringify({
+      contents: [{ role: 'user', parts: [
+        { text: `これは仕切書右上の金額列見出しを拡大・高コントラスト化した画像です。「金額（税抜・税込）」のうち、手書きの丸で囲まれた文字だけを判定してください。税込が囲まれていればinclusive、税抜が囲まれていればexclusive、判断不能なら空文字を返してください。印刷された括弧ではなく、文字に重なる手書きの楕円、途切れた楕円、下線につながる囲みを確認してください。金額計算から推測しないでください。` },
+        { inlineData: { mimeType, data: taxRegionBase64 } },
+      ] }],
+      generationConfig: {
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: 'OBJECT',
+          properties: { tax_treatment: { type: 'STRING' } },
+          required: ['tax_treatment'],
+        },
+        thinkingConfig: { thinkingLevel: 'LOW' },
+      },
+    }),
+  })
+  if (!response.ok) return ''
+  const data = await response.json() as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> }
+  const text = data.candidates?.[0]?.content?.parts?.find((part) => part.text)?.text
+  if (!text) return ''
+  const value = (JSON.parse(text) as { tax_treatment?: unknown }).tax_treatment
+  return value === 'inclusive' || value === 'exclusive' ? value : ''
+}
+
 async function generateStatement(
   models: string[],
   apiKey: string,
@@ -200,12 +230,14 @@ function normalizeStatementLines(statement: Record<string, unknown>, originMaste
   const originCandidates = [...new Set([...originMasterNames, ...prefectureOrigins])].sort((left, right) => right.length - left.length)
   let previousProductName = ''
   let previousOrigin = ''
+  let previousCropYear = ''
 
   for (const rawLine of statement.lines) {
     if (!rawLine || typeof rawLine !== 'object') continue
     const line = { ...(rawLine as Record<string, unknown>) }
     let rawProductName = typeof line.product_name === 'string' ? line.product_name.trim() : ''
     let rawOrigin = typeof line.origin === 'string' ? line.origin.trim() : ''
+    const rawCropYear = typeof line.crop_year === 'string' ? line.crop_year.trim() : String(line.crop_year ?? '').trim()
     if (!rawOrigin && rawProductName) {
       const matchedOrigin = originCandidates.find((origin) => rawProductName.startsWith(origin) && rawProductName.slice(origin.length).replace(/^[\s　・:：-]+/, '').trim())
       if (matchedOrigin) {
@@ -234,6 +266,7 @@ function normalizeStatementLines(statement: Record<string, unknown>, originMaste
     if (hasQuantityAndUnitPrice && (productIsPackageOnly || !rawProductName) && previousProductName) {
       line.product_name = previousProductName
       line.origin = rawOrigin || previousOrigin
+      line.crop_year = rawCropYear || previousCropYear
       if (!rawPackageType && packageText) line.package_type = packageText
     } else {
       line.product_name = rawProductName
@@ -241,6 +274,7 @@ function normalizeStatementLines(statement: Record<string, unknown>, originMaste
 
     if (rawProductName && !productIsPackageOnly && rawProductName !== '免税') previousProductName = rawProductName
     if (rawOrigin) previousOrigin = rawOrigin
+    if (/^\d{4}$/.test(rawCropYear)) previousCropYear = rawCropYear
     normalized.push(line)
   }
 
@@ -268,7 +302,7 @@ const prompt = `
 明細項目:
 - 基本は、印刷された表の1行を1明細として上から順番に返す。
 - 1つの品名や荷姿が複数の印刷行にまたがることがある。続きの行の数量・単価・金額がすべて空欄なら、その行の文字を直前の明細へ結合して1明細にする。
-- 数量列と単価列の両方に値がある行は必ず独立した明細にする。その行の品名欄が「18俵×2フレコン＋203kg」のような荷姿だけの場合は、直前の上の行にある品名をproduct_nameへ引き継ぎ、荷姿の文字はpackage_typeへ入れる。荷姿を品名として扱わない。
+- 数量列と単価列の両方に値がある行は必ず独立した明細にする。その行の品名欄が「18俵×2フレコン＋203kg」のような荷姿だけの場合は、直近の上の明細にある産年、産地、品名をそれぞれcrop_year、origin、product_nameへ引き継ぎ、荷姿の文字はpackage_typeへ入れる。荷姿を品名として扱わない。
 - crop_year: その明細に明記された産年を西暦4桁で返す。和暦は西暦へ変換する。省略されている行は推測せず空文字。
 - origin: 品名欄に書かれた都道府県名や地域名などの産地だけを返す（例: 「青森 青天のへきれき」なら「青森」）。記載がなければ空文字。産地をproduct_nameへ含めない。
 - product_name: 産地を除いた品名だけを返す（例: 「青森 青天のへきれき」なら「青天のへきれき」）。産年と荷姿も除く。手書きの一文字ずつを確認し、特に米の銘柄を字形が似た別銘柄へ勝手に置き換えない。「青天のへきれき」は一つの正式な銘柄名であり、「萩のきらめき」と読み替えない。品名マスタ候補が提示され、画像の筆跡と一致する候補がある場合はその正式表記を使う。
@@ -312,10 +346,23 @@ Deno.serve(async (request) => {
     const primaryModel = Deno.env.get('GEMINI_MODEL') || 'gemini-3.1-flash-lite'
     const fallbackModel = Deno.env.get('GEMINI_FALLBACK_MODEL') || 'gemini-3.7-flash'
     const models = [...new Set([primaryModel, fallbackModel].filter(Boolean))]
-    const geminiData = await generateStatement(models, geminiApiKey, mimeType, imageBase64, taxRegionBase64, paymentRegionBase64, detailRegionBase64, productMasterNames, originMasterNames)
+    const [statementResult, taxResult] = await Promise.allSettled([
+      generateStatement(models, geminiApiKey, mimeType, imageBase64, taxRegionBase64, paymentRegionBase64, detailRegionBase64, productMasterNames, originMasterNames),
+      classifyTaxTreatment(models.at(-1) ?? models[0], geminiApiKey, mimeType, taxRegionBase64),
+    ])
+    if (statementResult.status === 'rejected') throw statementResult.reason
+    const geminiData = statementResult.value
     const responseText = geminiData.candidates?.[0]?.content?.parts?.find((part) => part.text)?.text
     if (!responseText) throw new Error('Geminiから読取結果が返りませんでした。')
     const statement = normalizeStatementLines(JSON.parse(responseText) as Record<string, unknown>, originMasterNames)
+    const taxTreatment = taxResult.status === 'fulfilled' ? taxResult.value : ''
+    if (taxTreatment) {
+      const originalTaxTreatment = statement.tax_treatment
+      statement.tax_treatment = taxTreatment
+      if (originalTaxTreatment && originalTaxTreatment !== taxTreatment && Array.isArray(statement.warnings)) {
+        statement.warnings.push('消費税区分は拡大画像の専用判定を優先しました。丸印を確認してください。')
+      }
+    }
     return jsonResponse(request, { statement })
   } catch (error) {
     const status = error instanceof GeminiUnavailableError ? 503 : 400
