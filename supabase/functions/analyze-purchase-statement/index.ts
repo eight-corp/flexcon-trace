@@ -27,7 +27,7 @@ class GeminiUnavailableError extends Error {}
 class OpenAIUnavailableError extends Error {}
 
 type OpenAIResponse = {
-  error?: { message?: string }
+  error?: { message?: string; type?: string; code?: string }
   output?: Array<{ content?: Array<{ type?: string; text?: string }> }>
 }
 
@@ -75,6 +75,19 @@ async function requestOpenAIJson(
   try { data = JSON.parse(responseText) } catch {}
   if (response.ok) return data
 
+  console.error('OpenAI request failed.', {
+    status: response.status,
+    type: data.error?.type,
+    code: data.error?.code,
+    message: data.error?.message,
+  })
+  if (response.status === 429 && (
+    data.error?.code === 'insufficient_quota'
+    || data.error?.type === 'insufficient_quota'
+    || /quota|billing|credit/i.test(data.error?.message ?? '')
+  )) {
+    throw new Error('OpenAI APIの利用残高または支払設定を確認してください。ChatGPTの契約とは別に、API側の利用設定が必要です。')
+  }
   if ([429, 500, 502, 503, 504].includes(response.status)) {
     throw new OpenAIUnavailableError('ChatGPT画像読取りサービスが混み合っています。少し時間をおいて、もう一度お試しください。仕切書の内容が原因ではありません。')
   }
