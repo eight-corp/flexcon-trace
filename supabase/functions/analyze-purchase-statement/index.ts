@@ -111,6 +111,7 @@ const responseSchema = {
     document_number: { type: 'STRING' },
     recipient: { type: 'STRING' },
     issuer: { type: 'STRING' },
+    payment_method: { type: 'STRING' },
     tax_rate: { type: 'NUMBER' },
     tax_amount: { type: 'NUMBER' },
     total_amount: { type: 'NUMBER' },
@@ -133,7 +134,7 @@ const responseSchema = {
     },
     warnings: { type: 'ARRAY', items: { type: 'STRING' } },
   },
-  required: ['statement_date', 'document_number', 'recipient', 'issuer', 'tax_rate', 'tax_amount', 'total_amount', 'invoice_number', 'lines', 'warnings'],
+  required: ['statement_date', 'document_number', 'recipient', 'issuer', 'payment_method', 'tax_rate', 'tax_amount', 'total_amount', 'invoice_number', 'lines', 'warnings'],
 }
 
 const prompt = `
@@ -144,6 +145,7 @@ const prompt = `
 - document_number: 伝票番号。見えなければ空文字。
 - recipient: 宛先欄の「担当者」と「様」の間に記載された名称だけを返す。敬称は含めない。見えなければ空文字。
 - issuer: 発行元の会社名または氏名。見えなければ空文字。
+- payment_method: 仕切書左下の「現金払い」「振込払い」を確認し、丸が付いた方を返す。現金払いならcash、振込払いならtransfer、判別できなければ空文字。
 - tax_rate: 税率をパーセントの数値で返す（10%なら10）。見えなければ0。
 - tax_amount: 消費税額を数値だけで返す。見えなければ0。
 - total_amount: 税込合計金額または最終支払額を数値だけで返す。税抜小計ではない。見えなければ0。
@@ -153,6 +155,7 @@ const prompt = `
 - linesは明細を上から順番に返す。同じ明細の情報が複数行にまたがっている場合は、罫線と上下左右の位置関係を確認して1件に結合する。改行ごとに別明細へ分割しない。
 - crop_year: その明細に明記された産年を西暦4桁で返す。和暦は西暦へ変換する。省略されている行は推測せず空文字。
 - product_name: 品名。産年と荷姿は除く。
+- 品名が「免税」の行は商品名ではなく、インボイス登録番号のない仕入元に対する金額を表す明細である。「免税」をproduct_nameへそのまま入れ、対応するamountを読み取り、他の商品明細へ合算しない。数量が記載されていなければquantityは0とし、架空の数量を補わない。
 - package_type: 荷姿の記載を返す（例: フレコン、紙袋、30kg袋）。見えなければ空文字。
 - quantity: 数量を数値だけで返す。見えなければ0。
 - unit: 数量の単位を返す（例: 本、袋、俵、kg）。見えなければ空文字。

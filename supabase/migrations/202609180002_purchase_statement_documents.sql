@@ -14,6 +14,7 @@ create table if not exists public.flexcon_purchase_statements (
   total_amount numeric(14, 2),
   invoice_number text not null default '',
   source_type text not null default 'manual' check (source_type in ('camera', 'manual')),
+  image_path text,
   created_by_worker_id text not null references public.workers(worker_id),
   created_by_worker_name text not null,
   created_at timestamptz not null default now(),
@@ -30,7 +31,7 @@ create table if not exists public.flexcon_purchase_statement_items (
   crop_year integer check (crop_year between 1900 and 2100),
   product_name text not null,
   package_type text not null default '',
-  quantity numeric(14, 3) not null check (quantity > 0),
+  quantity numeric(14, 3) check (quantity is null or quantity > 0),
   unit text not null default '',
   unit_price numeric(14, 2) check (unit_price is null or unit_price >= 0),
   amount numeric(14, 2) check (amount is null or amount >= 0),
@@ -47,6 +48,13 @@ create table if not exists public.flexcon_purchase_statement_master_values (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('purchase-statement-images', 'purchase-statement-images', false, 9000000, array['image/jpeg'])
+on conflict (id) do update
+set public = false,
+    file_size_limit = excluded.file_size_limit,
+    allowed_mime_types = excluded.allowed_mime_types;
 
 create unique index if not exists flexcon_purchase_statement_master_value_key
   on public.flexcon_purchase_statement_master_values (value_type, lower(btrim(name)));
@@ -83,6 +91,7 @@ begin
     'total_amount', statement.total_amount,
     'invoice_number', statement.invoice_number,
     'source_type', statement.source_type,
+    'image_path', statement.image_path,
     'created_by_worker_name', statement.created_by_worker_name,
     'created_at', statement.created_at,
     'updated_at', statement.updated_at,
@@ -134,7 +143,8 @@ begin
   for v_item in select value from jsonb_array_elements(p_items)
   loop
     if nullif(btrim(v_item->>'product_name'), '') is null then raise exception '品名が空欄の明細があります。'; end if;
-    if coalesce((v_item->>'quantity')::numeric, 0) <= 0 then raise exception '数量を確認してください。'; end if;
+    if btrim(v_item->>'product_name') <> '免税' and coalesce(nullif(v_item->>'quantity', '')::numeric, 0) <= 0 then raise exception '数量を確認してください。'; end if;
+    if btrim(v_item->>'product_name') = '免税' and nullif(v_item->>'quantity', '') is not null and (v_item->>'quantity')::numeric <= 0 then raise exception '数量を確認してください。'; end if;
     if nullif(v_item->>'crop_year', '') is not null and (v_item->>'crop_year')::integer not between 1900 and 2100 then raise exception '産年を確認してください。'; end if;
     if nullif(v_item->>'unit_price', '') is not null and (v_item->>'unit_price')::numeric < 0 then raise exception '単価を確認してください。'; end if;
     if nullif(v_item->>'amount', '') is not null and (v_item->>'amount')::numeric < 0 then raise exception '金額を確認してください。'; end if;
@@ -185,7 +195,7 @@ begin
     nullif(item.value->>'crop_year', '')::integer,
     btrim(item.value->>'product_name'),
     btrim(coalesce(item.value->>'package_type', '')),
-    (item.value->>'quantity')::numeric,
+    nullif(item.value->>'quantity', '')::numeric,
     btrim(coalesce(item.value->>'unit', '')),
     nullif(item.value->>'unit_price', '')::numeric,
     nullif(item.value->>'amount', '')::numeric
