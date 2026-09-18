@@ -254,12 +254,16 @@ function normalizeStatementLines(statement: Record<string, unknown>, originMaste
     const amount = Number(line.amount) || 0
     const hasNumbers = quantity !== 0 || unitPrice !== 0 || amount !== 0
     const hasQuantityAndUnitPrice = quantity !== 0 && unitPrice !== 0
-    const continuationOnly = !hasNumbers && (productIsPackageOnly || (!rawProductName && Boolean(rawPackageType)))
 
-    if (continuationOnly && normalized.length > 0) {
-      const previous = normalized[normalized.length - 1]
-      const previousPackage = typeof previous.package_type === 'string' ? previous.package_type.trim() : ''
-      previous.package_type = [previousPackage, packageText].filter(Boolean).join(' / ')
+    if (!hasNumbers) {
+      if (packageText && normalized.length > 0 && (productIsPackageOnly || !rawProductName)) {
+        const previous = normalized[normalized.length - 1]
+        const previousPackage = typeof previous.package_type === 'string' ? previous.package_type.trim() : ''
+        previous.package_type = [previousPackage, packageText].filter(Boolean).join(' / ')
+      }
+      if (rawProductName && !productIsPackageOnly && rawProductName !== '免税') previousProductName = rawProductName
+      if (rawOrigin) previousOrigin = rawOrigin
+      if (/^\d{4}$/.test(rawCropYear)) previousCropYear = rawCropYear
       continue
     }
 
@@ -301,7 +305,8 @@ const prompt = `
 
 明細項目:
 - 基本は、印刷された表の1行を1明細として上から順番に返す。
-- 1つの品名や荷姿が複数の印刷行にまたがることがある。続きの行の数量・単価・金額がすべて空欄なら、その行の文字を直前の明細へ結合して1明細にする。
+- 数量・単価・金額がすべて空欄の行は、独立した明細としてlinesへ入れない。その行の品名、産地、産年は次の数値入り行へ引き継ぐための情報として使い、荷姿は直前または次の対応する明細の補足情報としてだけ使う。
+- 1つの品名や荷姿が複数の印刷行にまたがる場合も、数量・単価・金額がすべて空欄の行を明細件数に含めない。
 - 数量列と単価列の両方に値がある行は必ず独立した明細にする。その行の品名欄が「18俵×2フレコン＋203kg」のような荷姿だけの場合は、直近の上の明細にある産年、産地、品名をそれぞれcrop_year、origin、product_nameへ引き継ぎ、荷姿の文字はpackage_typeへ入れる。荷姿を品名として扱わない。
 - crop_year: その明細に明記された産年を西暦4桁で返す。和暦は西暦へ変換する。省略されている行は推測せず空文字。
 - origin: 品名欄に書かれた都道府県名や地域名などの産地だけを返す（例: 「青森 青天のへきれき」なら「青森」）。記載がなければ空文字。産地をproduct_nameへ含めない。
