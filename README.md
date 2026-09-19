@@ -122,14 +122,12 @@ https://eight-corp.github.io/flexcon-trace/
 
 ## 仕切書のAI読込み
 
-APIキーはGitHub Pagesの変数へ登録せず、Supabase Edge FunctionのSecretへ登録します。通常はGeminiで読み取り、`OCR_PROVIDER=openai` でChatGPT、`OCR_PROVIDER=vision` でGoogle Cloud Vision OCRへ切り替えます。Vision使用時は `DOCUMENT_TEXT_DETECTION` で得た文字と座標をGeminiが仕切書項目へ整理し、税区分と支払方法の丸印だけを画像で専用判定します。画像本体を送るVision APIではOAuth認証を使うため、権限をCloud Visionだけに限定したサービスアカウントのJSONをSupabase Secret `GOOGLE_CLOUD_VISION_SERVICE_ACCOUNT_JSON` に設定します。ChatGPTのモデルを変更する場合は `OPENAI_OCR_MODEL` を設定します。Gemini側は必要に応じて `GEMINI_MODEL` と `GEMINI_FALLBACK_MODEL` を設定できます。
+APIキーはGitHub Pagesの変数へ登録せず、Supabase Edge FunctionのSecretへ登録します。仕切書の画像読取りはGemini APIに統一しています。必要に応じて `GEMINI_MODEL` と `GEMINI_FALLBACK_MODEL` を設定できます。
 
 ```powershell
 npx supabase login
 npx supabase link --project-ref gkazhcddknmgzglcdwtk
 npx supabase secrets set GEMINI_API_KEY=取得したAPIキー
-npx supabase secrets set OPENAI_API_KEY=取得したOpenAI_APIキー
-npx supabase secrets set OCR_PROVIDER=gemini
 npx supabase functions deploy analyze-purchase-statement --no-verify-jwt
 npx supabase functions deploy purchase-statement-image --no-verify-jwt
 ```

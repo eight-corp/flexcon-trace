@@ -24,374 +24,6 @@ function jsonResponse(request: Request, body: unknown, status = 200) {
 const retryableGeminiStatuses = new Set([429, 500, 502, 503, 504])
 
 class GeminiUnavailableError extends Error {}
-class OpenAIUnavailableError extends Error {}
-class VisionUnavailableError extends Error {}
-
-type OpenAIResponse = {
-  error?: { message?: string; type?: string; code?: string }
-  output?: Array<{ content?: Array<{ type?: string; text?: string }> }>
-}
-
-function openAIOutputText(data: OpenAIResponse) {
-  return data.output
-    ?.flatMap((item) => item.content ?? [])
-    .find((item) => item.type === 'output_text' && item.text)
-    ?.text ?? ''
-}
-
-async function requestOpenAIJson(
-  apiKey: string,
-  model: string,
-  name: string,
-  schema: Record<string, unknown>,
-  content: Array<Record<string, unknown>>,
-  timeoutMs: number,
-) {
-  let response: Response
-  try {
-    response = await fetch('https://api.openai.com/v1/responses', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      signal: AbortSignal.timeout(timeoutMs),
-      body: JSON.stringify({
-        model,
-        store: false,
-        input: [{ role: 'user', content }],
-        text: { format: { type: 'json_schema', name, strict: true, schema } },
-        max_output_tokens: 5000,
-      }),
-    })
-  } catch (error) {
-    if (error instanceof DOMException && error.name === 'TimeoutError') {
-      throw new OpenAIUnavailableError('ChatGPT画像読取りが時間内に完了しませんでした。もう一度お試しください。')
-    }
-    throw error
-  }
-
-  const responseText = await response.text()
-  let data: OpenAIResponse = {}
-  try { data = JSON.parse(responseText) } catch {}
-  if (response.ok) return data
-
-  console.error('OpenAI request failed.', {
-    status: response.status,
-    type: data.error?.type,
-    code: data.error?.code,
-    message: data.error?.message,
-  })
-  if (response.status === 429 && (
-    data.error?.code === 'insufficient_quota'
-    || data.error?.type === 'insufficient_quota'
-    || /quota|billing|credit/i.test(data.error?.message ?? '')
-  )) {
-    throw new Error('OpenAI APIの利用残高または支払設定を確認してください。ChatGPTの契約とは別に、API側の利用設定が必要です。')
-  }
-  if ([429, 500, 502, 503, 504].includes(response.status)) {
-    throw new OpenAIUnavailableError('ChatGPT画像読取りサービスが混み合っています。少し時間をおいて、もう一度お試しください。仕切書の内容が原因ではありません。')
-  }
-  if (response.status === 401 || response.status === 403) {
-    throw new Error('ChatGPT画像読取りの接続設定を確認してください。')
-  }
-  throw new Error(data.error?.message ?? 'ChatGPTで画像を解析できませんでした。')
-}
-
-async function classifyTaxTreatmentWithOpenAI(model: string, apiKey: string, mimeType: string, taxRegionBase64: string) {
-  if (!taxRegionBase64) return ''
-  const data = await requestOpenAIJson(
-    apiKey,
-    model,
-    'purchase_statement_tax_treatment',
-    {
-      type: 'object',
-      additionalProperties: false,
-      properties: {
-        tax_treatment: { type: 'string', enum: ['inclusive', 'exclusive', ''] },
-      },
-      required: ['tax_treatment'],
-    },
-    [
-      {
-        type: 'input_text',
-        text: 'これは仕切書右上の金額列見出しを拡大・高コントラスト化した画像です。「金額（税抜・税込）」のうち、手書きの丸で囲まれた文字だけを判定してください。税込が囲まれていればinclusive、税抜が囲まれていればexclusive、判断不能なら空文字を返してください。印刷された括弧ではなく、文字に重なる手書きの楕円、途切れた楕円、下線につながる囲みを確認してください。金額計算から推測しないでください。',
-      },
-      { type: 'input_image', image_url: `data:${mimeType};base64,${taxRegionBase64}`, detail: 'high' },
-    ],
-    30_000,
-  )
-  const text = openAIOutputText(data)
-  if (!text) return ''
-  const value = (JSON.parse(text) as { tax_treatment?: unknown }).tax_treatment
-  return value === 'inclusive' || value === 'exclusive' ? value : ''
-}
-
-async function generateStatementWithOpenAI(
-  model: string,
-  apiKey: string,
-  mimeType: string,
-  imageBase64: string,
-  taxRegionBase64: string,
-  paymentRegionBase64: string,
-  detailRegionBase64: string,
-  productMasterNames: string[],
-  originMasterNames: string[],
-) {
-  const productMasterPrompt = productMasterNames.length > 0
-    ? `\n品名マスタ候補: ${productMasterNames.map((name) => JSON.stringify(name)).join('、')}\n画像の筆跡と一致する候補がある場合だけ、その候補の正式表記をproduct_nameへ使う。似た別銘柄へ置き換えず、一致しない場合は画像どおりに読む。`
-    : ''
-  const originMasterPrompt = originMasterNames.length > 0
-    ? `\n産地マスタ候補: ${originMasterNames.map((name) => JSON.stringify(name)).join('、')}\n画像に一致する産地がある場合は正式表記をoriginへ使う。`
-    : ''
-  const content: Array<Record<string, unknown>> = [
-    { type: 'input_text', text: `${prompt}${productMasterPrompt}${originMasterPrompt}` },
-    { type: 'input_text', text: '仕切書全体の画像:' },
-    { type: 'input_image', image_url: `data:${mimeType};base64,${imageBase64}`, detail: 'high' },
-  ]
-  if (taxRegionBase64) content.push(
-    { type: 'input_text', text: '同じ画像の右上側を拡大した補助画像。金額列見出しの「税抜・税込」の囲みは、この画像を優先して判定する:' },
-    { type: 'input_image', image_url: `data:${mimeType};base64,${taxRegionBase64}`, detail: 'high' },
-  )
-  if (paymentRegionBase64) content.push(
-    { type: 'input_text', text: '同じ画像の左下側を拡大した補助画像。「現金払い・振込払い」の手書きの囲みは、この画像だけを優先して支払方法として判定する:' },
-    { type: 'input_image', image_url: `data:${mimeType};base64,${paymentRegionBase64}`, detail: 'high' },
-  )
-  if (detailRegionBase64) content.push(
-    { type: 'input_text', text: '同じ画像の明細表を拡大した補助画像。品名、数量、単価、金額はこの画像を優先し、筆跡を一文字ずつ確認する:' },
-    { type: 'input_image', image_url: `data:${mimeType};base64,${detailRegionBase64}`, detail: 'high' },
-  )
-  return requestOpenAIJson(apiKey, model, 'purchase_statement', openAIResponseSchema, content, 60_000)
-}
-
-type VisionVertex = { x?: number; y?: number }
-type VisionAnnotation = {
-  fullTextAnnotation?: { text?: string }
-  textAnnotations?: Array<{ description?: string; boundingPoly?: { vertices?: VisionVertex[] } }>
-  error?: { code?: number; message?: string; status?: string }
-}
-
-type GoogleServiceAccount = {
-  client_email?: string
-  private_key?: string
-  project_id?: string
-  token_uri?: string
-}
-
-let visionAccessTokenCache: { token: string; expiresAt: number; projectId: string } | null = null
-
-function base64Url(value: string | Uint8Array) {
-  const bytes = typeof value === 'string' ? new TextEncoder().encode(value) : value
-  let binary = ''
-  for (const byte of bytes) binary += String.fromCharCode(byte)
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
-}
-
-async function googleServiceAccountAccessToken(credentialsJson: string) {
-  let credentials: GoogleServiceAccount
-  try {
-    credentials = JSON.parse(credentialsJson) as GoogleServiceAccount
-  } catch {
-    throw new Error('Google CloudサービスアカウントのJSON設定を確認してください。')
-  }
-  if (!credentials.client_email || !credentials.private_key || !credentials.project_id) {
-    throw new Error('Google CloudサービスアカウントのJSONに必要な項目がありません。')
-  }
-  if (visionAccessTokenCache && visionAccessTokenCache.expiresAt > Date.now() + 60_000) return visionAccessTokenCache
-
-  const now = Math.floor(Date.now() / 1000)
-  const tokenUri = credentials.token_uri || 'https://oauth2.googleapis.com/token'
-  const header = base64Url(JSON.stringify({ alg: 'RS256', typ: 'JWT' }))
-  const payload = base64Url(JSON.stringify({
-    iss: credentials.client_email,
-    scope: 'https://www.googleapis.com/auth/cloud-vision',
-    aud: tokenUri,
-    iat: now,
-    exp: now + 3600,
-  }))
-  const signingInput = `${header}.${payload}`
-  const pemBody = credentials.private_key.replace(/-----BEGIN PRIVATE KEY-----|-----END PRIVATE KEY-----|\s/g, '')
-  const keyBytes = Uint8Array.from(atob(pemBody), (character) => character.charCodeAt(0))
-  const privateKey = await crypto.subtle.importKey(
-    'pkcs8',
-    keyBytes,
-    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
-    false,
-    ['sign'],
-  )
-  const signature = new Uint8Array(await crypto.subtle.sign('RSASSA-PKCS1-v1_5', privateKey, new TextEncoder().encode(signingInput)))
-  const assertion = `${signingInput}.${base64Url(signature)}`
-  const tokenResponse = await fetch(tokenUri, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
-      assertion,
-    }),
-  })
-  const tokenData = await tokenResponse.json() as { access_token?: string; expires_in?: number; error_description?: string }
-  if (!tokenResponse.ok || !tokenData.access_token) {
-    throw new Error(tokenData.error_description ?? 'Google Cloudの認証に失敗しました。')
-  }
-  visionAccessTokenCache = {
-    token: tokenData.access_token,
-    expiresAt: Date.now() + (tokenData.expires_in ?? 3600) * 1000,
-    projectId: credentials.project_id,
-  }
-  return visionAccessTokenCache
-}
-
-function visionAnnotationText(label: string, annotation: VisionAnnotation) {
-  const plainText = annotation.fullTextAnnotation?.text?.trim() ?? annotation.textAnnotations?.[0]?.description?.trim() ?? ''
-  const positionedWords = (annotation.textAnnotations ?? []).slice(1).map((item) => {
-    const vertices = item.boundingPoly?.vertices ?? []
-    const xs = vertices.map((vertex) => vertex.x ?? 0)
-    const ys = vertices.map((vertex) => vertex.y ?? 0)
-    const x = xs.length > 0 ? Math.min(...xs) : 0
-    const y = ys.length > 0 ? Math.min(...ys) : 0
-    const width = xs.length > 0 ? Math.max(...xs) - x : 0
-    const height = ys.length > 0 ? Math.max(...ys) - y : 0
-    return `${x},${y},${width},${height}: ${item.description ?? ''}`
-  }).filter((line) => !line.endsWith(': ')).join('\n')
-  return `\n[${label} OCR全文]\n${plainText}\n[${label} 座標 x,y,w,h と認識文字]\n${positionedWords}`
-}
-
-async function recognizeStatementWithVision(
-  credentialsJson: string,
-  imageBase64: string,
-  detailRegionBase64: string,
-) {
-  const images = [
-    { label: '仕切書全体', data: imageBase64 },
-    ...(detailRegionBase64 ? [{ label: '明細表拡大', data: detailRegionBase64 }] : []),
-  ]
-  const authorization = await googleServiceAccountAccessToken(credentialsJson)
-  let response: Response
-  try {
-    response = await fetch('https://vision.googleapis.com/v1/images:annotate', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${authorization.token}`,
-        'x-goog-user-project': authorization.projectId,
-        'Content-Type': 'application/json',
-      },
-      signal: AbortSignal.timeout(30_000),
-      body: JSON.stringify({
-        requests: images.map((image) => ({
-          image: { content: image.data },
-          features: [{ type: 'DOCUMENT_TEXT_DETECTION' }],
-          imageContext: { languageHints: ['ja'] },
-        })),
-      }),
-    })
-  } catch (error) {
-    if (error instanceof DOMException && error.name === 'TimeoutError') {
-      throw new VisionUnavailableError('Google Cloud Vision OCRが時間内に完了しませんでした。もう一度お試しください。')
-    }
-    throw error
-  }
-  const responseText = await response.text()
-  let data: { responses?: VisionAnnotation[]; error?: { code?: number; message?: string; status?: string } } = {}
-  try { data = JSON.parse(responseText) } catch {}
-  const responseError = data.error ?? data.responses?.find((item) => item.error)?.error
-  if (!response.ok || responseError) {
-    console.error('Google Cloud Vision request failed.', {
-      status: response.status,
-      code: responseError?.code,
-      apiStatus: responseError?.status,
-      message: responseError?.message,
-    })
-    if (/has not been used|is disabled|accessNotConfigured|API_KEY_SERVICE_BLOCKED/i.test(responseError?.message ?? '')) {
-      throw new Error('Google Cloud側でCloud Vision APIを有効にするか、Vision APIを許可したAPIキーを設定してください。')
-    }
-    if (/billing|quota/i.test(responseError?.message ?? '')) {
-      throw new Error('Google Cloud Vision APIの請求設定または利用上限を確認してください。')
-    }
-    throw new VisionUnavailableError(responseError?.message ?? 'Google Cloud Vision OCRで画像を読み取れませんでした。')
-  }
-  const annotations = data.responses ?? []
-  const context = annotations.map((annotation, index) => visionAnnotationText(images[index]?.label ?? `画像${index + 1}`, annotation)).join('\n')
-  if (!context.trim() || !annotations.some((annotation) => annotation.fullTextAnnotation?.text || annotation.textAnnotations?.length)) {
-    throw new Error('Google Cloud Vision OCRから文字が返りませんでした。')
-  }
-  return context
-}
-
-async function generateStatementFromVisionText(
-  models: string[],
-  apiKey: string,
-  visionText: string,
-  productMasterNames: string[],
-  originMasterNames: string[],
-) {
-  const productMasterPrompt = productMasterNames.length > 0
-    ? `\n品名マスタ候補: ${productMasterNames.map((name) => JSON.stringify(name)).join('、')}`
-    : ''
-  const originMasterPrompt = originMasterNames.length > 0
-    ? `\n産地マスタ候補: ${originMasterNames.map((name) => JSON.stringify(name)).join('、')}`
-    : ''
-  for (const [modelIndex, model] of models.entries()) {
-    let response: Response
-    try {
-      response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
-        method: 'POST',
-        headers: { 'x-goog-api-key': apiKey, 'Content-Type': 'application/json' },
-        signal: AbortSignal.timeout(modelIndex === 0 ? 20_000 : 30_000),
-        body: JSON.stringify({
-          contents: [{ role: 'user', parts: [{ text: `${prompt}\n\n以下はGoogle Cloud Vision OCRが画像から抽出した文字と座標です。画像にない情報を補わず、このOCR結果だけからJSONを作成してください。座標は同じ印刷行と列を対応付けるために使います。支払方法と消費税区分は別の専用画像判定で上書きするため、ここでは判定不能なら空文字にしてください。${productMasterPrompt}${originMasterPrompt}\n${visionText}` }] }],
-          generationConfig: {
-            responseMimeType: 'application/json',
-            responseSchema,
-            thinkingConfig: { thinkingLevel: model === 'gemini-3.1-flash-lite' ? 'MINIMAL' : 'LOW' },
-          },
-        }),
-      })
-    } catch (error) {
-      const fallbackModel = models[modelIndex + 1]
-      if (fallbackModel && error instanceof DOMException && error.name === 'TimeoutError') continue
-      if (error instanceof DOMException && error.name === 'TimeoutError') throw new GeminiUnavailableError('OCR結果の項目整理が時間内に完了しませんでした。')
-      throw error
-    }
-    const responseText = await response.text()
-    let data: { error?: { message?: string }; candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> } = {}
-    try { data = JSON.parse(responseText) } catch {}
-    if (response.ok) return data
-    if (retryableGeminiStatuses.has(response.status) && models[modelIndex + 1]) continue
-    if (retryableGeminiStatuses.has(response.status)) throw new GeminiUnavailableError('OCR結果の項目整理サービスが混み合っています。もう一度お試しください。')
-    throw new Error(data.error?.message ?? 'OCR結果を仕切書項目へ整理できませんでした。')
-  }
-  throw new GeminiUnavailableError('OCR結果を仕切書項目へ整理できませんでした。')
-}
-
-async function classifyPaymentMethod(model: string, apiKey: string, mimeType: string, paymentRegionBase64: string) {
-  if (!paymentRegionBase64) return ''
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
-    method: 'POST',
-    headers: { 'x-goog-api-key': apiKey, 'Content-Type': 'application/json' },
-    signal: AbortSignal.timeout(15_000),
-    body: JSON.stringify({
-      contents: [{ role: 'user', parts: [
-        { text: 'これは仕切書左下の「（現金払い・振込払い）」を拡大・高コントラスト化した画像です。手書きの丸または下線を伴う囲みが現金払いに付いていればcash、振込払いに付いていればtransfer、判断不能なら空文字を返してください。税抜・税込の文字は支払方法ではありません。' },
-        { inlineData: { mimeType, data: paymentRegionBase64 } },
-      ] }],
-      generationConfig: {
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: 'OBJECT',
-          properties: { payment_method: { type: 'STRING' } },
-          required: ['payment_method'],
-        },
-        thinkingConfig: { thinkingLevel: 'LOW' },
-      },
-    }),
-  })
-  if (!response.ok) return ''
-  const data = await response.json() as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> }
-  const text = data.candidates?.[0]?.content?.parts?.find((part) => part.text)?.text
-  if (!text) return ''
-  const value = (JSON.parse(text) as { payment_method?: unknown }).payment_method
-  return value === 'cash' || value === 'transfer' ? value : ''
-}
 
 async function classifyTaxTreatment(model: string, apiKey: string, mimeType: string, taxRegionBase64: string) {
   if (!taxRegionBase64) return ''
@@ -578,42 +210,6 @@ const responseSchema = {
   required: ['statement_date', 'document_number', 'recipient', 'issuer', 'payment_method', 'tax_treatment', 'tax_rate', 'tax_amount', 'total_amount', 'invoice_number', 'lines', 'warnings'],
 }
 
-const openAILineSchema = {
-  type: 'object',
-  additionalProperties: false,
-  properties: {
-    crop_year: { type: 'string' },
-    origin: { type: 'string' },
-    product_name: { type: 'string' },
-    package_type: { type: 'string' },
-    quantity: { type: 'number' },
-    unit: { type: 'string' },
-    unit_price: { type: 'number' },
-    amount: { type: 'number' },
-  },
-  required: ['crop_year', 'origin', 'product_name', 'package_type', 'quantity', 'unit', 'unit_price', 'amount'],
-}
-
-const openAIResponseSchema = {
-  type: 'object',
-  additionalProperties: false,
-  properties: {
-    statement_date: { type: 'string' },
-    document_number: { type: 'string' },
-    recipient: { type: 'string' },
-    issuer: { type: 'string' },
-    payment_method: { type: 'string', enum: ['cash', 'transfer', ''] },
-    tax_treatment: { type: 'string', enum: ['inclusive', 'exclusive', ''] },
-    tax_rate: { type: 'number' },
-    tax_amount: { type: 'number' },
-    total_amount: { type: 'number' },
-    invoice_number: { type: 'string' },
-    lines: { type: 'array', items: openAILineSchema },
-    warnings: { type: 'array', items: { type: 'string' } },
-  },
-  required: ['statement_date', 'document_number', 'recipient', 'issuer', 'payment_method', 'tax_treatment', 'tax_rate', 'tax_amount', 'total_amount', 'invoice_number', 'lines', 'warnings'],
-}
-
 function looksLikePackageDescription(value: string) {
   const compact = value.replace(/\s/g, '')
   return /[（(].*[)）]/.test(compact)
@@ -731,10 +327,8 @@ Deno.serve(async (request) => {
 
   try {
     await requireRiceShippingOperator(request)
-    const openAIApiKey = Deno.env.get('OPENAI_API_KEY')
     const geminiApiKey = Deno.env.get('GEMINI_API_KEY')
-    const visionCredentialsJson = Deno.env.get('GOOGLE_CLOUD_VISION_SERVICE_ACCOUNT_JSON')
-    if (!openAIApiKey && !geminiApiKey) return jsonResponse(request, { error: 'AI画像読取りのAPIキーが設定されていません。' }, 503)
+    if (!geminiApiKey) return jsonResponse(request, { error: 'Gemini画像読取りのAPIキーが設定されていません。' }, 503)
 
     const body = await request.json() as { imageBase64?: string; taxRegionBase64?: string; paymentRegionBase64?: string; detailRegionBase64?: string; productMasterNames?: unknown; originMasterNames?: unknown; mimeType?: string }
     const imageBase64 = body.imageBase64 ?? ''
@@ -754,72 +348,19 @@ Deno.serve(async (request) => {
     if (paymentRegionBase64.length > 4_000_000) return jsonResponse(request, { error: '支払方法の拡大画像が大きすぎます。撮影し直してください。' }, 413)
     if (detailRegionBase64.length > 6_000_000) return jsonResponse(request, { error: '明細の拡大画像が大きすぎます。撮影し直してください。' }, 413)
 
-    const preferredProvider = (Deno.env.get('OCR_PROVIDER') || 'gemini').toLowerCase()
-    let provider = preferredProvider === 'openai' && openAIApiKey
-      ? 'openai'
-      : preferredProvider === 'vision' && geminiApiKey
-      ? 'vision'
-      : 'gemini'
-    let providerFallbackWarning = ''
     const primaryModel = Deno.env.get('GEMINI_MODEL') || 'gemini-3.1-flash-lite'
     const fallbackModel = Deno.env.get('GEMINI_FALLBACK_MODEL') || 'gemini-3.7-flash'
     const models = [...new Set([primaryModel, fallbackModel].filter(Boolean))]
-    const openAIModel = Deno.env.get('OPENAI_OCR_MODEL') || 'gpt-4o'
     let statementResult: PromiseSettledResult<unknown>
     let taxResult: PromiseSettledResult<string> = { status: 'fulfilled', value: '' }
-    let paymentResult: PromiseSettledResult<string> = { status: 'fulfilled', value: '' }
-    if (provider === 'openai') {
-      ;[statementResult, taxResult] = await Promise.allSettled([
-        generateStatementWithOpenAI(openAIModel, openAIApiKey!, mimeType, imageBase64, taxRegionBase64, paymentRegionBase64, detailRegionBase64, productMasterNames, originMasterNames),
-        classifyTaxTreatmentWithOpenAI(openAIModel, openAIApiKey!, mimeType, taxRegionBase64),
-      ])
-    } else if (provider === 'vision') {
-      const [visionResult, visionTaxResult, visionPaymentResult] = await Promise.allSettled([
-        visionCredentialsJson
-          ? recognizeStatementWithVision(visionCredentialsJson, imageBase64, detailRegionBase64)
-          : Promise.reject(new Error('Google Cloud Vision OCR用サービスアカウントJSONが設定されていません。')),
-        classifyTaxTreatment(models.at(-1) ?? models[0], geminiApiKey!, mimeType, taxRegionBase64),
-        classifyPaymentMethod(models.at(-1) ?? models[0], geminiApiKey!, mimeType, paymentRegionBase64),
-      ])
-      taxResult = visionTaxResult
-      paymentResult = visionPaymentResult
-      if (visionResult.status === 'rejected') {
-        statementResult = visionResult
-      } else {
-        ;[statementResult] = await Promise.allSettled([
-          generateStatementFromVisionText(models, geminiApiKey!, visionResult.value, productMasterNames, originMasterNames),
-        ])
-      }
-    } else {
-      ;[statementResult, taxResult] = await Promise.allSettled([
-        generateStatement(models, geminiApiKey!, mimeType, imageBase64, taxRegionBase64, paymentRegionBase64, detailRegionBase64, productMasterNames, originMasterNames),
-        classifyTaxTreatment(models.at(-1) ?? models[0], geminiApiKey!, mimeType, taxRegionBase64),
-      ])
-    }
-    if (provider !== 'gemini' && statementResult.status === 'rejected' && geminiApiKey) {
-      const failedProvider = provider
-      console.warn(`${failedProvider} OCR failed; falling back to Gemini.`, {
-        message: statementResult.reason instanceof Error ? statementResult.reason.message : String(statementResult.reason),
-      })
-      provider = 'gemini'
-      providerFallbackWarning = failedProvider === 'openai'
-        ? 'ChatGPTを利用できなかったため、今回は既存のAI読取りへ切り替えました。'
-        : `Google Cloud Vision OCRを利用できなかったため、今回は既存のAI読取りへ切り替えました。${statementResult.reason instanceof Error ? ` ${statementResult.reason.message}` : ''}`
-      ;[statementResult, taxResult] = await Promise.allSettled([
-        generateStatement(models, geminiApiKey, mimeType, imageBase64, taxRegionBase64, paymentRegionBase64, detailRegionBase64, productMasterNames, originMasterNames),
-        classifyTaxTreatment(models.at(-1) ?? models[0], geminiApiKey, mimeType, taxRegionBase64),
-      ])
-    }
+    ;[statementResult, taxResult] = await Promise.allSettled([
+      generateStatement(models, geminiApiKey, mimeType, imageBase64, taxRegionBase64, paymentRegionBase64, detailRegionBase64, productMasterNames, originMasterNames),
+      classifyTaxTreatment(models.at(-1) ?? models[0], geminiApiKey, mimeType, taxRegionBase64),
+    ])
     if (statementResult.status === 'rejected') throw statementResult.reason
-    const responseText = provider === 'openai'
-      ? openAIOutputText(statementResult.value as OpenAIResponse)
-      : (statementResult.value as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> }).candidates?.[0]?.content?.parts?.find((part) => part.text)?.text ?? ''
-    if (!responseText) throw new Error(`${provider === 'openai' ? 'ChatGPT' : provider === 'vision' ? 'Google Cloud Vision OCRの項目整理' : 'Gemini'}から読取結果が返りませんでした。`)
+    const responseText = (statementResult.value as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> }).candidates?.[0]?.content?.parts?.find((part) => part.text)?.text ?? ''
+    if (!responseText) throw new Error('Geminiから読取結果が返りませんでした。')
     const statement = normalizeStatementLines(JSON.parse(responseText) as Record<string, unknown>, originMasterNames)
-    if (providerFallbackWarning) {
-      if (!Array.isArray(statement.warnings)) statement.warnings = []
-      statement.warnings.push(providerFallbackWarning)
-    }
     const taxTreatment = taxResult.status === 'fulfilled' ? taxResult.value : ''
     if (taxTreatment) {
       const originalTaxTreatment = statement.tax_treatment
@@ -828,11 +369,9 @@ Deno.serve(async (request) => {
         statement.warnings.push('消費税区分は拡大画像の専用判定を優先しました。丸印を確認してください。')
       }
     }
-    const paymentMethod = paymentResult.status === 'fulfilled' ? paymentResult.value : ''
-    if (paymentMethod) statement.payment_method = paymentMethod
-    return jsonResponse(request, { statement, provider, model: provider === 'openai' ? openAIModel : models[0] })
+    return jsonResponse(request, { statement, provider: 'gemini', model: models[0] })
   } catch (error) {
-    const status = error instanceof GeminiUnavailableError || error instanceof OpenAIUnavailableError || error instanceof VisionUnavailableError ? 503 : 400
+    const status = error instanceof GeminiUnavailableError ? 503 : 400
     return jsonResponse(request, { error: error instanceof Error ? error.message : '仕切書を解析できませんでした。' }, status)
   }
 })
