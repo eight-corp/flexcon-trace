@@ -58,7 +58,7 @@ type StoredStatement = {
   created_by_worker_name: string
   items: StoredItem[]
 }
-type MasterType = 'recipient' | 'origin' | 'product' | 'category'
+type MasterType = 'recipient' | 'origin' | 'product' | 'category' | 'storage_location' | 'customer'
 type MasterValue = {
   id: string
   value_type: MasterType
@@ -68,6 +68,22 @@ type MasterValue = {
   product_category_id: string | null
   product_category_name: string
   is_variety_rice: boolean
+}
+type PurchaseInventoryMaster = {
+  id: string
+  name: string
+  inventory_product_id: string
+  inventory_product_name: string
+  scrap_type_product_id: string | null
+  scrap_type_product_name: string
+  statement_keywords: string[]
+  sort_order: number
+}
+type PurchaseInventoryEdit = {
+  name: string
+  inventoryProductId: string
+  scrapTypeProductId: string
+  keywords: string
 }
 type DuplicateStatement = { id: string; document_number: string; statement_date: string; issuer: string }
 type GeminiStatement = {
@@ -84,7 +100,12 @@ type GeminiStatement = {
   lines: Array<{ crop_year: string; origin: string; product_name: string; package_type: string; quantity: number; unit: string; unit_price: number; amount: number }>
   warnings: string[]
 }
-const masterLabels: Record<MasterType, string> = { recipient: '担当者', origin: '産地', product: '品名', category: '種別' }
+const masterLabels: Record<MasterType, string> = { recipient: '担当者', origin: '産地', product: '在庫商品管理', category: '種別', storage_location: '保管場所', customer: '販売先管理' }
+const masterFieldLabels: Record<MasterType, string> = { recipient: '担当者', origin: '産地', product: '品名', category: '種別', storage_location: '保管場所名', customer: '販売先名' }
+
+function parseStatementKeywords(value: string) {
+  return [...new Set(value.split(/[\n,、]+/).map((keyword) => keyword.trim()).filter(Boolean))]
+}
 
 function today() {
   const date = new Date()
@@ -235,11 +256,14 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin }
   const cameraRef = useRef<HTMLInputElement>(null)
   const [statements, setStatements] = useState<StoredStatement[]>([])
   const [masters, setMasters] = useState<MasterValue[]>([])
-  const [masterDrafts, setMasterDrafts] = useState<Record<MasterType, string>>({ recipient: '', origin: '', product: '', category: '' })
+  const [masterDrafts, setMasterDrafts] = useState<Record<MasterType, string>>({ recipient: '', origin: '', product: '', category: '', storage_location: '', customer: '' })
   const [productCategoryId, setProductCategoryId] = useState('')
   const [productIsVarietyRice, setProductIsVarietyRice] = useState(false)
   const [productEdits, setProductEdits] = useState<Record<string, { categoryId: string; isVarietyRice: boolean }>>({})
   const [masterNameEdits, setMasterNameEdits] = useState<Record<string, string>>({})
+  const [purchaseInventoryMasters, setPurchaseInventoryMasters] = useState<PurchaseInventoryMaster[]>([])
+  const [purchaseInventoryDraft, setPurchaseInventoryDraft] = useState<PurchaseInventoryEdit>({ name: '', inventoryProductId: '', scrapTypeProductId: '', keywords: '' })
+  const [purchaseInventoryEdits, setPurchaseInventoryEdits] = useState<Record<string, PurchaseInventoryEdit>>({})
   const [editor, setEditor] = useState<Editor | null>(null)
   const [selectedStatement, setSelectedStatement] = useState<StoredStatement | null>(null)
   const [duplicateStatement, setDuplicateStatement] = useState<DuplicateStatement | null>(null)
@@ -258,14 +282,26 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin }
   }, [workerId])
 
   const loadMasters = useCallback(async () => {
-    const { data, error } = await supabase.rpc('flexcon_list_purchase_statement_master', { p_worker_id: workerId })
-    if (error) return setNotice({ type: 'error', text: error.message })
-    const loaded = (data ?? []) as MasterValue[]
+    const [masterResult, purchaseInventoryResult] = await Promise.all([
+      supabase.rpc('flexcon_list_purchase_statement_master', { p_worker_id: workerId }),
+      supabase.rpc('flexcon_list_purchase_inventory_master', { p_worker_id: workerId }),
+    ])
+    if (masterResult.error) return setNotice({ type: 'error', text: masterResult.error.message })
+    if (purchaseInventoryResult.error) return setNotice({ type: 'error', text: purchaseInventoryResult.error.message })
+    const loaded = (masterResult.data ?? []) as MasterValue[]
+    const loadedPurchaseInventory = (purchaseInventoryResult.data ?? []) as PurchaseInventoryMaster[]
     setMasters(loaded)
     setMasterNameEdits(Object.fromEntries(loaded.map((item) => [item.id, item.name])))
     setProductEdits(Object.fromEntries(loaded.filter((item) => item.value_type === 'product').map((item) => [item.id, {
       categoryId: item.product_category_id ?? '',
       isVarietyRice: Boolean(item.is_variety_rice),
+    }])))
+    setPurchaseInventoryMasters(loadedPurchaseInventory)
+    setPurchaseInventoryEdits(Object.fromEntries(loadedPurchaseInventory.map((item) => [item.id, {
+      name: item.name,
+      inventoryProductId: item.inventory_product_id,
+      scrapTypeProductId: item.scrap_type_product_id ?? '',
+      keywords: item.statement_keywords.join('、'),
     }])))
   }, [workerId])
 
@@ -590,8 +626,80 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin }
     await loadMasters()
   }
 
+  const addPurchaseInventoryMaster = async () => {
+    const keywords = parseStatementKeywords(purchaseInventoryDraft.keywords)
+    if (busy || !purchaseInventoryDraft.name.trim() || !purchaseInventoryDraft.inventoryProductId || keywords.length === 0) return
+    setBusy(true)
+    const { error } = await supabase.rpc('flexcon_save_purchase_inventory_master', {
+      p_worker_id: workerId,
+      p_item_id: null,
+      p_name: purchaseInventoryDraft.name.trim(),
+      p_inventory_product_id: purchaseInventoryDraft.inventoryProductId,
+      p_scrap_type_product_id: purchaseInventoryDraft.scrapTypeProductId || null,
+      p_statement_keywords: keywords,
+    })
+    setBusy(false)
+    if (error) return setNotice({ type: 'error', text: error.message })
+    setPurchaseInventoryDraft({ name: '', inventoryProductId: '', scrapTypeProductId: '', keywords: '' })
+    setNotice({ type: 'success', text: '仕入在庫項目を追加しました。' })
+    await loadMasters()
+  }
+
+  const savePurchaseInventoryMasterGroup = async () => {
+    if (busy || purchaseInventoryMasters.length === 0) return
+    const items = purchaseInventoryMasters.map((item, index) => {
+      const edit = purchaseInventoryEdits[item.id] ?? {
+        name: item.name,
+        inventoryProductId: item.inventory_product_id,
+        scrapTypeProductId: item.scrap_type_product_id ?? '',
+        keywords: item.statement_keywords.join('、'),
+      }
+      return {
+        id: item.id,
+        name: edit.name.trim(),
+        inventory_product_id: edit.inventoryProductId,
+        scrap_type_product_id: edit.scrapTypeProductId || null,
+        statement_keywords: parseStatementKeywords(edit.keywords),
+        sort_order: index + 1,
+      }
+    })
+    if (items.some((item) => !item.name || !item.inventory_product_id || item.statement_keywords.length === 0)) {
+      return setNotice({ type: 'error', text: '品名、在庫計上先、仕切書キーワードをすべて入力してください。' })
+    }
+    setBusy(true)
+    const { error } = await supabase.rpc('flexcon_save_purchase_inventory_master_group', { p_worker_id: workerId, p_items: items })
+    setBusy(false)
+    if (error) return setNotice({ type: 'error', text: error.message })
+    setNotice({ type: 'success', text: '仕入在庫管理の変更をまとめて保存しました。' })
+    await loadMasters()
+  }
+
+  const movePurchaseInventoryMaster = (item: PurchaseInventoryMaster, direction: -1 | 1) => {
+    if (busy) return
+    setPurchaseInventoryMasters((current) => {
+      const index = current.findIndex((candidate) => candidate.id === item.id)
+      const targetIndex = index + direction
+      if (index < 0 || targetIndex < 0 || targetIndex >= current.length) return current
+      const next = [...current]
+      ;[next[index], next[targetIndex]] = [next[targetIndex], next[index]]
+      return next
+    })
+  }
+
+  const deletePurchaseInventoryMaster = async (item: PurchaseInventoryMaster) => {
+    if (!isAdmin || busy || !window.confirm(`「${item.name}」を削除しますか？`)) return
+    setBusy(true)
+    const { error } = await supabase.rpc('flexcon_delete_purchase_inventory_master', { p_worker_id: workerId, p_item_id: item.id })
+    setBusy(false)
+    if (error) return setNotice({ type: 'error', text: error.message })
+    setNotice({ type: 'success', text: '仕入在庫項目を削除しました。' })
+    await loadMasters()
+  }
+
   const categoryOptions = masters.filter((item) => item.value_type === 'category' && item.active)
-  const standardMasterTypes: MasterType[] = ['recipient', 'origin', 'category']
+  const productOptions = masters.filter((item) => item.value_type === 'product' && item.active)
+  const scrapTypeOptions = productOptions.filter((item) => item.is_variety_rice)
+  const standardMasterTypes: MasterType[] = ['recipient', 'origin', 'category', 'storage_location', 'customer']
 
   const editorForm = editor && <form className="purchase-statement-editor" noValidate onSubmit={(event) => void saveStatement(event)}>
     <div className="purchase-statement-editor-heading"><div><h2>{editor.id ? '仕切書を編集' : editor.sourceType === 'camera' ? '読取結果を確認' : '仕切書を手入力'}</h2><p>画像からの読取結果も、保存前に必ず確認・修正してください。</p></div><button className="icon-button" type="button" title="入力を閉じる" aria-label="入力を閉じる" onClick={() => setEditor(null)} disabled={busy}><X size={20} /></button></div>
@@ -637,7 +745,7 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin }
   </section>
 
   return <div className="purchase-statement-page">
-    <div className="page-heading"><h1>{mode === 'reader' ? '仕切書読込' : mode === 'list' ? '仕切書一覧' : 'マスタ'}</h1><p>{mode === 'reader' ? '仕切書を撮影して読み取るか、すべての項目を手入力します。' : mode === 'list' ? '登録済みの仕切書と明細を確認します。' : '手入力時に候補として表示する項目を管理します。'}</p></div>
+    <div className="page-heading"><h1>{mode === 'reader' ? '仕切書読込' : mode === 'list' ? '仕切書一覧' : 'マスタ'}</h1><p>{mode === 'reader' ? '仕切書を撮影して読み取るか、すべての項目を手入力します。' : mode === 'list' ? '登録済みの仕切書と明細を確認します。' : '仕切書の入力候補と在庫管理に使用する項目を管理します。'}</p></div>
     {notice && <div className={`notice ${notice.type}`} role={notice.type === 'error' ? 'alert' : 'status'}>{notice.text}</div>}
     {mode === 'reader' && canOperate && <>
       <input ref={cameraRef} className="visually-hidden" type="file" accept="image/*" capture="environment" onChange={(event) => { const file = event.target.files?.[0]; if (file) void preparePhoto(file) }} />
@@ -667,19 +775,32 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin }
         const items = masters.filter((item) => item.value_type === type)
         return <section className="section-band" key={type}>
           <div className="purchase-statement-master-heading"><h2>{masterLabels[type]}</h2><button className="primary-button" type="button" onClick={() => void saveMasterGroup(type)} disabled={busy || items.length === 0}><Save size={17} />変更を保存</button></div>
-          <form onSubmit={(event) => { event.preventDefault(); void saveMaster(type) }}><input value={masterDrafts[type]} onChange={(event) => setMasterDrafts((current) => ({ ...current, [type]: event.target.value }))} placeholder={`${masterLabels[type]}を入力`} required /><button className="secondary-button" disabled={busy}><Plus size={17} />追加</button></form>
+          <form onSubmit={(event) => { event.preventDefault(); void saveMaster(type) }}><input value={masterDrafts[type]} onChange={(event) => setMasterDrafts((current) => ({ ...current, [type]: event.target.value }))} placeholder={`${masterFieldLabels[type]}を入力`} aria-label={masterFieldLabels[type]} required /><button className="secondary-button" disabled={busy}><Plus size={17} />追加</button></form>
           <div className="purchase-statement-master-table-wrap">
-            <table className="purchase-statement-master-table standard"><thead><tr><th>名称</th><th>並び順</th><th>削除</th></tr></thead><tbody>
+            <table className="purchase-statement-master-table standard"><thead><tr><th>{masterFieldLabels[type]}</th><th>並び順</th><th>削除</th></tr></thead><tbody>
               {items.map((item, index) => <tr key={item.id}><td><input value={masterNameEdits[item.id] ?? item.name} onChange={(event) => setMasterNameEdits((current) => ({ ...current, [item.id]: event.target.value }))} aria-label={`${item.name}の名称`} /></td><td><span className="master-order-buttons"><button className="icon-button" type="button" title="上へ移動" aria-label={`${item.name}を上へ移動`} onClick={() => moveMaster(item, -1)} disabled={busy || index === 0}><ChevronUp size={17} /></button><button className="icon-button" type="button" title="下へ移動" aria-label={`${item.name}を下へ移動`} onClick={() => moveMaster(item, 1)} disabled={busy || index === items.length - 1}><ChevronDown size={17} /></button></span></td><td><button className="icon-button delete-icon" type="button" title="削除" aria-label={`${item.name}を削除`} onClick={() => void deleteMaster(item)} disabled={busy}><Trash2 size={17} /></button></td></tr>)}
               {items.length === 0 && <tr><td colSpan={3} className="empty-state">登録されていません</td></tr>}
             </tbody></table>
           </div>
         </section>
       })}
-      <section className="section-band purchase-statement-product-master"><div className="purchase-statement-master-heading"><h2>品名</h2><button className="primary-button" type="button" onClick={() => void saveMasterGroup('product')} disabled={busy || masters.every((item) => item.value_type !== 'product')}><Save size={17} />変更を保存</button></div><form onSubmit={(event) => { event.preventDefault(); void saveMaster('product') }}><input value={masterDrafts.product} onChange={(event) => setMasterDrafts((current) => ({ ...current, product: event.target.value }))} placeholder="品名を入力" required /><select value={productCategoryId} onChange={(event) => setProductCategoryId(event.target.value)} aria-label="品名の種別"><option value="">種別未設定</option>{categoryOptions.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select><label className="checkbox-field"><input type="checkbox" checked={productIsVarietyRice} onChange={(event) => setProductIsVarietyRice(event.target.checked)} />くず米</label><button className="secondary-button" disabled={busy}><Plus size={17} />追加</button></form><div className="purchase-statement-master-table-wrap product"><table className="purchase-statement-master-table product"><thead><tr><th>品名</th><th>種別</th><th>くず米</th><th>並び順</th><th>削除</th></tr></thead><tbody>{masters.filter((item) => item.value_type === 'product').map((item, index, items) => {
+      <section className="section-band purchase-statement-product-master"><div className="purchase-statement-master-heading"><h2>在庫商品管理</h2><button className="primary-button" type="button" onClick={() => void saveMasterGroup('product')} disabled={busy || masters.every((item) => item.value_type !== 'product')}><Save size={17} />変更を保存</button></div><form onSubmit={(event) => { event.preventDefault(); void saveMaster('product') }}><input value={masterDrafts.product} onChange={(event) => setMasterDrafts((current) => ({ ...current, product: event.target.value }))} placeholder="品名を入力" required /><select value={productCategoryId} onChange={(event) => setProductCategoryId(event.target.value)} aria-label="品名の種別"><option value="">種別未設定</option>{categoryOptions.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select><label className="checkbox-field"><input type="checkbox" checked={productIsVarietyRice} onChange={(event) => setProductIsVarietyRice(event.target.checked)} />くず米</label><button className="secondary-button" disabled={busy}><Plus size={17} />追加</button></form><div className="purchase-statement-master-table-wrap product"><table className="purchase-statement-master-table product"><thead><tr><th>品名</th><th>種別</th><th>くず米</th><th>並び順</th><th>削除</th></tr></thead><tbody>{masters.filter((item) => item.value_type === 'product').map((item, index, items) => {
         const settings = productEdits[item.id] ?? { categoryId: item.product_category_id ?? '', isVarietyRice: item.is_variety_rice }
         return <tr key={item.id}><td><input value={masterNameEdits[item.id] ?? item.name} onChange={(event) => setMasterNameEdits((current) => ({ ...current, [item.id]: event.target.value }))} aria-label={`${item.name}の名称`} /></td><td><select value={settings.categoryId} onChange={(event) => setProductEdits((current) => ({ ...current, [item.id]: { ...settings, categoryId: event.target.value } }))} aria-label={`${item.name}の種別`}><option value="">種別未設定</option>{categoryOptions.map((category) => <option value={category.id} key={category.id}>{category.name}</option>)}</select></td><td><label className="checkbox-field compact"><input type="checkbox" checked={settings.isVarietyRice} onChange={(event) => setProductEdits((current) => ({ ...current, [item.id]: { ...settings, isVarietyRice: event.target.checked } }))} /><span className="visually-hidden">{item.name}をくず米に設定</span></label></td><td><span className="master-order-buttons"><button className="icon-button" type="button" title="上へ移動" aria-label={`${item.name}を上へ移動`} onClick={() => moveMaster(item, -1)} disabled={busy || index === 0}><ChevronUp size={17} /></button><button className="icon-button" type="button" title="下へ移動" aria-label={`${item.name}を下へ移動`} onClick={() => moveMaster(item, 1)} disabled={busy || index === items.length - 1}><ChevronDown size={17} /></button></span></td><td><button className="icon-button delete-icon" type="button" title="削除" aria-label={`${item.name}を削除`} onClick={() => void deleteMaster(item)} disabled={busy}><Trash2 size={17} /></button></td></tr>
       })}{masters.every((item) => item.value_type !== 'product') && <tr><td colSpan={5} className="empty-state">登録されていません</td></tr>}</tbody></table></div></section>
+      <section className="section-band purchase-inventory-master"><div className="purchase-statement-master-heading"><h2>仕入在庫管理</h2><button className="primary-button" type="button" onClick={() => void savePurchaseInventoryMasterGroup()} disabled={busy || purchaseInventoryMasters.length === 0}><Save size={17} />変更を保存</button></div>
+        <form onSubmit={(event) => { event.preventDefault(); void addPurchaseInventoryMaster() }}>
+          <input value={purchaseInventoryDraft.name} onChange={(event) => setPurchaseInventoryDraft((current) => ({ ...current, name: event.target.value }))} placeholder="品名を入力" aria-label="仕入在庫の品名" required />
+          <select value={purchaseInventoryDraft.inventoryProductId} onChange={(event) => setPurchaseInventoryDraft((current) => ({ ...current, inventoryProductId: event.target.value }))} aria-label="在庫計上先" required><option value="">在庫計上先を選択</option>{productOptions.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select>
+          <select value={purchaseInventoryDraft.scrapTypeProductId} onChange={(event) => setPurchaseInventoryDraft((current) => ({ ...current, scrapTypeProductId: event.target.value }))} aria-label="くず米種別"><option value="">くず米種別なし</option>{scrapTypeOptions.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select>
+          <input value={purchaseInventoryDraft.keywords} onChange={(event) => setPurchaseInventoryDraft((current) => ({ ...current, keywords: event.target.value }))} placeholder="仕切書キーワード（、区切りで複数入力）" aria-label="仕切書キーワード" required />
+          <button className="secondary-button" disabled={busy}><Plus size={17} />追加</button>
+        </form>
+        <div className="purchase-statement-master-table-wrap purchase-inventory"><table className="purchase-statement-master-table purchase-inventory"><thead><tr><th>品名</th><th>在庫計上先</th><th>くず米種別</th><th>仕切書キーワード</th><th>並び順</th><th>削除</th></tr></thead><tbody>{purchaseInventoryMasters.map((item, index, items) => {
+          const edit = purchaseInventoryEdits[item.id] ?? { name: item.name, inventoryProductId: item.inventory_product_id, scrapTypeProductId: item.scrap_type_product_id ?? '', keywords: item.statement_keywords.join('、') }
+          return <tr key={item.id}><td><input value={edit.name} onChange={(event) => setPurchaseInventoryEdits((current) => ({ ...current, [item.id]: { ...edit, name: event.target.value } }))} aria-label={`${item.name}の品名`} /></td><td><select value={edit.inventoryProductId} onChange={(event) => setPurchaseInventoryEdits((current) => ({ ...current, [item.id]: { ...edit, inventoryProductId: event.target.value } }))} aria-label={`${item.name}の在庫計上先`}><option value="">選択してください</option>{productOptions.map((product) => <option value={product.id} key={product.id}>{product.name}</option>)}</select></td><td><select value={edit.scrapTypeProductId} onChange={(event) => setPurchaseInventoryEdits((current) => ({ ...current, [item.id]: { ...edit, scrapTypeProductId: event.target.value } }))} aria-label={`${item.name}のくず米種別`}><option value="">なし</option>{scrapTypeOptions.map((product) => <option value={product.id} key={product.id}>{product.name}</option>)}</select></td><td><input value={edit.keywords} onChange={(event) => setPurchaseInventoryEdits((current) => ({ ...current, [item.id]: { ...edit, keywords: event.target.value } }))} aria-label={`${item.name}の仕切書キーワード`} placeholder="、区切りで複数入力" /></td><td><span className="master-order-buttons"><button className="icon-button" type="button" title="上へ移動" aria-label={`${item.name}を上へ移動`} onClick={() => movePurchaseInventoryMaster(item, -1)} disabled={busy || index === 0}><ChevronUp size={17} /></button><button className="icon-button" type="button" title="下へ移動" aria-label={`${item.name}を下へ移動`} onClick={() => movePurchaseInventoryMaster(item, 1)} disabled={busy || index === items.length - 1}><ChevronDown size={17} /></button></span></td><td><button className="icon-button delete-icon" type="button" title="削除" aria-label={`${item.name}を削除`} onClick={() => void deletePurchaseInventoryMaster(item)} disabled={busy}><Trash2 size={17} /></button></td></tr>
+        })}{purchaseInventoryMasters.length === 0 && <tr><td colSpan={6} className="empty-state">登録されていません</td></tr>}</tbody></table></div>
+      </section>
     </div>}
     {duplicateStatement && editor && <div className="modal-backdrop" role="presentation"><section className="registration-modal purchase-statement-duplicate-modal" role="dialog" aria-modal="true" aria-labelledby="purchase-statement-duplicate-title"><div className="modal-header"><div><h2 id="purchase-statement-duplicate-title">同じ仕切書№が登録されています</h2><p>仕切書№「{duplicateStatement.document_number}」は{duplicateStatement.statement_date.replaceAll('-', '/')}に登録済みです。</p></div></div><p>現在の内容で既存の仕切書を上書きしますか？</p><div className="modal-actions"><button className="secondary-button" type="button" onClick={() => setDuplicateStatement(null)} disabled={busy}>キャンセル</button><button className="primary-button" type="button" onClick={() => void persistStatement(duplicateStatement.id)} disabled={busy}><Save size={18} />{busy ? '上書き中...' : '上書き'}</button></div></section></div>}
     {viewingImageUrl && <div className="modal-backdrop purchase-statement-image-backdrop" role="presentation" onClick={() => setViewingImageUrl('')}><section className="registration-modal purchase-statement-image-modal" role="dialog" aria-modal="true" aria-label="保存した仕切書画像" onClick={(event) => event.stopPropagation()}><div className="modal-header"><h2>保存した仕切書画像</h2><button className="icon-button" type="button" title="閉じる" aria-label="画像を閉じる" onClick={() => setViewingImageUrl('')}><X size={20} /></button></div><img src={viewingImageUrl} alt="保存した仕切書" /></section></div>}

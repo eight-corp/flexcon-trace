@@ -200,17 +200,26 @@
 .purchase-statement-master-grid form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
 .purchase-statement-master-grid form > input { width: min(100%, 14em); }
 .master-order-buttons { display: inline-flex; align-items: center; gap: 3px; }
-.purchase-statement-product-master { min-width: 0; grid-column: 1 / -1; }
+.purchase-statement-product-master, .purchase-inventory-master { min-width: 0; grid-column: 1 / -1; }
 .purchase-statement-master-grid .purchase-statement-product-master > form { display: flex; align-items: center; flex-wrap: nowrap; gap: 8px; overflow-x: auto; overscroll-behavior-inline: contain; scrollbar-width: thin; }
 .purchase-statement-product-master > form > input { width: 14em; min-width: 12em; flex: 0 0 14em; }
 .purchase-statement-product-master > form > select { width: 12em; min-width: 10em; flex: 0 0 12em; }
 .purchase-statement-product-master > form > .checkbox-field, .purchase-statement-product-master > form > button { flex: 0 0 auto; }
+.purchase-statement-master-grid .purchase-inventory-master > form { display: flex; align-items: center; flex-wrap: nowrap; gap: 8px; overflow-x: auto; overscroll-behavior-inline: contain; scrollbar-width: thin; }
+.purchase-inventory-master > form > input { width: 16em; min-width: 12em; flex: 0 0 16em; }
+.purchase-inventory-master > form > input:nth-of-type(2) { width: 25em; min-width: 20em; flex-basis: 25em; }
+.purchase-inventory-master > form > select { width: 14em; min-width: 12em; flex: 0 0 14em; }
+.purchase-inventory-master > form > button { flex: 0 0 auto; }
 .checkbox-field { display: inline-flex; align-items: center; gap: 6px; margin: 0; white-space: nowrap; font-weight: 700; }
 .checkbox-field input[type="checkbox"] { width: 18px; height: 18px; min-height: 18px; margin: 0; }
 .purchase-statement-master-table-wrap { width: 100%; max-height: 320px; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
 .purchase-statement-master-table-wrap.product { max-height: 390px; }
 .purchase-statement-master-table { width: 100%; min-width: 390px; border-collapse: separate; border-spacing: 0; }
 .purchase-statement-master-table.product { min-width: 670px; }
+.purchase-statement-master-table.purchase-inventory { min-width: 1050px; }
+.purchase-statement-master-table.purchase-inventory td:nth-child(1) { width: 14em; min-width: 12em; }
+.purchase-statement-master-table.purchase-inventory td:nth-child(2), .purchase-statement-master-table.purchase-inventory td:nth-child(3) { width: 14em; min-width: 12em; }
+.purchase-statement-master-table.purchase-inventory td:nth-child(4) { width: 25em; min-width: 20em; }
 .purchase-statement-master-table th, .purchase-statement-master-table td { height: 46px; padding: 5px 7px; border-right: 1px solid #e4e8e5; border-bottom: 1px solid var(--line); text-align: center; vertical-align: middle; }
 .purchase-statement-master-table th { position: sticky; top: 0; z-index: 2; height: 38px; background: #eef2ee; color: #3d4840; white-space: nowrap; }
 .purchase-statement-master-table th:last-child, .purchase-statement-master-table td:last-child { border-right: 0; }
@@ -914,7 +923,7 @@ table thead th { text-align: center !important; }
   .purchase-statement-detail-heading { align-items: flex-start; flex-direction: column; }
   .purchase-statement-detail-summary { grid-template-columns: 1fr; }
   .purchase-statement-master-grid { grid-template-columns: 1fr; }
-  .purchase-statement-product-master { grid-column: auto; }
+  .purchase-statement-product-master, .purchase-inventory-master { grid-column: auto; }
   .purchase-statement-edit-modal { width: 100%; padding: 0; }
   .inventory-entry-toolbar .inventory-mode-switch { width: 100%; }
   .inventory-import-actions { width: 100%; }
