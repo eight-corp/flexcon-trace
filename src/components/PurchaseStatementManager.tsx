@@ -84,7 +84,6 @@ type GeminiStatement = {
   lines: Array<{ crop_year: string; origin: string; product_name: string; package_type: string; quantity: number; unit: string; unit_price: number; amount: number }>
   warnings: string[]
 }
-
 const masterLabels: Record<MasterType, string> = { recipient: '担当者', origin: '産地', product: '品名', category: '種別' }
 
 function today() {
