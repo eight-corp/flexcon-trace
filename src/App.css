@@ -171,7 +171,7 @@
 .purchase-statement-table-wrap td:last-child { width: 48px; text-align: center; }
 .purchase-statement-list-count { color: var(--muted); font-size: 13px; font-weight: 700; text-align: right; }
 .purchase-statement-overview-wrap { width: 100%; max-height: calc(100dvh - 230px); min-height: 260px; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; border: 1px solid #cfd5d0; border-radius: 6px; background: #fff; }
-.purchase-statement-overview { width: 100%; min-width: 1180px; border-collapse: separate; border-spacing: 0; font-size: 14px; }
+.purchase-statement-overview { width: 100%; min-width: 900px; border-collapse: separate; border-spacing: 0; font-size: 14px; }
 .purchase-statement-overview th { position: sticky; top: 0; z-index: 3; height: 42px; padding: 8px 10px; background: #23282b; color: #fff; text-align: center; white-space: nowrap; }
 .purchase-statement-overview td { padding: 7px 10px; border: 0; vertical-align: top; white-space: nowrap; }
 .purchase-statement-overview tbody.statement-even td { background: #eef0ef; }

@@ -648,13 +648,13 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin }
       {selectedStatement ? statementDetail : <>
         <div className="search-row"><div className="search-input-wrap"><Search size={18} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="日付・仕切書№・担当者・仕入先・産地・品名を検索" /></div><button className="secondary-button" type="button" onClick={() => void loadStatements()} disabled={loadingStatements}><RefreshCw size={17} />{loadingStatements ? '読込中' : '再読込'}</button></div>
         <div className="purchase-statement-list-count">{loadingStatements ? '一覧を読み込んでいます' : `${displayedStatements.length}仕切書・${displayedStatements.reduce((sum, statement) => sum + statement.items.length, 0)}明細`}</div>
-        <div className="purchase-statement-overview-wrap"><table className="purchase-statement-overview"><thead><tr><th>仕切書№</th><th>産年</th><th>産地</th><th>品名</th><th>数量</th><th>単価</th><th>日付</th><th>担当者</th><th>金額（税込）</th><th>仕入先</th></tr></thead>
+        <div className="purchase-statement-overview-wrap"><table className="purchase-statement-overview"><thead><tr><th>仕切書№</th><th>内容</th><th>数量</th><th>単価</th><th>日付</th><th>担当者</th><th>金額（税込）</th><th>仕入先</th></tr></thead>
           {displayedStatements.map((statement, statementIndex) => {
             const rows: Array<StoredItem | null> = statement.items.length > 0 ? statement.items : [null]
             return <tbody className={statementIndex % 2 === 0 ? 'statement-even' : 'statement-odd'} key={statement.id}>{rows.map((item, itemIndex) => <tr key={item?.id ?? statement.id}>
               {itemIndex === 0 && <td rowSpan={rows.length}><button className="purchase-statement-number-link" type="button" onClick={() => setSelectedStatement(statement)}>{statement.document_number}</button></td>}
-              <td>{item?.crop_year ?? ''}</td><td>{item?.origin ?? ''}</td><td>{item?.product_name ?? ''}</td><td className="number-cell">{item?.quantity == null ? '' : `${Number(item.quantity).toLocaleString('ja-JP')}${item.unit ? ` ${item.unit}` : ''}`}</td><td className="number-cell">{formatMoney(item?.unit_price ?? null)}</td>
-              {itemIndex === 0 && <><td rowSpan={rows.length}>{statement.statement_date.replaceAll('-', '/')}</td><td rowSpan={rows.length}>{statement.recipient || '―'}</td><td className="number-cell" rowSpan={rows.length}>{formatMoney(statement.total_amount) || '―'}</td><td rowSpan={rows.length}>{statement.issuer || '―'}</td></>}
+              <td>{item ? [item.crop_year, item.origin, item.product_name].filter(Boolean).join(' ') : ''}</td><td className="number-cell">{item?.quantity == null ? '' : `${Number(item.quantity).toLocaleString('ja-JP')}${item.unit ? ` ${item.unit}` : ''}`}</td><td className="number-cell">{item?.unit_price == null ? '' : Number(item.unit_price).toLocaleString('ja-JP')}</td>
+              {itemIndex === 0 && <><td rowSpan={rows.length}>{statement.statement_date.replaceAll('-', '/')}</td><td rowSpan={rows.length}>{statement.recipient || '―'}</td><td className="number-cell" rowSpan={rows.length}>{statement.total_amount == null ? '―' : Number(statement.total_amount).toLocaleString('ja-JP')}</td><td rowSpan={rows.length}>{statement.issuer || '―'}</td></>}
             </tr>)}</tbody>
           })}
         </table></div>
