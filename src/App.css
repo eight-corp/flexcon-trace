@@ -192,12 +192,16 @@
 .purchase-statement-master-grid form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
 .purchase-statement-master-list { display: grid; gap: 5px; }
 .purchase-statement-master-list > div { min-height: 40px; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 5px 8px 5px 11px; border: 1px solid var(--line); border-radius: 5px; background: #f8faf8; }
+.purchase-statement-master-list > div > input { min-width: 0; flex: 1; }
+.purchase-statement-master-actions { display: flex; align-items: center; gap: 6px; }
+.purchase-statement-master-actions .secondary-button { min-height: 34px; padding: 5px 10px; }
+.master-order-buttons { display: inline-flex; align-items: center; gap: 3px; }
 .purchase-statement-product-master { grid-column: 1 / -1; }
 .purchase-statement-master-grid .purchase-statement-product-master > form { grid-template-columns: minmax(180px, 1fr) minmax(150px, .7fr) auto auto; align-items: center; }
 .checkbox-field { display: inline-flex; align-items: center; gap: 6px; margin: 0; white-space: nowrap; font-weight: 700; }
 .checkbox-field input[type="checkbox"] { width: 18px; height: 18px; min-height: 18px; margin: 0; }
 .purchase-statement-product-list { display: grid; gap: 6px; }
-.purchase-statement-product-row { min-height: 44px; display: grid; grid-template-columns: minmax(160px, 1fr) minmax(150px, .7fr) auto auto 36px; align-items: center; gap: 8px; padding: 6px 8px 6px 11px; border: 1px solid var(--line); border-radius: 5px; background: #f8faf8; }
+.purchase-statement-product-row { min-height: 44px; display: grid; grid-template-columns: minmax(160px, 1fr) minmax(150px, .7fr) auto auto auto 36px; align-items: center; gap: 8px; padding: 6px 8px 6px 11px; border: 1px solid var(--line); border-radius: 5px; background: #f8faf8; }
 .purchase-statement-product-row .secondary-button { min-height: 34px; padding: 5px 10px; }
 .purchase-statement-duplicate-modal { width: min(100%, 520px); }
 .inventory-mode-switch, .inventory-view-tabs { display: inline-flex; align-items: center; gap: 4px; padding: 3px; border: 1px solid var(--line); border-radius: 6px; background: #eef2ee; }
@@ -894,6 +898,9 @@ table thead th { text-align: center !important; }
   .purchase-statement-master-grid { grid-template-columns: 1fr; }
   .purchase-statement-product-master { grid-column: auto; }
   .purchase-statement-master-grid .purchase-statement-product-master > form, .purchase-statement-product-row { grid-template-columns: 1fr; }
+  .purchase-statement-master-list > div { align-items: stretch; flex-direction: column; }
+  .purchase-statement-master-actions { justify-content: flex-end; }
+  .purchase-statement-product-row .master-order-buttons { justify-self: end; }
   .purchase-statement-product-row .delete-icon { justify-self: end; }
   .purchase-statement-edit-modal { width: 100%; padding: 0; }
   .inventory-entry-toolbar .inventory-mode-switch { width: 100%; }
