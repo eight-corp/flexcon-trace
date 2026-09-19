@@ -9,7 +9,8 @@
 .brand-lockup strong { font-size: 16px; color: #163c29; }
 .brand-lockup small { color: var(--muted); font-size: 11px; margin-top: 1px; }
 .brand-mark { width: 36px; height: 36px; display: grid; place-items: center; color: #fff; background: var(--green); border-radius: 6px; }
-.app-main { width: min(100%, 920px); margin: 0 auto; padding: 18px 16px 30px; }
+.app-main { width: min(100%, 920px); min-width: 0; margin: 0 auto; padding: 18px 16px 30px; }
+.app-main > *, .section-band > * { min-width: 0; max-width: 100%; }
 .loading-screen { min-height: 100vh; min-height: 100dvh; display: grid; place-content: center; justify-items: center; gap: 12px; color: var(--green); }
 .icon-button { width: 38px; height: 38px; display: grid; place-items: center; border: 0; background: transparent; color: #4d5950; border-radius: 6px; }
 .icon-button:hover { background: var(--surface-soft); }
@@ -142,7 +143,7 @@
 .statement-reader-callout p { margin: 0; color: var(--muted); }
 .statement-reader-icon { width: 68px; height: 68px; flex: 0 0 68px; display: grid; place-items: center; border-radius: 50%; color: #fff; background: var(--green); box-shadow: 0 7px 18px rgb(35 102 64 / 22%); }
 .statement-reader-button { min-width: 190px; min-height: 50px; font-size: 15px; }
-.purchase-statement-page { display: grid; gap: 14px; }
+.purchase-statement-page { width: 100%; min-width: 0; display: grid; gap: 14px; }
 .purchase-statement-actions { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: clamp(18px, 4vw, 30px); border-color: #a8c8b2; background: linear-gradient(135deg, #f7fbf8 0%, #eef7f1 100%); }
 .purchase-statement-actions h2, .purchase-statement-actions p { margin: 0; }
 .purchase-statement-actions p { margin-top: 5px; color: var(--muted); }
@@ -187,22 +188,23 @@
 .purchase-statement-edit-modal { width: min(96vw, 1220px); max-height: calc(var(--visual-viewport-height, 100dvh) - 28px); padding: 10px; }
 .purchase-statement-edit-modal .purchase-statement-editor { width: 100%; min-width: 0; border: 0; box-shadow: none; }
 .purchase-statement-master-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-.purchase-statement-master-grid section { display: grid; gap: 10px; align-content: start; }
+.purchase-statement-master-grid section { min-width: 0; display: grid; gap: 10px; align-content: start; }
 .purchase-statement-master-grid h2 { margin: 0; }
+.purchase-statement-master-heading { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.purchase-statement-master-heading .primary-button { min-height: 36px; padding-block: 6px; }
 .purchase-statement-master-grid form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
 .purchase-statement-master-list { display: grid; gap: 5px; }
 .purchase-statement-master-list > div { min-height: 40px; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 5px 8px 5px 11px; border: 1px solid var(--line); border-radius: 5px; background: #f8faf8; }
 .purchase-statement-master-list > div > input { min-width: 0; flex: 1; }
 .purchase-statement-master-actions { display: flex; align-items: center; gap: 6px; }
-.purchase-statement-master-actions .secondary-button { min-height: 34px; padding: 5px 10px; }
 .master-order-buttons { display: inline-flex; align-items: center; gap: 3px; }
-.purchase-statement-product-master { grid-column: 1 / -1; }
+.purchase-statement-product-master { min-width: 0; grid-column: 1 / -1; overflow-x: auto; overscroll-behavior-inline: contain; }
 .purchase-statement-master-grid .purchase-statement-product-master > form { grid-template-columns: minmax(180px, 1fr) minmax(150px, .7fr) auto auto; align-items: center; }
 .checkbox-field { display: inline-flex; align-items: center; gap: 6px; margin: 0; white-space: nowrap; font-weight: 700; }
 .checkbox-field input[type="checkbox"] { width: 18px; height: 18px; min-height: 18px; margin: 0; }
-.purchase-statement-product-list { display: grid; gap: 6px; }
-.purchase-statement-product-row { min-height: 44px; display: grid; grid-template-columns: minmax(160px, 1fr) minmax(150px, .7fr) auto auto auto 36px; align-items: center; gap: 8px; padding: 6px 8px 6px 11px; border: 1px solid var(--line); border-radius: 5px; background: #f8faf8; }
-.purchase-statement-product-row .secondary-button { min-height: 34px; padding: 5px 10px; }
+.purchase-statement-product-list { min-width: 0; display: grid; gap: 6px; }
+.purchase-statement-product-row { width: 100%; min-width: 0; min-height: 44px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, .75fr) max-content max-content 38px; align-items: center; gap: 8px; padding: 6px 8px 6px 11px; border: 1px solid var(--line); border-radius: 5px; background: #f8faf8; }
+.purchase-statement-product-row > * { min-width: 0; max-width: 100%; }
 .purchase-statement-duplicate-modal { width: min(100%, 520px); }
 .inventory-mode-switch, .inventory-view-tabs { display: inline-flex; align-items: center; gap: 4px; padding: 3px; border: 1px solid var(--line); border-radius: 6px; background: #eef2ee; }
 .inventory-mode-switch { margin-bottom: 0; }
@@ -897,11 +899,14 @@ table thead th { text-align: center !important; }
   .purchase-statement-card-body dl { grid-template-columns: 1fr; }
   .purchase-statement-master-grid { grid-template-columns: 1fr; }
   .purchase-statement-product-master { grid-column: auto; }
-  .purchase-statement-master-grid .purchase-statement-product-master > form, .purchase-statement-product-row { grid-template-columns: 1fr; }
+  .purchase-statement-master-grid .purchase-statement-product-master > form { grid-template-columns: minmax(0, 1fr); }
+  .purchase-statement-product-row { grid-template-columns: minmax(0, 1fr) auto auto; }
+  .purchase-statement-product-row > input, .purchase-statement-product-row > select { grid-column: 1 / -1; }
+  .purchase-statement-product-row .checkbox-field { grid-column: 1; }
   .purchase-statement-master-list > div { align-items: stretch; flex-direction: column; }
   .purchase-statement-master-actions { justify-content: flex-end; }
-  .purchase-statement-product-row .master-order-buttons { justify-self: end; }
-  .purchase-statement-product-row .delete-icon { justify-self: end; }
+  .purchase-statement-product-row .master-order-buttons { grid-column: 2; justify-self: end; }
+  .purchase-statement-product-row .delete-icon { grid-column: 3; justify-self: end; }
   .purchase-statement-edit-modal { width: 100%; padding: 0; }
   .inventory-entry-toolbar .inventory-mode-switch { width: 100%; }
   .inventory-import-actions { width: 100%; }
