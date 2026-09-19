@@ -56,6 +56,8 @@ type StoredStatement = {
   source_type: SourceType
   image_path: string
   created_by_worker_name: string
+  created_at: string
+  updated_at: string
   items: StoredItem[]
 }
 type MasterType = 'recipient' | 'origin' | 'product' | 'category' | 'storage_location' | 'customer'
@@ -314,8 +316,14 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin }
   const suggestions = (type: MasterType) => masters.filter((item) => item.value_type === type && item.active).map((item) => item.name)
   const displayedStatements = useMemo(() => {
     const term = search.trim().toLowerCase()
-    if (!term) return statements
-    return statements.filter((statement) => [statement.statement_date, statement.document_number, statement.recipient, statement.issuer, statement.invoice_number, ...statement.items.flatMap((item) => [item.origin, item.product_name, item.package_type])].some((value) => String(value ?? '').toLowerCase().includes(term)))
+    const filtered = term
+      ? statements.filter((statement) => [statement.statement_date, statement.document_number, statement.recipient, statement.issuer, statement.invoice_number, ...statement.items.flatMap((item) => [item.origin, item.product_name, item.package_type])].some((value) => String(value ?? '').toLowerCase().includes(term)))
+      : statements
+    return [...filtered].sort((left, right) =>
+      right.statement_date.localeCompare(left.statement_date)
+      || (right.created_at ?? '').localeCompare(left.created_at ?? '')
+      || right.document_number.localeCompare(left.document_number, 'ja', { numeric: true }),
+    )
   }, [search, statements])
 
   const startManual = () => {
