@@ -9,7 +9,7 @@
 .brand-lockup strong { font-size: 16px; color: #163c29; }
 .brand-lockup small { color: var(--muted); font-size: 11px; margin-top: 1px; }
 .brand-mark { width: 36px; height: 36px; display: grid; place-items: center; color: #fff; background: var(--green); border-radius: 6px; }
-.app-main { width: min(100%, 920px); min-width: 0; margin: 0 auto; padding: 18px 16px 30px; }
+.app-main { width: min(100%, 920px); min-width: 0; margin: 0 auto; padding: 18px 16px 30px; overflow-x: auto; overscroll-behavior-inline: contain; -webkit-overflow-scrolling: touch; }
 .app-main > *, .section-band > * { min-width: 0; max-width: 100%; }
 .loading-screen { min-height: 100vh; min-height: 100dvh; display: grid; place-content: center; justify-items: center; gap: 12px; color: var(--green); }
 .icon-button { width: 38px; height: 38px; display: grid; place-items: center; border: 0; background: transparent; color: #4d5950; border-radius: 6px; }
