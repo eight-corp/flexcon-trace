@@ -212,8 +212,8 @@
 .purchase-inventory-master > form > button { flex: 0 0 auto; }
 .checkbox-field { display: inline-flex; align-items: center; gap: 6px; margin: 0; white-space: nowrap; font-weight: 700; }
 .checkbox-field input[type="checkbox"] { width: 18px; height: 18px; min-height: 18px; margin: 0; }
-.purchase-statement-master-table-wrap { width: 100%; max-height: 320px; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
-.purchase-statement-master-table-wrap.product { max-height: 390px; }
+.purchase-statement-master-table-wrap { width: 100%; max-height: none; overflow-x: auto; overflow-y: visible; overscroll-behavior-inline: contain; scrollbar-gutter: stable; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
+.purchase-statement-master-table-wrap.product { max-height: none; }
 .purchase-statement-master-table { width: 100%; min-width: 390px; border-collapse: separate; border-spacing: 0; }
 .purchase-statement-master-table.product { min-width: 670px; }
 .purchase-statement-master-table.purchase-inventory { min-width: 1050px; }
