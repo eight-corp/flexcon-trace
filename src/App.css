@@ -199,17 +199,19 @@
 .purchase-statement-master-heading .primary-button { min-height: 36px; padding-block: 6px; }
 .purchase-statement-master-grid form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
 .purchase-statement-master-grid form > input { width: min(100%, 14em); }
+.purchase-statement-master-footer { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.purchase-statement-master-footer > form { min-width: 260px; flex: 1 1 auto; }
+.purchase-statement-master-footer > .primary-button { flex: 0 0 auto; }
 .master-order-buttons { display: inline-flex; align-items: center; gap: 3px; }
 .purchase-statement-product-master, .purchase-inventory-master { min-width: 0; grid-column: 1 / -1; }
-.purchase-statement-master-grid .purchase-statement-product-master > form { display: flex; align-items: center; flex-wrap: nowrap; gap: 8px; overflow-x: auto; overscroll-behavior-inline: contain; scrollbar-width: thin; }
-.purchase-statement-product-master > form > input { width: 14em; min-width: 12em; flex: 0 0 14em; }
-.purchase-statement-product-master > form > select { width: 12em; min-width: 10em; flex: 0 0 12em; }
-.purchase-statement-product-master > form > .checkbox-field, .purchase-statement-product-master > form > button { flex: 0 0 auto; }
-.purchase-statement-master-grid .purchase-inventory-master > form { display: flex; align-items: center; flex-wrap: nowrap; gap: 8px; overflow-x: auto; overscroll-behavior-inline: contain; scrollbar-width: thin; }
-.purchase-inventory-master > form > input { width: 16em; min-width: 12em; flex: 0 0 16em; }
-.purchase-inventory-master > form > input:nth-of-type(2) { width: 25em; min-width: 20em; flex-basis: 25em; }
-.purchase-inventory-master > form > select { width: 14em; min-width: 12em; flex: 0 0 14em; }
-.purchase-inventory-master > form > button { flex: 0 0 auto; }
+.purchase-statement-master-grid .purchase-statement-master-add-form { display: flex; align-items: center; flex-wrap: nowrap; gap: 8px; overflow-x: auto; overscroll-behavior-inline: contain; scrollbar-width: thin; }
+.purchase-statement-product-master .purchase-statement-master-add-form > input { width: 14em; min-width: 12em; flex: 0 0 14em; }
+.purchase-statement-product-master .purchase-statement-master-add-form > select { width: 12em; min-width: 10em; flex: 0 0 12em; }
+.purchase-statement-product-master .purchase-statement-master-add-form > .checkbox-field, .purchase-statement-product-master .purchase-statement-master-add-form > button { flex: 0 0 auto; }
+.purchase-inventory-master .purchase-statement-master-add-form > input { width: 16em; min-width: 12em; flex: 0 0 16em; }
+.purchase-inventory-master .purchase-statement-master-add-form > input:nth-of-type(2) { width: 25em; min-width: 20em; flex-basis: 25em; }
+.purchase-inventory-master .purchase-statement-master-add-form > select { width: 14em; min-width: 12em; flex: 0 0 14em; }
+.purchase-inventory-master .purchase-statement-master-add-form > button { flex: 0 0 auto; }
 .checkbox-field { display: inline-flex; align-items: center; gap: 6px; margin: 0; white-space: nowrap; font-weight: 700; }
 .checkbox-field input[type="checkbox"] { width: 18px; height: 18px; min-height: 18px; margin: 0; }
 .purchase-statement-master-table-wrap { width: 100%; max-height: none; overflow-x: auto; overflow-y: visible; overscroll-behavior-inline: contain; scrollbar-gutter: stable; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
