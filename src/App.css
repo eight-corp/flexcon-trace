@@ -840,6 +840,7 @@ table thead th { text-align: center !important; }
   .bottom-nav button { display: flex; justify-content: flex-start; align-items: center; place-content: initial; gap: 10px; padding: 0 14px; border-radius: 6px; font-size: 13px; }
   .app-main { padding: 20px 22px 34px; }
   .app-main.app-main-wide { width: 100%; max-width: none; height: calc(100dvh - 64px); padding-bottom: 20px; overflow: hidden; }
+  .app-main.app-main-wide.app-main-statements { height: auto; min-height: calc(100dvh - 64px); padding-bottom: 34px; overflow-x: auto; overflow-y: visible; }
   .app-main-wide .authorization-page { height: 100%; min-height: 0; display: flex; flex-direction: column; }
   .app-main-wide .authorization-table-wrap { flex: 1; min-height: 0; }
   .app-main-wide .inspection-page { height: 100%; min-height: 0; display: flex; flex-direction: column; }

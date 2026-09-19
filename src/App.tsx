@@ -148,7 +148,7 @@ function App() {
         </div>
       </header>
 
-      <main className={`app-main ${statementApplication || tab === 'history' || tab === 'inventory-history' || tab === 'inventory' || tab === 'authorizations' || tab === 'inspections' ? 'app-main-wide' : ''}`}>
+      <main className={`app-main ${statementApplication || tab === 'history' || tab === 'inventory-history' || tab === 'inventory' || tab === 'authorizations' || tab === 'inspections' ? 'app-main-wide' : ''} ${statementApplication ? 'app-main-statements' : ''}`}>
         {!statementApplication && tab === 'scan' && canOperate && (
           <ShipmentScanner
             key={worker.worker_id}
