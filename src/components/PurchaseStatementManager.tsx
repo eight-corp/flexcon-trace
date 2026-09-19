@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Camera, ChevronDown, ChevronUp, FileImage, Keyboard, Pencil, Plus, RefreshCw, Save, Search, Trash2, X } from 'lucide-react'
+import { ArrowLeft, Camera, ChevronDown, ChevronUp, FileImage, Keyboard, Pencil, Plus, RefreshCw, Save, Search, Trash2, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
 type Mode = 'reader' | 'list' | 'master'
@@ -241,6 +241,7 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin }
   const [productEdits, setProductEdits] = useState<Record<string, { categoryId: string; isVarietyRice: boolean }>>({})
   const [masterNameEdits, setMasterNameEdits] = useState<Record<string, string>>({})
   const [editor, setEditor] = useState<Editor | null>(null)
+  const [selectedStatement, setSelectedStatement] = useState<StoredStatement | null>(null)
   const [duplicateStatement, setDuplicateStatement] = useState<DuplicateStatement | null>(null)
   const [search, setSearch] = useState('')
   const [busy, setBusy] = useState(false)
@@ -444,6 +445,7 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin }
     }
     setBusy(false)
     setEditor(null)
+    setSelectedStatement(null)
     setNotice({ type: 'success', text: statementId && statementId !== editor.id ? '同じ仕切書№の登録を上書きしました。' : '仕切書を保存しました。' })
     if (mode === 'list') await loadStatements()
   }
@@ -510,6 +512,7 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin }
       if (imageError) imageWarning = ' 画像ファイルだけ削除できなかったため、管理者へ確認してください。'
     }
     setBusy(false)
+    setSelectedStatement(null)
     setNotice({ type: imageWarning ? 'error' : 'success', text: `仕切書を削除しました。${imageWarning}` })
     await loadStatements()
   }
@@ -626,6 +629,13 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin }
     <datalist id="statement-product-list">{suggestions('product').map((value) => <option value={value} key={value} />)}</datalist>
   </form>
 
+  const statementDetail = selectedStatement && <section className="purchase-statement-detail-screen">
+    <div className="purchase-statement-detail-heading"><button className="secondary-button" type="button" onClick={() => setSelectedStatement(null)}><ArrowLeft size={18} />一覧に戻る</button><div><h2>仕切書№ {selectedStatement.document_number}</h2><p>{selectedStatement.statement_date.replaceAll('-', '/')}　{selectedStatement.issuer || '仕入先未入力'}</p></div></div>
+    <dl className="purchase-statement-detail-summary"><div><dt>日付</dt><dd>{selectedStatement.statement_date.replaceAll('-', '/')}</dd></div><div><dt>担当者</dt><dd>{selectedStatement.recipient || '―'}</dd></div><div><dt>仕入先</dt><dd>{selectedStatement.issuer || '―'}</dd></div><div><dt>支払方法</dt><dd>{paymentMethodLabel(selectedStatement.payment_method)}</dd></div><div><dt>消費税区分</dt><dd>{taxTreatmentLabel(selectedStatement.tax_treatment)}</dd></div><div><dt>税率</dt><dd>{selectedStatement.tax_rate == null ? '―' : `${selectedStatement.tax_rate}%`}</dd></div><div><dt>消費税額</dt><dd>{formatMoney(selectedStatement.tax_amount) || '―'}</dd></div><div><dt>金額（税込）</dt><dd>{formatMoney(selectedStatement.total_amount) || '―'}</dd></div><div><dt>登録番号</dt><dd>{selectedStatement.invoice_number || '―'}</dd></div></dl>
+    <div className="purchase-statement-table-wrap"><table><thead><tr><th>産年</th><th>産地</th><th>品名</th><th>荷姿</th><th>数量</th><th>単価</th><th>金額</th></tr></thead><tbody>{selectedStatement.items.map((item) => <tr key={item.id}><td>{item.crop_year ?? ''}</td><td>{item.origin}</td><td>{item.product_name}</td><td>{item.package_type}</td><td>{item.quantity == null ? '' : Number(item.quantity).toLocaleString('ja-JP')}{item.unit}</td><td>{formatMoney(item.unit_price)}</td><td>{formatMoney(item.amount)}</td></tr>)}</tbody></table></div>
+    <div className="purchase-statement-detail-actions">{selectedStatement.image_path && <button className="secondary-button" type="button" onClick={() => void openStatementImage(selectedStatement)} disabled={busy}><FileImage size={17} />元画像を表示</button>}{canOperate && <button className="secondary-button" type="button" onClick={() => editStatement(selectedStatement)} disabled={busy}><Pencil size={17} />編集</button>}{isAdmin && <button className="danger-button" type="button" onClick={() => void deleteStatement(selectedStatement)} disabled={busy}><Trash2 size={17} />削除</button>}</div>
+  </section>
+
   return <div className="purchase-statement-page">
     <div className="page-heading"><h1>{mode === 'reader' ? '仕切書読込' : mode === 'list' ? '仕切書一覧' : 'マスタ'}</h1><p>{mode === 'reader' ? '仕切書を撮影して読み取るか、すべての項目を手入力します。' : mode === 'list' ? '登録済みの仕切書と明細を確認します。' : '手入力時に候補として表示する項目を管理します。'}</p></div>
     {notice && <div className={`notice ${notice.type}`} role={notice.type === 'error' ? 'alert' : 'status'}>{notice.text}</div>}
@@ -635,13 +645,21 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin }
       {editorForm}
     </>}
     {mode === 'list' && <>
-      <div className="search-row"><div className="search-input-wrap"><Search size={18} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="日付・仕切書№・担当者・仕入元・産地・品名を検索" /></div><button className="secondary-button" type="button" onClick={() => void loadStatements()} disabled={loadingStatements}><RefreshCw size={17} />{loadingStatements ? '読込中' : '再読込'}</button></div>
-      <div className="purchase-statement-list-count">{loadingStatements ? '一覧を読み込んでいます' : `${displayedStatements.length}仕切書・${displayedStatements.reduce((sum, statement) => sum + statement.items.length, 0)}明細`}</div>
-      <div className="purchase-statement-list">{displayedStatements.map((statement) => <details className="purchase-statement-card" key={statement.id}><summary><span><strong>{statement.statement_date.replaceAll('-', '/')}</strong><b>{statement.document_number}</b><span>{statement.issuer || '仕入元未入力'}</span></span><span>{formatMoney(statement.total_amount)}　{statement.items.length}明細</span></summary><div className="purchase-statement-card-body">
-        <dl><div><dt>担当者</dt><dd>{statement.recipient || '―'}</dd></div><div><dt>仕入元</dt><dd>{statement.issuer || '―'}</dd></div><div><dt>支払方法</dt><dd>{paymentMethodLabel(statement.payment_method)}</dd></div><div><dt>消費税区分</dt><dd>{taxTreatmentLabel(statement.tax_treatment)}</dd></div><div><dt>税率</dt><dd>{statement.tax_rate == null ? '―' : `${statement.tax_rate}%`}</dd></div><div><dt>消費税額</dt><dd>{formatMoney(statement.tax_amount) || '―'}</dd></div><div><dt>税込合計</dt><dd>{formatMoney(statement.total_amount) || '―'}</dd></div><div><dt>登録番号</dt><dd>{statement.invoice_number || '―'}</dd></div></dl>
-        <div className="purchase-statement-table-wrap"><table><thead><tr><th>産年</th><th>産地</th><th>品名</th><th>荷姿</th><th>数量</th><th>単価</th><th>金額</th></tr></thead><tbody>{statement.items.map((item) => <tr key={item.id}><td>{item.crop_year ?? ''}</td><td>{item.origin}</td><td>{item.product_name}</td><td>{item.package_type}</td><td>{item.quantity == null ? '' : Number(item.quantity).toLocaleString('ja-JP')}{item.unit}</td><td>{formatMoney(item.unit_price)}</td><td>{formatMoney(item.amount)}</td></tr>)}</tbody></table></div>
-        <div className="purchase-statement-card-actions">{statement.image_path && <button className="secondary-button" type="button" onClick={() => void openStatementImage(statement)} disabled={busy}><FileImage size={17} />画像を表示</button>}{canOperate && <button className="secondary-button" type="button" onClick={() => editStatement(statement)} disabled={busy}><Pencil size={17} />編集</button>}{isAdmin && <button className="danger-button" type="button" onClick={() => void deleteStatement(statement)} disabled={busy}><Trash2 size={17} />削除</button>}</div>
-      </div></details>)}{!loadingStatements && displayedStatements.length === 0 && <div className="empty-state">登録された仕切書はありません</div>}</div>
+      {selectedStatement ? statementDetail : <>
+        <div className="search-row"><div className="search-input-wrap"><Search size={18} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="日付・仕切書№・担当者・仕入先・産地・品名を検索" /></div><button className="secondary-button" type="button" onClick={() => void loadStatements()} disabled={loadingStatements}><RefreshCw size={17} />{loadingStatements ? '読込中' : '再読込'}</button></div>
+        <div className="purchase-statement-list-count">{loadingStatements ? '一覧を読み込んでいます' : `${displayedStatements.length}仕切書・${displayedStatements.reduce((sum, statement) => sum + statement.items.length, 0)}明細`}</div>
+        <div className="purchase-statement-overview-wrap"><table className="purchase-statement-overview"><thead><tr><th>仕切書№</th><th>産年</th><th>産地</th><th>品名</th><th>数量</th><th>単価</th><th>日付</th><th>担当者</th><th>金額（税込）</th><th>仕入先</th></tr></thead>
+          {displayedStatements.map((statement, statementIndex) => {
+            const rows: Array<StoredItem | null> = statement.items.length > 0 ? statement.items : [null]
+            return <tbody className={statementIndex % 2 === 0 ? 'statement-even' : 'statement-odd'} key={statement.id}>{rows.map((item, itemIndex) => <tr key={item?.id ?? statement.id}>
+              {itemIndex === 0 && <td rowSpan={rows.length}><button className="purchase-statement-number-link" type="button" onClick={() => setSelectedStatement(statement)}>{statement.document_number}</button></td>}
+              <td>{item?.crop_year ?? ''}</td><td>{item?.origin ?? ''}</td><td>{item?.product_name ?? ''}</td><td className="number-cell">{item?.quantity == null ? '' : `${Number(item.quantity).toLocaleString('ja-JP')}${item.unit ? ` ${item.unit}` : ''}`}</td><td className="number-cell">{formatMoney(item?.unit_price ?? null)}</td>
+              {itemIndex === 0 && <><td rowSpan={rows.length}>{statement.statement_date.replaceAll('-', '/')}</td><td rowSpan={rows.length}>{statement.recipient || '―'}</td><td className="number-cell" rowSpan={rows.length}>{formatMoney(statement.total_amount) || '―'}</td><td rowSpan={rows.length}>{statement.issuer || '―'}</td></>}
+            </tr>)}</tbody>
+          })}
+        </table></div>
+        {!loadingStatements && displayedStatements.length === 0 && <div className="empty-state">登録された仕切書はありません</div>}
+      </>}
       {editor && <div className="modal-backdrop purchase-statement-edit-backdrop" role="presentation"><section className="registration-modal purchase-statement-edit-modal" role="dialog" aria-modal="true" aria-label="仕切書を編集">{editorForm}</section></div>}
     </>}
     {mode === 'master' && isAdmin && <div className="purchase-statement-master-grid">
