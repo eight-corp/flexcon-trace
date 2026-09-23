@@ -31,7 +31,7 @@ type InventoryMovement = {
 }
 type InventoryBalance = { warehouse_id: string | null; warehouse_name: string; origin: string; product_name: string; grade: string; quantity: number; unit: string }
 type InventoryBalanceRow = { warehouseId: string | null; warehouseName: string; origin: string; productName: string; unit: string; quantities: Record<string, number> }
-type MovementForm = { movementDate: string; producerName: string; origin: string; productName: string; grade: string; quantity: string; unit: string; fromWarehouseId: string; toWarehouseId: string }
+type MovementForm = { movementDate: string; origin: string; productName: string; grade: string; quantity: string; unit: string; fromWarehouseId: string; toWarehouseId: string }
 type PurchaseImportRecord = {
   settlement_no: string
   detail_no: number
@@ -99,7 +99,7 @@ function today() {
 }
 
 function emptyForm(): MovementForm {
-  return { movementDate: today(), producerName: '', origin: '', productName: '', grade: '', quantity: '', unit: 'kg', fromWarehouseId: '', toWarehouseId: '' }
+  return { movementDate: today(), origin: '', productName: '', grade: '', quantity: '', unit: 'kg', fromWarehouseId: '', toWarehouseId: '' }
 }
 
 function formatQuantity(value: number) {
@@ -715,7 +715,6 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
 
   const validateForm = (target: MovementForm, mode: MovementMode, productNames: string[], grades: InspectionOption[]) => {
     if (!target.movementDate) return '日付を入力してください。'
-    if (mode === 'inbound' && !target.producerName.trim()) return '手動入庫では生産者名を入力してください。'
     if (!originOptions.some((item) => item.name === target.origin)) return '産地をマスタから選択してください。'
     if (!productNames.includes(target.productName)) return '名称をマスタから選択してください。'
     if (!otherProductNames.has(target.productName) && !grades.some((item) => item.name === target.grade)) return '等級をマスタから選択してください。'
@@ -741,7 +740,7 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
     if (errorText) return setNotice({ type: 'error', text: errorText })
     setBusy(true); setNotice(null)
     const { error } = await supabase.rpc('flexcon_add_inventory_movement', {
-      p_worker_id: workerId, p_movement_date: form.movementDate, p_producer_name: movementMode === 'inbound' ? form.producerName.trim() : '', p_origin: form.origin, p_product_name: form.productName,
+      p_worker_id: workerId, p_movement_date: form.movementDate, p_producer_name: '', p_origin: form.origin, p_product_name: form.productName,
       p_grade: otherProductNames.has(form.productName) ? '' : form.grade, p_quantity: Number(form.quantity), p_unit: form.unit,
       p_from_warehouse_id: movementMode === 'inbound' ? null : form.fromWarehouseId,
       p_to_warehouse_id: movementMode === 'outbound' ? null : form.toWarehouseId,
@@ -749,14 +748,14 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
     setBusy(false)
     if (error) return setNotice({ type: 'error', text: error.message })
     setNotice({ type: 'success', text: `${movementMode === 'inbound' ? '入庫' : movementMode === 'outbound' ? '出庫' : '倉庫間移動'}を記録しました。` })
-    setForm((current) => ({ ...emptyForm(), movementDate: current.movementDate, producerName: movementMode === 'inbound' ? current.producerName : '', origin: current.origin, productName: current.productName, grade: current.grade, unit: current.unit }))
+    setForm((current) => ({ ...emptyForm(), movementDate: current.movementDate, origin: current.origin, productName: current.productName, grade: current.grade, unit: current.unit }))
     setVersion((value) => value + 1)
   }
 
   const beginEdit = (movement: InventoryMovement) => {
     setEditing(movement)
     setEditMode(modeForMovement(movement))
-    setEditForm({ movementDate: movement.movement_date, producerName: movement.producer_name, origin: movement.origin, productName: movement.product_name, grade: movement.grade, quantity: String(movement.quantity), unit: movement.unit, fromWarehouseId: movement.from_warehouse_id ?? '', toWarehouseId: movement.to_warehouse_id ?? '' })
+    setEditForm({ movementDate: movement.movement_date, origin: movement.origin, productName: movement.product_name, grade: movement.grade, quantity: String(movement.quantity), unit: movement.unit, fromWarehouseId: movement.from_warehouse_id ?? '', toWarehouseId: movement.to_warehouse_id ?? '' })
     setNotice(null)
   }
 
@@ -768,7 +767,7 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
     setBusy(true); setNotice(null)
     const { error } = await supabase.rpc('flexcon_update_inventory_movement', {
       p_worker_id: workerId, p_movement_id: editing.id, p_movement_date: editForm.movementDate, p_origin: editForm.origin,
-      p_producer_name: editMode === 'inbound' ? editForm.producerName.trim() : '',
+      p_producer_name: editMode === 'inbound' ? editing.producer_name : '',
       p_product_name: editForm.productName, p_grade: otherProductNames.has(editForm.productName) ? '' : editForm.grade,
       p_quantity: Number(editForm.quantity), p_unit: editForm.unit,
       p_from_warehouse_id: editMode === 'inbound' ? null : editForm.fromWarehouseId,
@@ -937,7 +936,6 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
     return <>
       <label className="inventory-field-date">日付{weekdayLabel(target.movementDate)}<input type="date" value={target.movementDate} onChange={(e) => setTarget((current) => ({ ...current, movementDate: e.target.value }))} required /></label>
       <label className="inventory-field-worker">作業者<input value={editing?.worker_name ?? workerName} readOnly /></label>
-      {mode === 'inbound' && <label className="inventory-field-producer">生産者名<input value={target.producerName} maxLength={120} onChange={(e) => setTarget((current) => ({ ...current, producerName: e.target.value }))} required /></label>}
       <label className="inventory-field-origin">産地<select value={target.origin} onChange={(e) => setTarget((current) => ({ ...current, origin: e.target.value, productName: '', grade: '' }))} required><option value="">選択</option>{originOptions.map((origin) => <option key={origin.id} value={origin.name}>{origin.name}</option>)}</select></label>
       <label className="inventory-field-product">名称<select value={target.productName} onChange={(e) => setTarget((current) => ({ ...current, productName: e.target.value, grade: '' }))} disabled={!target.origin} required><option value="">{target.origin ? '選択' : '先に産地を選択'}</option>{productNames.map((product) => <option key={product} value={product}>{product}</option>)}</select></label>
       <label className="inventory-field-grade">等級<select value={otherProduct ? '' : target.grade} onChange={(e) => setTarget((current) => ({ ...current, grade: e.target.value }))} disabled={!target.productName || otherProduct} required={!otherProduct}><option value="">{otherProduct ? '対象外' : target.productName ? '選択' : '先に名称を選択'}</option>{grades.map((grade) => <option key={grade.id} value={grade.name}>{grade.name}</option>)}</select></label>
@@ -962,7 +960,7 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
           <button className="secondary-button" type="button" onClick={() => importFileRef.current?.click()} disabled={busy}><FileUp size={18} />仕切り書Excel取込</button>
         </div>}
       </div>
-      <form className={`inventory-entry-form ${movementMode === 'inbound' ? 'with-producer' : ''}`} noValidate onSubmit={(event) => void submit(event)}>{renderMovementFields(form, setForm, movementMode, addProductNames, addGrades)}<button className="primary-button" type="submit" disabled={busy || !warehouseRouteAvailable}><Plus size={18} />{busy ? '登録中...' : '記録を追加'}</button></form>
+      <form className="inventory-entry-form" noValidate onSubmit={(event) => void submit(event)}>{renderMovementFields(form, setForm, movementMode, addProductNames, addGrades)}<button className="primary-button" type="submit" disabled={busy || !warehouseRouteAvailable}><Plus size={18} />{busy ? '登録中...' : '記録を追加'}</button></form>
     </section>}
     {view === 'statement-reader' && canOperate && <section className="section-band statement-reader-section">
       <input ref={cameraFileRef} className="visually-hidden" type="file" accept="image/*" capture="environment" onChange={(event) => { const file = event.target.files?.[0]; if (file) void preparePurchasePhoto(file) }} />
