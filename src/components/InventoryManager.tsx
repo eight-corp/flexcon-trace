@@ -480,6 +480,7 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
       : activeWarehouses.length > 0 && warehouses.length > 1
 
   const preparePurchaseImport = async (file: File) => {
+    if (!isAdmin) return
     setBusy(true)
     setNotice(null)
     setImportError('')
@@ -689,7 +690,7 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
   }
 
   const executePurchaseImport = async () => {
-    if (busy) return
+    if (busy || (importSource === 'excel' && !isAdmin)) return
     if (mappedImportRecords.length === 0) return setImportError('取込可能な明細がありません。')
     const invalidRecord = mappedImportRecords.find((record) => !record.settlement_no.trim() || !record.purchased_at || !record.producer_name.trim()
       || !originOptions.some((origin) => origin.name === record.origin) || !Number.isFinite(Number(record.quantity)) || Number(record.quantity) <= 0
@@ -948,7 +949,7 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
   }
 
   return <div className="inventory-page">
-    <div className="page-heading"><h1>{view === 'history' ? '入出庫記録' : view === 'statement-reader' ? '仕切書読込み' : view === 'statement-list' ? '仕切書一覧' : '在庫'}</h1><p>{view === 'history' ? '手動入力と仕切り書Excelから米穀の入出庫を記録します。' : view === 'statement-reader' ? '仕切書を撮影し、米穀明細と仕入価格を読み取って登録します。' : view === 'statement-list' ? '撮影して登録した仕切書の明細を確認・編集します。' : '倉庫ごとの現在庫を産地、名称、等級別に表示します。'}</p></div>
+    <div className="page-heading"><h1>{view === 'history' ? '入出庫記録' : view === 'statement-reader' ? '仕切書読込み' : view === 'statement-list' ? '仕切書一覧' : '在庫'}</h1><p>{view === 'history' ? (isAdmin ? '手動入力と仕切り書Excelから米穀の入出庫を記録します。' : '手動入力で米穀の入出庫を記録します。') : view === 'statement-reader' ? '仕切書を撮影し、米穀明細と仕入価格を読み取って登録します。' : view === 'statement-list' ? '撮影して登録した仕切書の明細を確認・編集します。' : '倉庫ごとの現在庫を産地、名称、等級別に表示します。'}</p></div>
     {view === 'history' && canOperate && <section className="section-band inventory-entry-section">
       <div className="inventory-entry-toolbar">
         <div className="inventory-mode-switch" role="group" aria-label="移動区分">
@@ -956,10 +957,10 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
           <button type="button" className={movementMode === 'outbound' ? 'active' : ''} onClick={() => changeMode('outbound')}><ArrowUpFromLine size={18} />出庫</button>
           <button type="button" className={movementMode === 'transfer' ? 'active' : ''} onClick={() => changeMode('transfer')}><ArrowRightLeft size={18} />倉庫間移動</button>
         </div>
-        <div className="inventory-import-actions">
-        <input ref={importFileRef} className="visually-hidden" type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel.sheet.macroEnabled.12" onChange={(event) => { const file = event.target.files?.[0]; if (file) void preparePurchaseImport(file) }} />
-        <button className="secondary-button" type="button" onClick={() => importFileRef.current?.click()} disabled={busy}><FileUp size={18} />仕切り書Excel取込</button>
-        </div>
+        {isAdmin && <div className="inventory-import-actions">
+          <input ref={importFileRef} className="visually-hidden" type="file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel.sheet.macroEnabled.12" onChange={(event) => { const file = event.target.files?.[0]; if (file) void preparePurchaseImport(file) }} />
+          <button className="secondary-button" type="button" onClick={() => importFileRef.current?.click()} disabled={busy}><FileUp size={18} />仕切り書Excel取込</button>
+        </div>}
       </div>
       <form className={`inventory-entry-form ${movementMode === 'inbound' ? 'with-producer' : ''}`} noValidate onSubmit={(event) => void submit(event)}>{renderMovementFields(form, setForm, movementMode, addProductNames, addGrades)}<button className="primary-button" type="submit" disabled={busy || !warehouseRouteAvailable}><Plus size={18} />{busy ? '登録中...' : '記録を追加'}</button></form>
     </section>}
