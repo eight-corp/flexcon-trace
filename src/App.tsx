@@ -4,7 +4,7 @@ import { AuthorizationManager } from './components/AuthorizationManager'
 import { InspectionRecordManager, type InspectionRecordTarget } from './components/InspectionRecordManager'
 import { InspectionOptionManager } from './components/InspectionOptionManager'
 import { InventoryManager } from './components/InventoryManager'
-import { OtherRiceShipment } from './components/OtherRiceShipment'
+import { ShipmentRecord } from './components/ShipmentRecord'
 import { PurchaseStatementManager } from './components/PurchaseStatementManager'
 import { ShipmentHistory } from './components/ShipmentHistory'
 import { ShipmentScanner } from './components/ShipmentScanner'
@@ -160,7 +160,7 @@ function App() {
           />
         )}
         {!statementApplication && tab === 'shipping-record' && canOperate && (
-          <OtherRiceShipment
+          <ShipmentRecord
             workerId={worker.worker_id}
             workerName={worker.worker_name}
             onRegistered={() => setHistoryVersion((value) => value + 1)}

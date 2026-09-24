@@ -12,7 +12,7 @@ type InventoryColumn = 'movementDate' | 'movementType' | 'settlementNo' | 'worke
 type InventoryMovement = {
   id: string
   registration_order?: number
-  source_type: 'manual' | 'settlement' | 'inspection_flexcon' | 'inspection_paper_bag' | 'shipment_flexcon' | 'shipment_manual'
+  source_type: 'manual' | 'settlement' | 'inspection_flexcon' | 'inspection_paper_bag' | 'shipment_flexcon' | 'shipment_manual' | 'shipment_record'
   movement_type: InventoryMovementType
   movement_date: string
   worker_name: string
@@ -214,7 +214,7 @@ function modeForMovement(movement: InventoryMovement): MovementMode {
 function movementTypeLabel(movement: InventoryMovement) {
   if (movement.movement_type === 'settlement') return '仕切り書'
   if (movement.source_type === 'inspection_flexcon' || movement.source_type === 'inspection_paper_bag') return '検査記録'
-  if (movement.source_type === 'shipment_flexcon' || movement.source_type === 'shipment_manual') return '出荷'
+  if (movement.source_type === 'shipment_flexcon' || movement.source_type === 'shipment_manual' || movement.source_type === 'shipment_record') return '出荷'
   const mode = modeForMovement(movement)
   return mode === 'inbound' ? '入庫' : mode === 'outbound' ? '出庫' : '倉庫間移動'
 }

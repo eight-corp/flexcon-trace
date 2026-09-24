@@ -370,6 +370,15 @@
 .inventory-auto-label { display: inline-flex; align-items: center; justify-content: center; min-width: 46px; min-height: 26px; padding: 2px 6px; border: 1px solid #aab5ad; border-radius: 4px; background: #f0f3f1; color: #59635c; font-size: 12px; font-weight: 700; }
 .worker-summary-label { display: flex; align-items: center; gap: 7px; color: var(--green-dark) !important; }
 .manual-items-editor { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 6px; background: #f7f9f7; }
+.record-items-editor { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 6px; background: #f7f9f7; }
+.record-item-fields, .record-item-row { display: grid; grid-template-columns: 104px minmax(0, 1fr) 100px 86px 72px 42px; align-items: end; gap: 8px; }
+.record-item-fields label { min-width: 0; margin: 0; font-size: 12px; }
+.record-item-fields select, .record-item-fields input, .record-item-row select, .record-item-row input { width: 100%; min-width: 0; }
+.record-item-fields button { grid-column: 6; padding-inline: 8px; }
+.record-item-list { display: grid; gap: 7px; }
+.record-item-row { align-items: center; padding: 6px; border: 1px solid #d6ddd8; border-radius: 5px; background: #fff; }
+.record-item-row select, .record-item-row input { height: 36px; padding: 5px 7px; }
+.record-item-row button { width: 38px; height: 38px; }
 .manual-item-add { display: grid; grid-template-columns: minmax(0, 1fr) 112px auto; align-items: end; gap: 8px; }
 .manual-item-add.paper { grid-template-columns: 104px minmax(0, 1fr) 112px auto; }
 .manual-item-add.paper .manual-paper-moisture { grid-column: 1; }
@@ -459,13 +468,15 @@
 .shipment-table th.shipment-column-reason { width: 118px; }
 .shipment-table th.shipment-column-flexconQuantity { width: 96px; }
 .shipment-table th.shipment-column-paperBagQuantity { width: 82px; }
+.shipment-table th.shipment-column-kgQuantity { width: 82px; }
 .shipment-table th.shipment-column-carrier { width: 115px; }
 .shipment-table th.shipment-column-driver { width: 100px; }
 .shipment-table th.shipment-column-vehicle { width: 125px; }
 .shipment-table th.shipment-column-worker { width: 90px; }
 .shipment-table th.shipment-column-note { width: 180px; }
 .shipment-table th.shipment-column-flexconQuantity .shipment-column-sort,
-.shipment-table th.shipment-column-paperBagQuantity .shipment-column-sort { justify-content: flex-end; text-align: right; }
+.shipment-table th.shipment-column-paperBagQuantity .shipment-column-sort,
+.shipment-table th.shipment-column-kgQuantity .shipment-column-sort { justify-content: flex-end; text-align: right; }
 .shipment-table th.shipment-actions-heading { min-width: 80px; padding: 5px 8px; text-align: center; }
 .shipment-table td.shipment-actions-cell { min-width: 80px; padding: 2px 5px; white-space: nowrap; }
 .shipment-table-actions { display: flex; align-items: center; justify-content: center; gap: 4px; }
@@ -1019,6 +1030,15 @@ table thead th { text-align: center !important; }
   .manual-item-inspection-row { grid-template-columns: 86px 100px minmax(120px, 1fr); gap: 5px; }
   .manual-item-row { grid-template-columns: minmax(112px, 1fr) 90px 38px; gap: 5px; }
   .manual-items-editor { padding: 9px; overflow-x: auto; }
+  .record-items-editor { padding: 9px; }
+  .record-item-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .record-item-fields button { grid-column: auto; }
+  .record-item-row { grid-template-columns: repeat(2, minmax(0, 1fr)) 38px; gap: 6px; }
+  .record-item-row > :nth-child(2) { grid-column: 2 / 4; }
+  .record-item-row > :nth-child(3) { grid-column: 1 / 2; }
+  .record-item-row > :nth-child(4) { grid-column: 2 / 3; }
+  .record-item-row > :nth-child(5) { grid-column: 1 / 2; }
+  .record-item-row > :nth-child(6) { grid-column: 3 / 4; grid-row: 3; }
   .authorization-heading { align-items: stretch; flex-direction: column; }
   .authorization-heading-actions { justify-content: stretch; }
   .authorization-heading-actions > button { flex: 1; }

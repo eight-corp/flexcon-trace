@@ -37,7 +37,7 @@ export type Shipment = {
   driver_name: string | null
   vehicle_no: string | null
   note: string | null
-  shipment_kind: 'qr_flexcon' | 'paper_bag' | 'other_rice'
+  shipment_kind: 'qr_flexcon' | 'paper_bag' | 'other_rice' | 'manual_record'
   origin_prefecture: string | null
   product_name: string | null
   quantity_count: number | null
@@ -56,6 +56,7 @@ export type Shipment = {
     origin_prefecture: string | null
     product_name: string
     quantity_count: number
+    unit: '本' | '袋' | 'kg'
     grade: string | null
     moisture: number | null
     reason: string | null
