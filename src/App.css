@@ -140,6 +140,7 @@
 .shipment-registration-form .worker-summary { grid-template-columns: 132px minmax(0, 1fr); }
 .shipment-registration-form .worker-summary strong { justify-self: start; }
 .inventory-page { height: 100%; min-height: 0; display: flex; flex-direction: column; }
+.inventory-page-balance { overflow-y: auto; }
 .inventory-entry-section { width: 100%; flex: 0 0 auto; }
 .statement-reader-section { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 18px; padding: clamp(18px, 4vw, 34px); border-color: #a8c8b2; background: linear-gradient(135deg, #f7fbf8 0%, #eef7f1 100%); }
 .statement-reader-callout { display: flex; align-items: center; gap: 16px; }
@@ -354,6 +355,9 @@
 .inventory-import-preview { max-height: 330px; }
 .inventory-import-preview table { min-width: 840px; }
 .inventory-balance-table { min-width: 650px; }
+.inventory-page-balance .inventory-table-wrap { flex: 0 0 auto; max-height: min(60dvh, 720px); border: 2px solid #a9b9ad; }
+.inventory-page-balance .inventory-balance-table th,
+.inventory-page-balance .inventory-balance-table td { border-right: 2px solid #c0cec3; border-bottom: 2px solid #c0cec3; }
 .inventory-balance-table th:nth-child(4), .inventory-balance-table td:nth-child(4) { width: 64px; text-align: center; }
 .inventory-balance-table th:nth-child(3), .inventory-balance-table td:nth-child(3) { white-space: nowrap; }
 .inventory-balance-table .inventory-balance-grade { width: 82px; min-width: 82px; }

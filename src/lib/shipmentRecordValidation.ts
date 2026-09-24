@@ -27,8 +27,8 @@ export function isShipmentRecordBrand(origin: string, productName: string, optio
 
 export function gradesFor(productName: string, options: InspectionOption[], requireActive = true) {
   return options.filter((option) => option.option_type === 'grade' && (!requireActive || option.active)
-    && selectedInspectionGrade(option.name)
-    && (productName === '飼料用玄米' ? option.name === '合格' : option.name !== '合格'))
+    && (selectedInspectionGrade(option.name) || option.name === '未検査')
+    && (productName === '飼料用玄米' ? ['合格', '未検査'].includes(option.name) : option.name !== '合格'))
 }
 
 export function validateShipmentRecordItems(items: ShipmentRecordItemDraft[], options: InspectionOption[], requireActive = true) {
@@ -41,7 +41,7 @@ export function validateShipmentRecordItems(items: ShipmentRecordItemDraft[], op
     if (!['本', '袋', 'kg'].includes(item.unit)) return '単位を選択してください。'
     if (!Number.isInteger(Number(item.quantityCount)) || Number(item.quantityCount) < 1) return '数量は1以上の整数で入力してください。'
     if (isShipmentRecordBrand(item.originPrefecture, item.productName, options)) {
-      const grade = selectedInspectionGrade(item.grade)
+      const grade = item.grade === '未検査' ? item.grade : selectedInspectionGrade(item.grade)
       if (!grade || !gradesFor(item.productName, options, requireActive).some((option) => option.name === grade)) return '銘柄米の等級を選択してください。'
     } else if (item.grade) return '銘柄米以外に等級は入力できません。'
     const key = `${item.originPrefecture}\u001f${item.productName.toLowerCase()}\u001f${item.grade}\u001f${item.unit}`
