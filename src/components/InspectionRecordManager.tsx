@@ -24,6 +24,7 @@ type AddGroupForm = {
   producer_name: string
   fiscal_year: string
   purchase_date: string
+  settlement_no: string
   inspection_date: string
   warehouse_id: string
   brand: string
@@ -93,6 +94,7 @@ type InspectionDetailRow = {
 type InspectionRegistrationSummaryRow = {
   registrationId: string
   registrationNo: number
+  settlementNo: string
   authorizationId: string
   purchaseDates: string
   inspectionDates: string
@@ -110,10 +112,11 @@ type InspectionRegistrationSummaryRow = {
   uninspectedQuantity: number
 }
 type SummarySortDirection = 'asc' | 'desc'
-type SummaryColumn = 'registrationNo' | 'purchaseDates' | 'inspectionDates' | 'fullName' | 'origin' | 'municipality' | 'inspectionLocations' | 'authorizationNo' | 'brands' | 'grade' | 'flexconCount' | 'paperBagCount' | 'bulkQuantity' | 'inspectedQuantity' | 'uninspectedQuantity'
+type SummaryColumn = 'registrationNo' | 'settlementNo' | 'purchaseDates' | 'inspectionDates' | 'fullName' | 'origin' | 'municipality' | 'inspectionLocations' | 'authorizationNo' | 'brands' | 'grade' | 'flexconCount' | 'paperBagCount' | 'bulkQuantity' | 'inspectedQuantity' | 'uninspectedQuantity'
 
 const SUMMARY_COLUMNS: Array<{ key: SummaryColumn; label: string }> = [
   { key: 'registrationNo', label: '登録No.' },
+  { key: 'settlementNo', label: '仕切書№' },
   { key: 'purchaseDates', label: '仕入日' },
   { key: 'inspectionDates', label: '検査日' },
   { key: 'fullName', label: '氏名' },
@@ -148,6 +151,7 @@ function emptyAddGroupForm(): AddGroupForm {
     producer_name: '',
     fiscal_year: String(currentFiscalYear()),
     purchase_date: today(),
+    settlement_no: '',
     inspection_date: '',
     warehouse_id: '',
     brand: '',
@@ -318,6 +322,7 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
   const [inspectionOptions, setInspectionOptions] = useState<InspectionOption[]>([])
   const [weights, setWeights] = useState<Record<InspectionWeight['weight_type'], number>>({ branded_rice: DEFAULT_BRANDED_RICE_WEIGHT, feed_rice: DEFAULT_FEED_RICE_WEIGHT })
   const [addGroupForm, setAddGroupForm] = useState<AddGroupForm>(emptyAddGroupForm)
+  const [registrationSettlementDraft, setRegistrationSettlementDraft] = useState<{ registrationId: string; value: string } | null>(null)
   const [addGroupFormOpen, setAddGroupFormOpen] = useState(false)
   const [producerPickerOpen, setProducerPickerOpen] = useState(false)
   const [detailDrafts, setDetailDrafts] = useState<Record<string, InlineDetailDraft>>({})
@@ -478,6 +483,7 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
         return {
           registrationId: registration.id,
           registrationNo: registration.registration_no,
+          settlementNo: registration.settlement_no ?? '',
           authorizationId: authorization.id,
           purchaseDates: joinDistinct(gradeRecords.map((item) => item.purchase_date), displayDate),
           inspectionDates: joinDistinct(gradeRecords.map((item) => item.inspection_date), displayDate),
@@ -681,6 +687,7 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
     const paperBagCount = Number(addGroupForm.paper_bag_count || 0)
     const bulkQuantityKg = Number(addGroupForm.bulk_quantity_kg || 0)
     if (!addGroupForm.purchase_date) return setNotice({ type: 'error', text: '仕入日を入力してください。' })
+    if (addGroupForm.settlement_no.trim().length > 80) return setNotice({ type: 'error', text: '仕切書№は80文字以内で入力してください。' })
     if (!addGroupForm.warehouse_id) return setNotice({ type: 'error', text: '搬入先を選択してください。' })
     if (!addGroupForm.brand) return setNotice({ type: 'error', text: '銘柄を選択してください。' })
     if (!Number.isInteger(bulkQuantityKg) || bulkQuantityKg < 0) return setNotice({ type: 'error', text: 'バラは0kg以上の整数で入力してください。' })
@@ -692,6 +699,7 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
       p_authorization_id: addAuthorization.id,
       p_fiscal_year: Number(addGroupForm.fiscal_year),
       p_purchase_date: addGroupForm.purchase_date,
+      p_settlement_no: addGroupForm.settlement_no.trim(),
       p_inspection_date: addGroupForm.inspection_date || null,
       p_inspection_location: null,
       p_warehouse_id: addGroupForm.warehouse_id,
@@ -724,6 +732,26 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
     onSelectedRecordTargetChange(null)
     onSelectedRegistrationChange(registrationId)
     onSelectedAuthorizationChange(addAuthorization.id)
+  }
+
+  const saveRegistrationSettlementNo = async (event: React.FormEvent) => {
+    event.preventDefault()
+    if (!selectedRegistration || busy) return
+    const value = registrationSettlementDraft?.registrationId === selectedRegistration.id
+      ? registrationSettlementDraft.value.trim()
+      : selectedRegistration.settlement_no ?? ''
+    if (value.length > 80) return setNotice({ type: 'error', text: '仕切書№は80文字以内で入力してください。' })
+    setBusy(true); setNotice(null)
+    const { error } = await supabase.rpc('flexcon_set_inspection_registration_settlement_no', {
+      p_worker_id: workerId,
+      p_registration_id: selectedRegistration.id,
+      p_settlement_no: value,
+    })
+    setBusy(false)
+    if (error) return setNotice({ type: 'error', text: error.message })
+    setRegistrationSettlementDraft(null)
+    setNotice({ type: 'success', text: '仕切書№を保存しました。' })
+    setVersion((version) => version + 1)
   }
 
   const applyBatchMetadata = async (event: React.FormEvent) => {
@@ -1283,6 +1311,7 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
         </div>
         <label>年度<input type="number" min="1" max="99" step="1" value={addGroupForm.fiscal_year} onChange={(event) => setAddGroupForm((current) => ({ ...current, fiscal_year: event.target.value }))} required /></label>
         <label>仕入日<input type="date" value={addGroupForm.purchase_date} onChange={(event) => setAddGroupForm((current) => ({ ...current, purchase_date: event.target.value }))} required /></label>
+        <label>仕切書№<input value={addGroupForm.settlement_no} maxLength={80} onChange={(event) => setAddGroupForm((current) => ({ ...current, settlement_no: event.target.value }))} /></label>
         <label>検査日<input type="date" value={addGroupForm.inspection_date} onChange={(event) => setAddGroupForm((current) => ({ ...current, inspection_date: event.target.value }))} /></label>
         <label>搬入先<select value={addGroupForm.warehouse_id} onChange={(event) => setAddGroupForm((current) => ({ ...current, warehouse_id: event.target.value }))} required><option value="">選択してください</option>{warehouseOptions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
         <label>産地<input value={formatPrefectureName(addAuthorization?.prefecture) || ''} readOnly aria-label="産地" /></label>
@@ -1313,10 +1342,10 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
       {summaryView === 'list' && <div className="inspection-summary-wrap"><table className="inspection-summary-table">
         <thead><tr>{SUMMARY_COLUMNS.map((column) => <InspectionSummaryColumnHeader key={column.key} column={column} sort={summarySort} values={summaryFilterValues[column.key]} selectedValues={summaryColumnFilters[column.key]} onSort={changeSummarySort} onFilterChange={changeSummaryColumnFilter} />)}{!readOnly && <th className="inspection-summary-actions-heading">操作</th>}</tr></thead>
         <tbody>{displayedSummary.map((row, index) => <tr className={index > 0 && displayedSummary[index - 1].registrationId !== row.registrationId ? 'inspection-summary-registration-start' : undefined} key={`${row.registrationId}-${row.grade}`} tabIndex={0} onClick={() => { onSelectedRecordTargetChange(null); onSelectedRegistrationChange(row.registrationId); onSelectedAuthorizationChange(row.authorizationId) }} onKeyDown={(event) => { if (event.key === 'Enter' && event.target === event.currentTarget) { onSelectedRecordTargetChange(null); onSelectedRegistrationChange(row.registrationId); onSelectedAuthorizationChange(row.authorizationId) } }}>
-          <td className="numeric-cell">{row.registrationNo}</td><td>{row.purchaseDates}</td><td>{row.inspectionDates}</td><td><strong>{row.fullName}</strong></td><td>{row.origin}</td><td>{row.municipality}</td><td>{row.inspectionLocations}</td><td className="numeric-cell">{row.authorizationNo}</td><td>{row.brands}</td><td>{row.grade}</td><td className="numeric-cell">{row.flexconCount}本</td><td className="numeric-cell">{row.paperBagCount}袋</td><td className="numeric-cell">{row.bulkQuantity.toLocaleString()}kg</td><td className="inspection-progress-inspected numeric-cell">{row.inspectedQuantity.toLocaleString()}kg</td><td className="inspection-progress-uninspected numeric-cell">{row.uninspectedQuantity.toLocaleString()}kg</td>
+          <td className="numeric-cell">{row.registrationNo}</td><td>{row.settlementNo}</td><td>{row.purchaseDates}</td><td>{row.inspectionDates}</td><td><strong>{row.fullName}</strong></td><td>{row.origin}</td><td>{row.municipality}</td><td>{row.inspectionLocations}</td><td className="numeric-cell">{row.authorizationNo}</td><td>{row.brands}</td><td>{row.grade}</td><td className="numeric-cell">{row.flexconCount}本</td><td className="numeric-cell">{row.paperBagCount}袋</td><td className="numeric-cell">{row.bulkQuantity.toLocaleString()}kg</td><td className="inspection-progress-inspected numeric-cell">{row.inspectedQuantity.toLocaleString()}kg</td><td className="inspection-progress-uninspected numeric-cell">{row.uninspectedQuantity.toLocaleString()}kg</td>
           {!readOnly && <td className="inspection-summary-actions"><button className="icon-button delete-icon" type="button" title="この登録行を削除" aria-label={`登録No. ${row.registrationNo}を削除`} disabled={busy} onClick={(event) => { event.stopPropagation(); void deleteInspectionRegistration(row) }}><Trash2 size={17} /></button></td>}
         </tr>)}
-        {displayedSummary.length === 0 && <tr><td colSpan={readOnly ? 15 : 16} className="empty-state">該当する検査記録はありません</td></tr>}</tbody>
+        {displayedSummary.length === 0 && <tr><td colSpan={readOnly ? 16 : 17} className="empty-state">該当する検査記録はありません</td></tr>}</tbody>
       </table></div>}
       {notice && <div className={`notice operation-log ${notice.type}`}>{notice.text}</div>}
     </div>
@@ -1325,12 +1354,18 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
   return <div className="producer-inspection-page">
     <div className="producer-inspection-heading">
       <button className="icon-button" type="button" title={readOnly ? '委任状一覧へ戻る' : '検査記録へ戻る'} aria-label={readOnly ? '委任状一覧へ戻る' : '検査記録へ戻る'} onClick={onBack}><ArrowLeft size={21} /></button>
-      <div><h1>{selectedAuthorization.full_name}</h1><p>委任状№ {selectedAuthorization.authorization_no}　{[selectedAuthorization.prefecture, selectedAuthorization.municipality].filter(Boolean).join(' ')}{!readOnly && selectedRegistration ? `　登録No. ${selectedRegistration.registration_no}` : ''}</p></div>
+      <div><h1>{selectedAuthorization.full_name}</h1><p>委任状№ {selectedAuthorization.authorization_no}　{[selectedAuthorization.prefecture, selectedAuthorization.municipality].filter(Boolean).join(' ')}{!readOnly && selectedRegistration ? `　登録No. ${selectedRegistration.registration_no}` : ''}{selectedRegistration?.settlement_no ? `　仕切書№ ${selectedRegistration.settlement_no}` : ''}</p></div>
       {readOnly && <div className="producer-inspection-actions">
         <button className="secondary-button" type="button" onClick={() => void createInspectionLedgerPdf()} disabled={inspectionLedgerBusy || gradingNoticeBusy}><ClipboardList size={18} />{inspectionLedgerBusy ? 'PDF作成中...' : '検査請求者別検査台帳'}</button>
         <button className="secondary-button" type="button" onClick={() => void createGradingNoticePdf()} disabled={gradingNoticeBusy || inspectionLedgerBusy}><FileText size={18} />{gradingNoticeBusy ? 'PDF作成中...' : '格付結果通知票'}</button>
       </div>}
     </div>
+    {!readOnly && selectedRegistration && <section className="section-band inspection-registration-settlement">
+      <form onSubmit={(event) => void saveRegistrationSettlementNo(event)}>
+        <label>仕切書№<input value={registrationSettlementDraft?.registrationId === selectedRegistration.id ? registrationSettlementDraft.value : selectedRegistration.settlement_no ?? ''} maxLength={80} disabled={busy} onChange={(event) => setRegistrationSettlementDraft({ registrationId: selectedRegistration.id, value: event.target.value })} /></label>
+        <button className="secondary-button" type="submit" disabled={busy}><Save size={18} />仕切書№を保存</button>
+      </form>
+    </section>}
     {!readOnly && selectedRegistration && <section className="section-band inspection-batch-metadata">
       <div className="section-title"><div><h2>検査情報を一括設定</h2><span>この登録の推フレ・バラ・紙袋すべてに反映</span></div></div>
       <form className="inspection-batch-metadata-form" onSubmit={(event) => void applyBatchMetadata(event)}>

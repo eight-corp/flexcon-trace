@@ -160,6 +160,7 @@ export type InspectionRegistration = {
   id: string
   registration_no: number
   authorization_id: string
+  settlement_no: string | null
   created_by_worker_id: string
   created_at: string
 }
