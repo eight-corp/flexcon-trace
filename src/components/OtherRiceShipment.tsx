@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Send, UserRound, Wheat, X } from 'lucide-react'
+import { RotateCcw, Send, UserRound } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import type { Destination, InspectionOption, TransportProfile } from '../types'
 import { ManualShipmentItemsEditor, type ManualShipmentItemDraft } from './ManualShipmentItemsEditor'
@@ -30,7 +30,7 @@ export function OtherRiceShipment({ workerId, workerName, onRegistered }: Props)
   const [vehicleNo, setVehicleNo] = useState('')
   const [purchasePrice, setPurchasePrice] = useState('')
   const [note, setNote] = useState('')
-  const [open, setOpen] = useState(false)
+  const [editorVersion, setEditorVersion] = useState(0)
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
@@ -49,6 +49,7 @@ export function OtherRiceShipment({ workerId, workerName, onRegistered }: Props)
       setWarehouses((warehouseResult.data ?? []) as InspectionOption[])
       setTransportProfiles((transportResult.data ?? []) as TransportProfile[])
       setShipmentProducts((productResult.data ?? []) as InspectionOption[])
+      if (!productResult.data?.length) setNotice({ type: 'error', text: '銘柄米以外の種類がマスタに登録されていません。' })
     })
   }, [])
 
@@ -56,11 +57,18 @@ export function OtherRiceShipment({ workerId, workerName, onRegistered }: Props)
   const origin = [...new Set(items.map((item) => item.originPrefecture).filter(Boolean))].join('、') || '産地未登録'
   const products = items.map((item) => `${item.productName} ${item.quantityCount}本`).join('、') || '明細未登録'
 
-  const beginRegistration = () => {
-    if (shipmentProducts.length === 0) return setNotice({ type: 'error', text: '銘柄米以外の種類がマスタに登録されていません。' })
+  const clearForm = () => {
     setNotice(null)
     setItems([])
-    setOpen(true)
+    setEditorVersion((version) => version + 1)
+    setShippedAt(currentLocalDateTime())
+    setDestinationId('')
+    setFromWarehouseId('')
+    setTransportProfileId('')
+    setDriverName('')
+    setVehicleNo('')
+    setPurchasePrice('')
+    setNote('')
   }
 
   const register = async (event: FormEvent) => {
@@ -102,8 +110,8 @@ export function OtherRiceShipment({ workerId, workerName, onRegistered }: Props)
     })
     setBusy(false)
     if (error) return setNotice({ type: 'error', text: error.message })
-    setOpen(false)
     setItems([])
+    setEditorVersion((version) => version + 1)
     setDriverName('')
     setVehicleNo('')
     setPurchasePrice('')
@@ -113,33 +121,27 @@ export function OtherRiceShipment({ workerId, workerName, onRegistered }: Props)
     onRegistered()
   }
 
-  return <div>
+  return <div className="other-rice-page">
     <div className="page-heading"><h1>出荷記録</h1></div>
     {notice && <div className={`notice ${notice.type}`} role={notice.type === 'error' ? 'alert' : 'status'}>{notice.text}</div>}
-    <button className="primary-button" type="button" onClick={beginRegistration}><Wheat size={18} />銘柄米以外の出荷</button>
-    {open && <div className="modal-backdrop" role="presentation">
-      <section className="registration-modal" role="dialog" aria-modal="true" aria-labelledby="other-rice-registration-title">
-        <div className="modal-header"><h2 id="other-rice-registration-title">銘柄米以外の出荷</h2><button className="icon-button" type="button" title="閉じる" aria-label="登録画面を閉じる" onClick={() => setOpen(false)} disabled={busy}><X size={21} /></button></div>
-        <div className="shipment-registration-summary" aria-label="出荷内容">
-          <div><span>出荷本数</span><strong>{count}本</strong></div>
-          <div><span>産地</span><strong>{origin}</strong></div>
-          <div><span>種類</span><strong>{products}</strong></div>
-        </div>
-        {notice?.type === 'error' && <div className="notice error" role="alert">{notice.text}</div>}
-        <form className="shipment-registration-form" noValidate onSubmit={(event) => void register(event)}>
-          <ManualShipmentItemsEditor kind="other_rice" items={items} onChange={setItems} shipmentProducts={shipmentProducts} disabled={busy} />
-          <div className="shipment-form-row worker-summary"><span className="worker-summary-label"><UserRound size={18} />担当者</span><strong>{workerName}</strong></div>
-          <label className="shipment-form-row"><span>出荷日時</span><input className={!shippedAt ? 'shipment-required-missing' : ''} type="datetime-local" step={60} value={shippedAt} onChange={(event) => setShippedAt(event.target.value)} required /></label>
-          <label className="shipment-form-row"><span>納品先</span><select className={!destinationId ? 'shipment-required-missing' : ''} value={destinationId} onChange={(event) => setDestinationId(event.target.value)} required><option value="">選択してください</option>{destinations.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-          <label className="shipment-form-row"><span>出庫元倉庫</span><select className={!fromWarehouseId ? 'shipment-required-missing' : ''} value={fromWarehouseId} onChange={(event) => setFromWarehouseId(event.target.value)} required><option value="">選択してください</option>{warehouses.map((item) => <option key={item.id} value={item.id}>{item.name}{item.active || item.name === '倉庫未設定' ? '' : '（無効）'}</option>)}</select></label>
-          <label className="shipment-form-row"><span>運送会社</span><select className={!transportProfileId ? 'shipment-required-missing' : ''} value={transportProfileId} onChange={(event) => setTransportProfileId(event.target.value)} required><option value="">選択してください</option>{transportProfiles.map((item) => <option key={item.id} value={item.id}>{item.company_name}</option>)}</select></label>
-          <label className="shipment-form-row"><span>ドライバー名</span><input className={!driverName.trim() ? 'shipment-required-missing' : ''} value={driverName} onChange={(event) => setDriverName(event.target.value)} required /></label>
-          <label className="shipment-form-row"><span>車両番号</span><input className={!vehicleNo.trim() ? 'shipment-required-missing' : ''} value={vehicleNo} onChange={(event) => setVehicleNo(event.target.value)} required placeholder="例：岩手 100 あ 12-34" /></label>
-          <label className="shipment-form-row"><span>仕入値（任意・1俵当たり）</span><input type="number" min="0" step="1" inputMode="decimal" value={purchasePrice} onChange={(event) => setPurchasePrice(event.target.value)} /></label>
-          <label className="shipment-form-row"><span>備考（任意）</span><textarea rows={2} value={note} onChange={(event) => setNote(event.target.value)} placeholder="申し送りなど" /></label>
-          <div className="modal-actions"><button className="secondary-button" type="button" onClick={() => setOpen(false)} disabled={busy}>戻る</button><button className="primary-button" type="submit" disabled={busy || items.length === 0}><Send size={18} />{busy ? '登録中...' : `${count}本を登録`}</button></div>
-        </form>
-      </section>
-    </div>}
+    <h2 className="other-rice-heading">銘柄米以外の出荷</h2>
+    <div className="shipment-registration-summary" aria-label="出荷内容">
+      <div><span>出荷本数</span><strong>{count}本</strong></div>
+      <div><span>産地</span><strong>{origin}</strong></div>
+      <div><span>種類</span><strong>{products}</strong></div>
+    </div>
+    <form className="shipment-registration-form" noValidate onSubmit={(event) => void register(event)}>
+      <div className="modal-actions other-rice-actions"><button className="secondary-button" type="button" onClick={clearForm} disabled={busy}><RotateCcw size={18} />入力をクリア</button><button className="primary-button" type="submit" disabled={busy || items.length === 0}><Send size={18} />{busy ? '登録中...' : `${count}本を登録`}</button></div>
+      <ManualShipmentItemsEditor key={editorVersion} kind="other_rice" items={items} onChange={setItems} shipmentProducts={shipmentProducts} disabled={busy} />
+      <div className="shipment-form-row worker-summary"><span className="worker-summary-label"><UserRound size={18} />担当者</span><strong>{workerName}</strong></div>
+      <label className="shipment-form-row"><span>出荷日時</span><input className={!shippedAt ? 'shipment-required-missing' : ''} type="datetime-local" step={60} value={shippedAt} onChange={(event) => setShippedAt(event.target.value)} required /></label>
+      <label className="shipment-form-row"><span>納品先</span><select className={!destinationId ? 'shipment-required-missing' : ''} value={destinationId} onChange={(event) => setDestinationId(event.target.value)} required><option value="">選択してください</option>{destinations.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+      <label className="shipment-form-row"><span>出庫元倉庫</span><select className={!fromWarehouseId ? 'shipment-required-missing' : ''} value={fromWarehouseId} onChange={(event) => setFromWarehouseId(event.target.value)} required><option value="">選択してください</option>{warehouses.map((item) => <option key={item.id} value={item.id}>{item.name}{item.active || item.name === '倉庫未設定' ? '' : '（無効）'}</option>)}</select></label>
+      <label className="shipment-form-row"><span>運送会社</span><select className={!transportProfileId ? 'shipment-required-missing' : ''} value={transportProfileId} onChange={(event) => setTransportProfileId(event.target.value)} required><option value="">選択してください</option>{transportProfiles.map((item) => <option key={item.id} value={item.id}>{item.company_name}</option>)}</select></label>
+      <label className="shipment-form-row"><span>ドライバー名</span><input className={!driverName.trim() ? 'shipment-required-missing' : ''} value={driverName} onChange={(event) => setDriverName(event.target.value)} required /></label>
+      <label className="shipment-form-row"><span>車両番号</span><input className={!vehicleNo.trim() ? 'shipment-required-missing' : ''} value={vehicleNo} onChange={(event) => setVehicleNo(event.target.value)} required placeholder="例：岩手 100 あ 12-34" /></label>
+      <label className="shipment-form-row"><span>仕入値（任意・1俵当たり）</span><input type="number" min="0" step="1" inputMode="decimal" value={purchasePrice} onChange={(event) => setPurchasePrice(event.target.value)} /></label>
+      <label className="shipment-form-row"><span>備考（任意）</span><textarea rows={2} value={note} onChange={(event) => setNote(event.target.value)} placeholder="申し送りなど" /></label>
+    </form>
   </div>
 }

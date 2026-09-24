@@ -129,6 +129,9 @@
 .driver-vehicle-fields { margin: 0; padding: 13px; border: 1px solid var(--line); border-radius: 6px; }
 .driver-vehicle-fields legend { padding: 0 5px; color: #3f4a42; font-size: 13px; font-weight: 700; }
 .shipment-registration-form { display: grid; gap: 10px; }
+.other-rice-page { width: 100%; max-width: 640px; }
+.other-rice-heading { margin: 0 0 10px; font-size: 18px; }
+.other-rice-actions { margin-bottom: 4px; }
 .shipment-form-row { display: grid; grid-template-columns: 132px minmax(0, 1fr); align-items: center; gap: 12px; margin: 0; }
 .shipment-form-row > span:first-child { color: #3f4a42; font-size: 14px; font-weight: 700; }
 .shipment-form-row input, .shipment-form-row select, .shipment-form-row textarea { width: 100%; min-width: 0; margin: 0; }
