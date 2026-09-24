@@ -1,9 +1,10 @@
 import { useEffect, useState, type CSSProperties } from 'react'
-import { ArrowLeft, Boxes, Camera, ClipboardList, FileSignature, History, House, List, LogOut, Settings2, Truck, Wheat } from 'lucide-react'
+import { ArrowLeft, Boxes, Camera, ClipboardList, FileSignature, History, House, List, LogOut, NotebookPen, Settings2, Truck, Wheat } from 'lucide-react'
 import { AuthorizationManager } from './components/AuthorizationManager'
 import { InspectionRecordManager, type InspectionRecordTarget } from './components/InspectionRecordManager'
 import { InspectionOptionManager } from './components/InspectionOptionManager'
 import { InventoryManager } from './components/InventoryManager'
+import { MemoManager } from './components/MemoManager'
 import { ShipmentRecord } from './components/ShipmentRecord'
 import { PurchaseStatementManager } from './components/PurchaseStatementManager'
 import { ShipmentHistory } from './components/ShipmentHistory'
@@ -13,7 +14,7 @@ import { useCalendarMode } from './lib/calendarMode'
 import type { Worker } from './types'
 import './App.css'
 
-type Tab = 'scan' | 'shipping-record' | 'history' | 'inventory-history' | 'inventory' | 'statement-reader' | 'statement-list' | 'statement-master' | 'authorizations' | 'inspections' | 'master'
+type Tab = 'scan' | 'shipping-record' | 'history' | 'inventory-history' | 'inventory' | 'statement-reader' | 'statement-list' | 'statement-master' | 'authorizations' | 'memos' | 'inspections' | 'master'
 
 function isStatementApplication() {
   const params = new URLSearchParams(window.location.search)
@@ -128,7 +129,7 @@ function App() {
   const canOperate = worker.role !== 'viewer'
   const isAdmin = worker.role === 'admin'
   const roleName = isAdmin ? '管理者' : canOperate ? '作業者' : '閲覧者'
-  const navStyle = { '--nav-count': statementApplication ? (isAdmin ? 3 : canOperate ? 2 : 1) : isAdmin ? 7 : canOperate ? 6 : 3 } as CSSProperties
+  const navStyle = { '--nav-count': statementApplication ? (isAdmin ? 3 : canOperate ? 2 : 1) : isAdmin ? 8 : canOperate ? 7 : 3 } as CSSProperties
 
   return (
     <div className="app-shell">
@@ -156,7 +157,7 @@ function App() {
         </div>
       </header>
 
-      <main className={`app-main ${statementApplication || tab === 'history' || tab === 'inventory-history' || tab === 'inventory' || tab === 'authorizations' || tab === 'inspections' ? 'app-main-wide' : ''} ${statementApplication ? 'app-main-statements' : ''}`}>
+      <main className={`app-main ${statementApplication || tab === 'history' || tab === 'inventory-history' || tab === 'inventory' || tab === 'authorizations' || tab === 'memos' || tab === 'inspections' ? 'app-main-wide' : ''} ${statementApplication ? 'app-main-statements' : ''}`}>
         {!statementApplication && tab === 'scan' && isAdmin && (
           <>
             <button className="secondary-button qr-scan-back" type="button" onClick={() => setTab('shipping-record')}><ArrowLeft size={18} />出荷記録へ戻る</button>
@@ -194,6 +195,7 @@ function App() {
             }}
           />
         )}
+        {!statementApplication && tab === 'memos' && canOperate && <MemoManager workerId={worker.worker_id} />}
         {!statementApplication && tab === 'inspections' && canOperate && (
           <div className="inspection-workspace">
             <div className="inspection-workspace-content">
@@ -250,6 +252,9 @@ function App() {
         </button>
         {canOperate && <button className={tab === 'authorizations' ? 'active' : ''} onClick={() => setTab('authorizations')}>
           <FileSignature size={22} /><span>委任状一覧</span>
+        </button>}
+        {canOperate && <button className={tab === 'memos' ? 'active' : ''} onClick={() => setTab('memos')}>
+          <NotebookPen size={22} /><span>メモ書き</span>
         </button>}
         {isAdmin && <button className={tab === 'master' ? 'active' : ''} onClick={() => setTab('master')}>
           <Settings2 size={22} /><span>マスタ</span>

@@ -518,6 +518,23 @@
 .authorization-actions-row { display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 14px; }
 .visually-hidden { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; margin: -1px !important; overflow: hidden !important; clip: rect(0, 0, 0, 0) !important; white-space: nowrap !important; border: 0 !important; }
 .authorization-table-wrap { max-width: 100%; overflow: auto; border: 1px solid var(--line); border-radius: 7px; background: #fff; }
+.memo-page { min-height: 0; display: flex; flex-direction: column; }
+.memo-actions { display: flex; justify-content: flex-end; margin-bottom: 12px; }
+.memo-table-wrap { flex: 1 1 auto; min-height: 160px; overflow: auto; border: 1px solid var(--line); border-radius: 7px; background: #fff; }
+.memo-table { width: 100%; min-width: 650px; table-layout: fixed; border-collapse: separate; border-spacing: 0; font-size: 13px; }
+.memo-table th, .memo-table td { height: 36px; padding: 5px 8px; border-right: 1px solid #e5e8e5; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+.memo-table th { position: sticky; top: 0; z-index: 2; background: #eef2ee; text-align: center; }
+.memo-table th:nth-child(1) { width: 70px; }
+.memo-table th:nth-child(2) { width: 205px; }
+.memo-table th:nth-child(3) { width: 130px; }
+.memo-table tbody tr:not(:has(.empty-state)) { cursor: pointer; }
+.memo-table tbody tr:not(:has(.empty-state)):hover, .memo-table tbody tr:focus { background: var(--green-soft); }
+.memo-preview { display: block; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.memo-dialog { width: min(100%, 760px); }
+.memo-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 14px; }
+.memo-body-field { display: grid; gap: 6px; font-weight: 700; }
+.memo-body-field textarea { width: 100%; min-height: 220px; resize: vertical; font-weight: 400; }
+.memo-full-text { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.7; }
 .authorization-table { width: 1338px; table-layout: fixed; border-collapse: separate; border-spacing: 0; font-size: 13px; }
 .authorization-table th, .authorization-table td { padding: 5px 5px; border-bottom: 1px solid var(--line); border-right: 1px solid #e5e8e5; text-align: left; vertical-align: middle; overflow-wrap: anywhere; }
 .authorization-table th.authorization-filter-heading { padding: 0; }
@@ -886,6 +903,7 @@ table thead th { text-align: center !important; }
   .app-main.app-main-wide { width: 100%; max-width: none; height: calc(100dvh - 64px); padding-bottom: 20px; overflow: hidden; }
   .app-main.app-main-wide.app-main-statements { height: auto; min-height: calc(100dvh - 64px); padding-bottom: 34px; overflow-x: auto; overflow-y: visible; }
   .app-main-wide .authorization-page { height: 100%; min-height: 0; display: flex; flex-direction: column; }
+  .app-main-wide .memo-page { height: 100%; }
   .app-main-wide .authorization-table-wrap { flex: 1; min-height: 0; }
   .app-main-wide .inspection-page { height: 100%; min-height: 0; display: flex; flex-direction: column; }
   .app-main-wide .inspection-table-wrap { flex: 1; min-height: 0; }
