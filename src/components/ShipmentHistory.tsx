@@ -257,7 +257,7 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
   const [manualItems, setManualItems] = useState<ManualShipmentItemDraft[]>([])
   const [recordItems, setRecordItems] = useState<ShipmentRecordItemDraft[]>([])
   const [busy, setBusy] = useState(false)
-  const [viewMode, setViewMode] = useState<ViewMode>('cards')
+  const [viewMode, setViewMode] = useState<ViewMode>('table')
   const [sort, setSort] = useState<{ key: TableColumn; direction: SortDirection } | null>(null)
   const [columnFilters, setColumnFilters] = useState<Partial<Record<TableColumn, string[]>>>({})
   useEffect(() => {
