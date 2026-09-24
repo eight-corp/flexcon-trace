@@ -431,16 +431,12 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
   const selectedRegistration = registrations.find((item) => item.id === selectedRegistrationId) ?? null
   const certificateFlexconsFor = (kind: CertificateKind) => kind === 'bulk' ? selectedBulkFlexcons : standardCertificateFlexcons
   const selectedRegistrationRecords: Array<FlexconInspection | PaperBagInspection> = [...selectedFlexcons, ...selectedPaperBags]
-  const commonRegistrationValue = (values: Array<string | null>) => {
-    const distinct = [...new Set(values.map((value) => value?.trim()).filter((value): value is string => Boolean(value)))]
-    return distinct.length === 1 ? distinct[0] : ''
-  }
   const batchMetadata = batchMetadataDraft.registration_id === selectedRegistrationId ? batchMetadataDraft : {
     registration_id: selectedRegistrationId,
-    inspection_date: commonRegistrationValue(selectedRegistrationRecords.map((item) => item.inspection_date)),
-    inspector_name: commonRegistrationValue(selectedRegistrationRecords.map((item) => item.inspector_name)),
-    inspection_location: commonRegistrationValue(selectedRegistrationRecords.map((item) => item.inspection_location)),
-    grade: commonRegistrationValue(selectedRegistrationRecords.map((item) => selectedInspectionGrade(item.grade))),
+    inspection_date: '',
+    inspector_name: '',
+    inspection_location: '',
+    grade: '',
   }
   const changeBatchMetadata = (values: Partial<BatchInspectionMetadata>) => {
     setBatchMetadataDraft({ ...batchMetadata, registration_id: selectedRegistrationId, ...values })
@@ -759,27 +755,31 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
   const applyBatchMetadata = async (event: React.FormEvent) => {
     event.preventDefault()
     if (!selectedRegistration || batchMetadataBusy) return
-    if (!batchMetadata.inspection_date) return setNotice({ type: 'error', text: '一括設定する検査日を入力してください。' })
-    if (!batchMetadata.inspector_name) return setNotice({ type: 'error', text: '一括設定する検査員を選択してください。' })
-    if (!batchMetadata.inspection_location) return setNotice({ type: 'error', text: '一括設定する検査場所を選択してください。' })
-    if (!batchMetadata.grade) return setNotice({ type: 'error', text: '一括設定する等級を選択してください。' })
-    if (!selectedRegistrationRecords.every((item) => isGradeAllowedForBrand(item.brand ?? '', batchMetadata.grade))) return setNotice({ type: 'error', text: '対象の銘柄に設定できない等級が選択されています。' })
+    const selectedFields = [
+      batchMetadata.inspection_date && '検査日',
+      batchMetadata.inspector_name && '検査員',
+      batchMetadata.inspection_location && '検査場所',
+      batchMetadata.grade && '等級',
+    ].filter(Boolean)
+    if (selectedFields.length === 0) return setNotice({ type: 'error', text: '反映する項目を1つ以上入力してください。' })
+    if (batchMetadata.grade && !selectedRegistrationRecords.every((item) => isGradeAllowedForBrand(item.brand ?? '', batchMetadata.grade))) return setNotice({ type: 'error', text: '対象の銘柄に設定できない等級が選択されています。' })
 
     setBatchMetadataBusy(true)
     setNotice(null)
     const { error } = await supabase.rpc('flexcon_set_inspection_registration_metadata', {
       p_worker_id: workerId,
       p_registration_id: selectedRegistration.id,
-      p_inspection_date: batchMetadata.inspection_date,
-      p_inspector_name: batchMetadata.inspector_name,
-      p_inspection_location: batchMetadata.inspection_location,
-      p_grade: batchMetadata.grade,
+      p_inspection_date: batchMetadata.inspection_date || null,
+      p_inspector_name: batchMetadata.inspector_name || null,
+      p_inspection_location: batchMetadata.inspection_location || null,
+      p_grade: batchMetadata.grade || null,
     })
     setBatchMetadataBusy(false)
     if (error) return setNotice({ type: 'error', text: error.message })
 
     setDetailDrafts({})
-    setNotice({ type: 'success', text: `登録No. ${selectedRegistration.registration_no}の検査日・検査員・検査場所・等級を一括設定しました。` })
+    setBatchMetadataDraft({ registration_id: selectedRegistration.id, inspection_date: '', inspector_name: '', inspection_location: '', grade: '' })
+    setNotice({ type: 'success', text: `登録No. ${selectedRegistration.registration_no}の${selectedFields.join('・')}を一括設定しました。` })
     setVersion((value) => value + 1)
   }
 
@@ -1371,10 +1371,10 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
     {!readOnly && selectedRegistration && <section className="section-band inspection-batch-metadata">
       <div className="section-title"><div><h2>検査情報を一括設定</h2><span>この登録の推フレ・バラ・紙袋すべてに反映</span></div></div>
       <form className="inspection-batch-metadata-form" onSubmit={(event) => void applyBatchMetadata(event)}>
-        <label>検査日<JapaneseDateInput className={!batchMetadata.inspection_date ? 'inspection-missing' : ''} value={batchMetadata.inspection_date} disabled={batchMetadataBusy} onChange={(inspection_date) => changeBatchMetadata({ inspection_date })} required /></label>
-        <label>検査員<select className={!batchMetadata.inspector_name ? 'inspection-missing' : ''} value={batchMetadata.inspector_name} disabled={batchMetadataBusy} onChange={(event) => changeBatchMetadata({ inspector_name: event.target.value })} required><option value="">未選択</option>{inspectorOptions.map((option) => <option key={option.id} value={option.name}>{option.name}</option>)}</select></label>
-        <label>検査場所<select className={!batchMetadata.inspection_location ? 'inspection-missing' : ''} value={batchMetadata.inspection_location} disabled={batchMetadataBusy} onChange={(event) => changeBatchMetadata({ inspection_location: event.target.value })} required><option value="">未選択</option>{locationOptions.map((option) => <option key={option.id} value={option.name}>{option.name}</option>)}</select></label>
-        <label>等級<select className={!batchMetadata.grade ? 'inspection-missing' : ''} value={batchMetadata.grade} disabled={batchMetadataBusy} onChange={(event) => changeBatchMetadata({ grade: event.target.value })} required><option value="">未選択</option>{batchGradeOptions.map((option) => <option key={option.id} value={option.name}>{option.name}</option>)}</select></label>
+        <label>検査日<JapaneseDateInput value={batchMetadata.inspection_date} placeholder="変更なし" disabled={batchMetadataBusy} onChange={(inspection_date) => changeBatchMetadata({ inspection_date })} /></label>
+        <label>検査員<select value={batchMetadata.inspector_name} disabled={batchMetadataBusy} onChange={(event) => changeBatchMetadata({ inspector_name: event.target.value })}><option value="">変更なし</option>{inspectorOptions.map((option) => <option key={option.id} value={option.name}>{option.name}</option>)}</select></label>
+        <label>検査場所<select value={batchMetadata.inspection_location} disabled={batchMetadataBusy} onChange={(event) => changeBatchMetadata({ inspection_location: event.target.value })}><option value="">変更なし</option>{locationOptions.map((option) => <option key={option.id} value={option.name}>{option.name}</option>)}</select></label>
+        <label>等級<select value={batchMetadata.grade} disabled={batchMetadataBusy} onChange={(event) => changeBatchMetadata({ grade: event.target.value })}><option value="">変更なし</option>{batchGradeOptions.map((option) => <option key={option.id} value={option.name}>{option.name}</option>)}</select></label>
         <button className="primary-button" type="submit" disabled={batchMetadataBusy}><Save size={18} />{batchMetadataBusy ? '設定中...' : 'まとめて反映'}</button>
       </form>
     </section>}

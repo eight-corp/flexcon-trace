@@ -8,11 +8,12 @@ type DateProps = {
   className?: string
   disabled?: boolean
   required?: boolean
+  placeholder?: string
   'aria-label'?: string
   'aria-invalid'?: boolean
 }
 
-export function JapaneseDateInput({ value, onChange, className, disabled, required, 'aria-label': ariaLabel, 'aria-invalid': ariaInvalid }: DateProps) {
+export function JapaneseDateInput({ value, onChange, className, disabled, required, placeholder = '令和8年9月24日', 'aria-label': ariaLabel, 'aria-invalid': ariaInvalid }: DateProps) {
   const [draft, setDraft] = useState<{ source: string; text: string; invalid: boolean } | null>(null)
   const text = draft?.source === value ? draft.text : formatJapaneseDate(value)
   const invalid = draft?.source === value && draft.invalid
@@ -26,7 +27,7 @@ export function JapaneseDateInput({ value, onChange, className, disabled, requir
   }
 
   return <span className={`japanese-date-input ${className ?? ''}`}>
-    <input type="text" value={text} placeholder="令和8年9月24日" aria-label={ariaLabel} aria-invalid={invalid || ariaInvalid} aria-required={required} disabled={disabled} onChange={(event) => setDraft({ source: value, text: event.target.value, invalid: false })} onBlur={commit} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur() } }} />
+    <input type="text" value={text} placeholder={placeholder} aria-label={ariaLabel} aria-invalid={invalid || ariaInvalid} aria-required={required} disabled={disabled} onChange={(event) => setDraft({ source: value, text: event.target.value, invalid: false })} onBlur={commit} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur() } }} />
     <span className="japanese-date-picker"><CalendarDays size={17} aria-hidden="true" /><input type="date" value={value} aria-label={`${ariaLabel ?? '日付'}をカレンダーから選択`} tabIndex={0} disabled={disabled} onChange={(event) => { setDraft(null); onChange(event.target.value) }} /></span>
     {invalid && <span className="japanese-date-error" role="alert">和暦の日付を確認してください</span>}
   </span>
