@@ -41,7 +41,7 @@ inventory_delta as (
   union all
   select coalesce(registration.warehouse_id, unassigned.id),
     case when right(btrim(auth_record.prefecture), 1) in ('都', '道', '府', '県') then btrim(auth_record.prefecture) else btrim(auth_record.prefecture) || '県' end,
-    btrim(flexcon.brand), coalesce(nullif(btrim(flexcon.grade), ''), '未検査'),
+    btrim(flexcon.brand), coalesce(nullif(btrim(flexcon.grade), ''), '検査前'),
     case when flexcon.record_kind = 'bulk' then 'kg' else '本' end,
     case when flexcon.record_kind = 'bulk' then flexcon.quantity_kg::numeric else 1::numeric end
   from public.flexcon_inspection_flexcons as flexcon
@@ -54,7 +54,7 @@ inventory_delta as (
   union all
   select coalesce(registration.warehouse_id, unassigned.id),
     case when right(btrim(auth_record.prefecture), 1) in ('都', '道', '府', '県') then btrim(auth_record.prefecture) else btrim(auth_record.prefecture) || '県' end,
-    btrim(paper.brand), coalesce(nullif(btrim(paper.grade), ''), '未検査'), '袋', paper.bag_count::numeric
+    btrim(paper.brand), coalesce(nullif(btrim(paper.grade), ''), '検査前'), '袋', paper.bag_count::numeric
   from public.flexcon_inspection_paper_bags as paper
   join public.flexcon_inspection_registrations as registration on registration.id = paper.registration_id
   join public.flexcon_authorizations as auth_record on auth_record.id = paper.authorization_id
@@ -138,7 +138,7 @@ union all
 select 'inspection-flexcon:' || flexcon.id::text, null::bigint, 'inspection_flexcon', 'inbound',
   flexcon.purchase_date, coalesce(worker.worker_name, '登録者不明'), auth_record.full_name, '',
   case when right(btrim(auth_record.prefecture), 1) in ('都', '道', '府', '県') then btrim(auth_record.prefecture) else btrim(auth_record.prefecture) || '県' end,
-  btrim(flexcon.brand), coalesce(nullif(btrim(flexcon.grade), ''), '未検査'),
+  btrim(flexcon.brand), coalesce(nullif(btrim(flexcon.grade), ''), '検査前'),
   case when flexcon.record_kind = 'bulk' then flexcon.quantity_kg::numeric else 1::numeric end,
   case when flexcon.record_kind = 'bulk' then 'kg' else '本' end,
   null::uuid, coalesce(registration.warehouse_id, unassigned.id), '検査記録', coalesce(warehouse.name, unassigned.name), flexcon.created_at, null::numeric
@@ -153,7 +153,7 @@ union all
 select 'inspection-paper:' || paper.id::text, null::bigint, 'inspection_paper_bag', 'inbound',
   paper.purchase_date, coalesce(worker.worker_name, '登録者不明'), auth_record.full_name, '',
   case when right(btrim(auth_record.prefecture), 1) in ('都', '道', '府', '県') then btrim(auth_record.prefecture) else btrim(auth_record.prefecture) || '県' end,
-  btrim(paper.brand), coalesce(nullif(btrim(paper.grade), ''), '未検査'), paper.bag_count::numeric, '袋',
+  btrim(paper.brand), coalesce(nullif(btrim(paper.grade), ''), '検査前'), paper.bag_count::numeric, '袋',
   null::uuid, coalesce(registration.warehouse_id, unassigned.id), '検査記録', coalesce(warehouse.name, unassigned.name), paper.created_at, null::numeric
 from public.flexcon_inspection_paper_bags as paper
 join public.flexcon_inspection_registrations as registration on registration.id = paper.registration_id

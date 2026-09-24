@@ -378,7 +378,8 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
   }
   const gradesFor = (productName: string) => otherProductNames.has(productName)
     ? []
-    : [{ id: 'inventory-uninspected', option_type: 'grade', name: '未検査', description: null, active: true, sort_order: -1, created_at: '', updated_at: '' } satisfies InspectionOption,
+    : [{ id: 'inventory-before-inspection', option_type: 'grade', name: '検査前', description: null, active: true, sort_order: -2, created_at: '', updated_at: '' } satisfies InspectionOption,
+      { id: 'inventory-uninspected', option_type: 'grade', name: '未検査', description: null, active: true, sort_order: -1, created_at: '', updated_at: '' } satisfies InspectionOption,
       ...productOptions.filter((item) => item.option_type === 'grade' && (productName === '飼料用玄米' ? item.name === '合格' : item.name !== '合格'))]
   const addProductNames = productNamesFor(form.origin)
   const addGrades = gradesFor(form.productName)
