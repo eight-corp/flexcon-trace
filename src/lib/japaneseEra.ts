@@ -31,19 +31,15 @@ export function formatJapaneseDate(value: string | null | undefined) {
   const era = eraForDate(parts.iso)
   if (!era) return value
   const eraYear = parts.year - era.firstYear + 1
-  return `${era.name}${eraYear === 1 ? '元' : eraYear}/${String(parts.month).padStart(2, '0')}/${String(parts.day).padStart(2, '0')}`
+  return `${era.name}${eraYear === 1 ? '元' : eraYear}年${parts.month}月${parts.day}日`
 }
 
 export function formatJapaneseDateLong(value: string | null | undefined) {
-  const compact = formatJapaneseDate(value)
-  const match = compact.match(/^(令和|平成|昭和|大正|明治)(元|\d+)\/(\d{2})\/(\d{2})$/)
-  return match ? `${match[1]} ${match[2]} 年 ${Number(match[3])} 月 ${Number(match[4])} 日` : compact
+  return formatJapaneseDate(value)
 }
 
 export function formatJapaneseDateForFilename(value: string) {
-  const compact = formatJapaneseDate(value)
-  const match = compact.match(/^([^/]+)\/(\d{2})\/(\d{2})$/)
-  return match ? `${match[1]}年${match[2]}月${match[3]}日` : compact
+  return formatJapaneseDate(value)
 }
 
 export function formatJapaneseDateTime(value: string | null | undefined) {

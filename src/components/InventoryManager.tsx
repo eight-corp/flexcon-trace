@@ -331,7 +331,6 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
   const [balances, setBalances] = useState<InventoryBalance[]>([])
   const [form, setForm] = useState<MovementForm>(emptyForm)
   const [editing, setEditing] = useState<InventoryMovement | null>(null)
-  const [editMode, setEditMode] = useState<MovementMode>('inbound')
   const [editForm, setEditForm] = useState<MovementForm>(emptyForm)
   const [search, setSearch] = useState('')
   const [sort, setSort] = useState<{ key: InventoryColumn; direction: SortDirection } | null>(null)
@@ -767,7 +766,6 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
 
   const beginEdit = (movement: InventoryMovement) => {
     setEditing(movement)
-    setEditMode(modeForMovement(movement))
     setEditForm({ movementDate: movement.movement_date, cropYear: movement.crop_year == null ? '' : String(movement.crop_year), settlementNo: movement.settlement_no, origin: movement.origin, productName: movement.product_name, grade: movement.grade, quantity: String(movement.quantity), unit: movement.unit, fromWarehouseId: movement.from_warehouse_id ?? '', toWarehouseId: movement.to_warehouse_id ?? '', note: movement.note ?? '' })
     setNotice(null)
   }
@@ -775,6 +773,7 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
   const saveEdit = async (event: React.FormEvent) => {
     event.preventDefault()
     if (!editing || busy || !canOperate) return
+    const editMode = modeForMovement(editing)
     const errorText = validateForm(editForm, editMode, editProductNames, editGrades)
     if (errorText) return setNotice({ type: 'error', text: errorText })
     setBusy(true); setNotice(null)
@@ -1034,8 +1033,8 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
     {editing && <div className="modal-backdrop" role="presentation"><section className="registration-modal inventory-edit-modal" role="dialog" aria-modal="true" aria-labelledby="inventory-edit-title">
       <div className="modal-header"><div><h2 id="inventory-edit-title">入出庫記録を編集</h2><p>登録時の作業者：{editing.worker_name}</p></div><button className="icon-button" type="button" title="閉じる" aria-label="編集画面を閉じる" onClick={() => setEditing(null)} disabled={busy}><X size={20} /></button></div>
       {notice?.type === 'error' && <div className="notice error" role="alert">{notice.text}</div>}
-      <div className="inventory-mode-switch" role="group" aria-label="移動区分">{(['inbound', 'outbound', 'transfer'] as MovementMode[]).map((mode) => <button key={mode} type="button" className={editMode === mode ? 'active' : ''} onClick={() => { setEditMode(mode); setEditForm((current) => ({ ...current, fromWarehouseId: mode === 'inbound' ? '' : current.fromWarehouseId, toWarehouseId: mode === 'outbound' ? '' : current.toWarehouseId })) }}>{mode === 'inbound' ? '入庫' : mode === 'outbound' ? '出庫' : '倉庫間移動'}</button>)}</div>
-      <form className="form-grid inventory-edit-form" noValidate onSubmit={(event) => void saveEdit(event)}>{renderMovementFields(editForm, setEditForm, editMode, editProductNames, editGrades)}<div className="modal-actions"><button className="secondary-button" type="button" onClick={() => setEditing(null)} disabled={busy}>取消</button><button className="primary-button" type="submit" disabled={busy}><Save size={18} />{busy ? '保存中...' : '変更を保存'}</button></div></form>
+      <div className="inventory-edit-mode">区分：<strong>{movementTypeLabel(editing)}</strong></div>
+      <form className="form-grid inventory-edit-form" noValidate onSubmit={(event) => void saveEdit(event)}>{renderMovementFields(editForm, setEditForm, modeForMovement(editing), editProductNames, editGrades)}<div className="modal-actions"><button className="secondary-button" type="button" onClick={() => setEditing(null)} disabled={busy}>取消</button><button className="primary-button" type="submit" disabled={busy}><Save size={18} />{busy ? '保存中...' : '変更を保存'}</button></div></form>
     </section></div>}
     {statementEditForm && <div className="modal-backdrop" role="presentation"><section className="registration-modal inventory-statement-edit-modal" role="dialog" aria-modal="true" aria-labelledby="statement-edit-title">
       <div className="modal-header"><div><h2 id="statement-edit-title">仕切り書をまとめて編集</h2><p>明細 {statementEditForm.rows.length}行</p></div><button className="icon-button" type="button" title="閉じる" aria-label="編集画面を閉じる" onClick={() => setStatementEditForm(null)} disabled={busy}><X size={20} /></button></div>

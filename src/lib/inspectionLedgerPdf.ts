@@ -158,7 +158,7 @@ function drawTextInBox(
 }
 
 function ledgerDate(value: string) {
-  return formatJapaneseDate(value).replaceAll('/', '・')
+  return formatJapaneseDate(value)
 }
 
 function cropType(brand: string) {
