@@ -523,17 +523,24 @@
 .memo-page { min-height: 0; display: flex; flex-direction: column; }
 .memo-actions { display: flex; justify-content: flex-end; margin-bottom: 12px; }
 .memo-table-wrap { flex: 1 1 auto; min-height: 160px; overflow: auto; border: 1px solid var(--line); border-radius: 7px; background: #fff; }
-.memo-table { width: 100%; min-width: 650px; table-layout: fixed; border-collapse: separate; border-spacing: 0; font-size: 13px; }
+.memo-table { width: 100%; min-width: 760px; table-layout: fixed; border-collapse: separate; border-spacing: 0; font-size: 13px; }
 .memo-table th, .memo-table td { height: 36px; padding: 5px 8px; border-right: 1px solid #e5e8e5; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
 .memo-table th { position: sticky; top: 0; z-index: 2; background: #eef2ee; text-align: center; }
 .memo-table th:nth-child(1) { width: 70px; }
 .memo-table th:nth-child(2) { width: 205px; }
 .memo-table th:nth-child(3) { width: 130px; }
+.memo-table th:nth-child(4) { width: 120px; }
+.memo-table .memo-visibility-cell > div { display: flex; align-items: center; justify-content: center; gap: 6px; }
+.memo-table .memo-visibility-cell .toggle-switch { width: 40px; height: 23px; padding: 2px; }
+.memo-table .memo-visibility-cell .toggle-switch span { width: 19px; height: 19px; }
+.memo-table .memo-visibility-cell .toggle-switch[aria-checked="true"] span { transform: translateX(17px); }
+.memo-table .memo-visibility-cell .toggle-switch:disabled { cursor: default; opacity: .55; }
 .memo-table tbody tr:not(:has(.empty-state)) { cursor: pointer; }
 .memo-table tbody tr:not(:has(.empty-state)):hover, .memo-table tbody tr:focus { background: var(--green-soft); }
 .memo-preview { display: block; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .memo-dialog { width: min(100%, 760px); }
 .memo-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 14px; }
+.memo-visibility-field { margin-bottom: 14px; }
 .memo-body-field { display: grid; gap: 6px; font-weight: 700; }
 .memo-body-field textarea { width: 100%; min-height: 220px; resize: vertical; font-weight: 400; }
 .memo-full-text { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.7; }

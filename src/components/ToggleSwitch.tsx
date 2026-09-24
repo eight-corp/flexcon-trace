@@ -2,9 +2,10 @@ type Props = {
   checked: boolean
   label: string
   onChange: () => void
+  disabled?: boolean
 }
 
-export function ToggleSwitch({ checked, label, onChange }: Props) {
+export function ToggleSwitch({ checked, label, onChange, disabled = false }: Props) {
   return (
     <button
       className="toggle-switch"
@@ -14,6 +15,7 @@ export function ToggleSwitch({ checked, label, onChange }: Props) {
       aria-label={label}
       title={label}
       onClick={onChange}
+      disabled={disabled}
     >
       <span />
     </button>
