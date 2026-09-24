@@ -354,7 +354,7 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
       supabase.from('flexcon_inspection_options').select('*').eq('option_type', 'warehouse').order('sort_order').order('name'),
       supabase.from('flexcon_inspection_options').select('*').in('option_type', ['origin', 'brand', 'brand_aomori', 'brand_iwate', 'shipment_product', 'grade']).eq('active', true).order('sort_order').order('name'),
       supabase.from('flexcon_inventory_ledger').select('*')
-        .not('source_type', 'in', '(inspection_flexcon,inspection_paper_bag)')
+        .not('source_type', 'in', '(inspection_flexcon,inspection_paper_bag,shipment_record)')
         .order('movement_date', { ascending: false }).order('created_at', { ascending: false }).order('id', { ascending: true }).limit(1000),
       supabase.from('flexcon_inventory_balances').select('*').order('warehouse_name').order('origin').order('product_name').order('grade').order('unit'),
     ]).then(([warehouseResult, productResult, movementResult, balanceResult]) => {
