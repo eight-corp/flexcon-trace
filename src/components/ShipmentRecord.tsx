@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { RotateCcw, Send, UserRound } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import type { Destination, InspectionOption, TransportProfile } from '../types'
+import type { Destination, InspectionOption } from '../types'
 import { ShipmentRecordItemsEditor } from './ShipmentRecordItemsEditor'
 import { type ShipmentRecordItemDraft, validateShipmentRecordItems } from '../lib/shipmentRecordValidation'
 
@@ -20,15 +20,11 @@ function currentLocalDateTime() {
 export function ShipmentRecord({ workerId, workerName, onRegistered }: Props) {
   const [destinations, setDestinations] = useState<Destination[]>([])
   const [warehouses, setWarehouses] = useState<InspectionOption[]>([])
-  const [transportProfiles, setTransportProfiles] = useState<TransportProfile[]>([])
   const [shipmentProducts, setShipmentProducts] = useState<InspectionOption[]>([])
   const [items, setItems] = useState<ShipmentRecordItemDraft[]>([])
   const [shippedAt, setShippedAt] = useState(currentLocalDateTime)
   const [destinationId, setDestinationId] = useState('')
   const [fromWarehouseId, setFromWarehouseId] = useState('')
-  const [transportProfileId, setTransportProfileId] = useState('')
-  const [driverName, setDriverName] = useState('')
-  const [vehicleNo, setVehicleNo] = useState('')
   const [purchasePrice, setPurchasePrice] = useState('')
   const [note, setNote] = useState('')
   const [editorVersion, setEditorVersion] = useState(0)
@@ -39,16 +35,14 @@ export function ShipmentRecord({ workerId, workerName, onRegistered }: Props) {
     void Promise.all([
       supabase.from('flexcon_destinations').select('*').eq('active', true).order('name'),
       supabase.from('flexcon_inspection_options').select('*').eq('option_type', 'warehouse').order('sort_order').order('name'),
-      supabase.from('flexcon_transport_profiles').select('*').eq('active', true).order('company_name'),
       supabase.from('flexcon_inspection_options').select('*').in('option_type', ['brand', 'brand_aomori', 'brand_iwate', 'shipment_product', 'grade']).eq('active', true).order('sort_order').order('name'),
-    ]).then(([destinationResult, warehouseResult, transportResult, productResult]) => {
-      if (destinationResult.error || warehouseResult.error || transportResult.error || productResult.error) {
+    ]).then(([destinationResult, warehouseResult, productResult]) => {
+      if (destinationResult.error || warehouseResult.error || productResult.error) {
         setNotice({ type: 'error', text: '出荷に必要なマスタを取得できませんでした。' })
         return
       }
       setDestinations((destinationResult.data ?? []) as Destination[])
       setWarehouses((warehouseResult.data ?? []) as InspectionOption[])
-      setTransportProfiles((transportResult.data ?? []) as TransportProfile[])
       setShipmentProducts((productResult.data ?? []) as InspectionOption[])
       if (!productResult.data?.some((item) => item.option_type !== 'grade')) setNotice({ type: 'error', text: '種類がマスタに登録されていません。' })
     })
@@ -65,9 +59,6 @@ export function ShipmentRecord({ workerId, workerName, onRegistered }: Props) {
     setShippedAt(currentLocalDateTime())
     setDestinationId('')
     setFromWarehouseId('')
-    setTransportProfileId('')
-    setDriverName('')
-    setVehicleNo('')
     setPurchasePrice('')
     setNote('')
   }
@@ -78,9 +69,6 @@ export function ShipmentRecord({ workerId, workerName, onRegistered }: Props) {
     if (!shippedAt || !Number.isFinite(new Date(shippedAt).getTime())) return setNotice({ type: 'error', text: '出荷日時を入力してください。' })
     if (!destinationId) return setNotice({ type: 'error', text: '納品先を選択してください。' })
     if (!fromWarehouseId) return setNotice({ type: 'error', text: '出庫元倉庫を選択してください。' })
-    if (!transportProfileId) return setNotice({ type: 'error', text: '運送会社を選択してください。' })
-    if (!driverName.trim()) return setNotice({ type: 'error', text: 'ドライバー名を入力してください。' })
-    if (!vehicleNo.trim()) return setNotice({ type: 'error', text: '車両番号を入力してください。' })
     const itemError = validateShipmentRecordItems(items, shipmentProducts)
     if (itemError) return setNotice({ type: 'error', text: itemError })
     const price = purchasePrice.trim() === '' ? null : Number(purchasePrice)
@@ -91,10 +79,10 @@ export function ShipmentRecord({ workerId, workerName, onRegistered }: Props) {
     const { error } = await supabase.rpc('flexcon_register_inventory_record', {
       p_worker_id: workerId,
       p_destination_id: destinationId,
-      p_transport_profile_id: transportProfileId,
+      p_transport_profile_id: null,
       p_shipped_at: new Date(shippedAt).toISOString(),
-      p_driver_name: driverName.trim(),
-      p_vehicle_no: vehicleNo.trim(),
+      p_driver_name: null,
+      p_vehicle_no: null,
       p_purchase_price_per_bale: price,
       p_from_warehouse_id: fromWarehouseId,
       p_note: note.trim() || null,
@@ -110,8 +98,6 @@ export function ShipmentRecord({ workerId, workerName, onRegistered }: Props) {
     if (error) return setNotice({ type: 'error', text: error.message })
     setItems([])
     setEditorVersion((version) => version + 1)
-    setDriverName('')
-    setVehicleNo('')
     setPurchasePrice('')
     setNote('')
     setShippedAt(currentLocalDateTime())
@@ -135,9 +121,6 @@ export function ShipmentRecord({ workerId, workerName, onRegistered }: Props) {
       <label className="shipment-form-row"><span>出荷日時</span><input className={!shippedAt ? 'shipment-required-missing' : ''} type="datetime-local" step={60} value={shippedAt} onChange={(event) => setShippedAt(event.target.value)} required /></label>
       <label className="shipment-form-row"><span>納品先</span><select className={!destinationId ? 'shipment-required-missing' : ''} value={destinationId} onChange={(event) => setDestinationId(event.target.value)} required><option value="">選択してください</option>{destinations.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
       <label className="shipment-form-row"><span>出庫元倉庫</span><select className={!fromWarehouseId ? 'shipment-required-missing' : ''} value={fromWarehouseId} onChange={(event) => setFromWarehouseId(event.target.value)} required><option value="">選択してください</option>{warehouses.map((item) => <option key={item.id} value={item.id}>{item.name}{item.active || item.name === '倉庫未設定' ? '' : '（無効）'}</option>)}</select></label>
-      <label className="shipment-form-row"><span>運送会社</span><select className={!transportProfileId ? 'shipment-required-missing' : ''} value={transportProfileId} onChange={(event) => setTransportProfileId(event.target.value)} required><option value="">選択してください</option>{transportProfiles.map((item) => <option key={item.id} value={item.id}>{item.company_name}</option>)}</select></label>
-      <label className="shipment-form-row"><span>ドライバー名</span><input className={!driverName.trim() ? 'shipment-required-missing' : ''} value={driverName} onChange={(event) => setDriverName(event.target.value)} required /></label>
-      <label className="shipment-form-row"><span>車両番号</span><input className={!vehicleNo.trim() ? 'shipment-required-missing' : ''} value={vehicleNo} onChange={(event) => setVehicleNo(event.target.value)} required placeholder="例：岩手 100 あ 12-34" /></label>
       <label className="shipment-form-row"><span>仕入値（任意・1俵当たり）</span><input type="number" min="0" step="1" inputMode="decimal" value={purchasePrice} onChange={(event) => setPurchasePrice(event.target.value)} /></label>
       <label className="shipment-form-row"><span>備考（任意）</span><textarea rows={2} value={note} onChange={(event) => setNote(event.target.value)} placeholder="申し送りなど" /></label>
     </form>

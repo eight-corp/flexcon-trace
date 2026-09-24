@@ -530,10 +530,10 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
       p_worker_id: workerId,
       p_shipment_id: editing.id,
       p_destination_id: destinationId,
-      p_transport_profile_id: transportProfileId,
+      p_transport_profile_id: editing.shipment_kind === 'manual_record' ? null : transportProfileId,
       p_shipped_at: new Date(shippedAt).toISOString(),
-      p_driver_name: driverName.trim(),
-      p_vehicle_no: vehicleNo.trim(),
+      p_driver_name: editing.shipment_kind === 'manual_record' ? null : driverName.trim(),
+      p_vehicle_no: editing.shipment_kind === 'manual_record' ? null : vehicleNo.trim(),
       p_purchase_price_per_bale: purchasePrice.trim() === '' ? null : Number(purchasePrice),
       p_note: note.trim() || null,
     }
@@ -818,7 +818,7 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
                   </select>
                 </label>
               </div>
-              <label>運送会社
+              {editing.shipment_kind !== 'manual_record' && <><label>運送会社
                 <select value={transportProfileId} onChange={(e) => setTransportProfileId(e.target.value)} required>
                   <option value="">選択してください</option>
                   {transportProfiles.map((item) => <option key={item.id} value={item.id} disabled={!item.active}>{item.company_name}{item.active ? '' : '（無効）'}</option>)}
@@ -830,7 +830,7 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
                   <label>ドライバー名<input value={driverName} onChange={(e) => setDriverName(e.target.value)} required /></label>
                   <label>車両番号<input value={vehicleNo} onChange={(e) => setVehicleNo(e.target.value)} required /></label>
                 </div>
-              </fieldset>
+              </fieldset></>}
               <label>仕入値（任意・1俵当たり）<input type="number" min="0" step="1" inputMode="decimal" value={purchasePrice} onChange={(e) => setPurchasePrice(e.target.value)} /></label>
               <label>備考（任意）<textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} /></label>
               <div className="modal-actions">
