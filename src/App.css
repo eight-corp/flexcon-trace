@@ -265,12 +265,14 @@
 .inventory-entry-form { display: grid; grid-template-columns: 150px 136px 100px 100px 90px minmax(130px, 1fr) 75px 75px 60px 100px 100px auto; align-items: end; gap: 8px; }
 .inventory-entry-form label { min-width: 0; margin: 0; font-size: 12px; }
 .inventory-entry-form input, .inventory-entry-form select { width: 100%; min-width: 0; height: 34px; min-height: 34px; }
+.inventory-entry-form .inventory-field-note { grid-column: 1 / -2; }
+.inventory-entry-form .inventory-field-note textarea { width: 100%; min-width: 0; min-height: 34px; height: 34px; resize: vertical; }
 .inventory-entry-form input[readonly] { background: #edf1ee; color: #4b5650; }
 .inventory-entry-form .primary-button { min-height: 34px; height: 34px; white-space: nowrap; }
 .inventory-view-tabs { flex: 0 0 auto; align-self: flex-start; margin-bottom: 8px; }
 .inventory-table-wrap { flex: 1; min-height: 0; overflow: auto; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
 .inventory-table { width: 100%; min-width: 820px; border-collapse: collapse; font-size: 13px; }
-.inventory-history-table { min-width: 1250px; }
+.inventory-history-table { min-width: 1410px; }
 .inventory-table th, .inventory-table td { height: 34px; padding: 5px 8px; border-right: 1px solid #e4e8e5; border-bottom: 1px solid var(--line); }
 .inventory-table th { position: sticky; top: 0; z-index: 2; background: #eef2ee; color: #3d4840; white-space: nowrap; }
 .inventory-table th.inventory-filter-heading { padding: 0; }
@@ -283,8 +285,11 @@
 .inventory-actions-cell { padding: 2px 5px !important; }
 .inventory-row-actions { display: flex; align-items: center; justify-content: center; gap: 4px; }
 .inventory-actions-cell .icon-button { width: 30px; height: 30px; margin: 0; }
+.inventory-note-cell { min-width: 160px; max-width: 260px; }
+.inventory-note-cell span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .inventory-edit-modal { width: min(100%, 760px); }
 .inventory-edit-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.inventory-edit-form .inventory-field-note { grid-column: 1 / -1; }
 .inventory-edit-form .modal-actions { grid-column: 1 / -1; }
 .inventory-statement-edit-modal { width: min(100%, 1080px); }
 .inventory-statement-edit-form { display: grid; gap: 12px; min-height: 0; }
@@ -951,6 +956,7 @@ table thead th { text-align: center !important; }
   .inventory-entry-form .inventory-field-origin,
   .inventory-entry-form .inventory-field-product,
   .inventory-entry-form .inventory-field-grade { grid-column: span 2; }
+  .inventory-entry-form .inventory-field-note { grid-column: 1 / -1; }
   .inventory-entry-form .primary-button { grid-column: 1 / -1; width: 100%; }
   .inventory-entry-toolbar { align-items: stretch; flex-direction: column; }
   .statement-reader-section { grid-template-columns: 1fr; text-align: left; }

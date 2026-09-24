@@ -10,7 +10,7 @@ type MovementMode = 'inbound' | 'outbound' | 'transfer'
 type InventoryMovementType = MovementMode | 'settlement'
 type ViewMode = 'history' | 'balance' | 'statement-reader' | 'statement-list'
 type SortDirection = 'asc' | 'desc'
-type InventoryColumn = 'movementDate' | 'cropYear' | 'movementType' | 'settlementNo' | 'workerName' | 'producerName' | 'origin' | 'productName' | 'grade' | 'quantity' | 'unit' | 'purchasePrice' | 'movementFrom' | 'movementTo'
+type InventoryColumn = 'movementDate' | 'cropYear' | 'movementType' | 'settlementNo' | 'workerName' | 'producerName' | 'origin' | 'productName' | 'grade' | 'quantity' | 'unit' | 'purchasePrice' | 'movementFrom' | 'movementTo' | 'note'
 type InventoryMovement = {
   id: string
   registration_order?: number
@@ -27,6 +27,7 @@ type InventoryMovement = {
   quantity: number
   unit: string
   purchase_price: number | null
+  note: string | null
   from_warehouse_id: string | null
   to_warehouse_id: string | null
   movement_from: string
@@ -34,7 +35,7 @@ type InventoryMovement = {
 }
 type InventoryBalance = { warehouse_id: string | null; warehouse_name: string; crop_year: number | null; origin: string; product_name: string; grade: string; quantity: number; unit: string }
 type InventoryBalanceRow = { warehouseId: string | null; warehouseName: string; cropYear: number | null; origin: string; productName: string; unit: string; quantities: Record<string, number> }
-type MovementForm = { movementDate: string; cropYear: string; settlementNo: string; origin: string; productName: string; grade: string; quantity: string; unit: string; fromWarehouseId: string; toWarehouseId: string }
+type MovementForm = { movementDate: string; cropYear: string; settlementNo: string; origin: string; productName: string; grade: string; quantity: string; unit: string; fromWarehouseId: string; toWarehouseId: string; note: string }
 type PurchaseImportRecord = {
   settlement_no: string
   detail_no: number
@@ -94,6 +95,7 @@ const INVENTORY_COLUMNS: Array<{ key: InventoryColumn; label: string }> = [
   { key: 'purchasePrice', label: '仕入価格' },
   { key: 'movementFrom', label: '移動元' },
   { key: 'movementTo', label: '移動先' },
+  { key: 'note', label: '備考' },
 ]
 
 function today() {
@@ -103,7 +105,7 @@ function today() {
 }
 
 function emptyForm(): MovementForm {
-  return { movementDate: today(), cropYear: String(new Date().getFullYear()), settlementNo: '', origin: '', productName: '', grade: '', quantity: '', unit: 'kg', fromWarehouseId: '', toWarehouseId: '' }
+  return { movementDate: today(), cropYear: String(new Date().getFullYear()), settlementNo: '', origin: '', productName: '', grade: '', quantity: '', unit: 'kg', fromWarehouseId: '', toWarehouseId: '', note: '' }
 }
 
 function formatQuantity(value: number) {
@@ -240,6 +242,7 @@ function movementValue(movement: InventoryMovement, key: InventoryColumn) {
   if (key === 'purchasePrice') return movement.purchase_price == null ? '' : `${Number(movement.purchase_price).toLocaleString('ja-JP')}円`
   if (key === 'movementFrom') return movement.movement_from
   if (key === 'movementTo') return movement.source_type === 'settlement' && !movement.to_warehouse_id ? '移動先未指定' : movement.movement_to
+  if (key === 'note') return movement.note ?? ''
   if (key === 'grade') return movement.grade || '対象外'
   return movement[key]
 }
@@ -753,6 +756,7 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
       p_grade: otherProductNames.has(form.productName) ? '' : form.grade, p_quantity: Number(form.quantity), p_unit: form.unit,
       p_from_warehouse_id: movementMode === 'inbound' ? null : form.fromWarehouseId,
       p_to_warehouse_id: movementMode === 'outbound' ? null : form.toWarehouseId,
+      p_note: form.note.trim(),
     })
     setBusy(false)
     if (error) return setNotice({ type: 'error', text: error.message })
@@ -764,7 +768,7 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
   const beginEdit = (movement: InventoryMovement) => {
     setEditing(movement)
     setEditMode(modeForMovement(movement))
-    setEditForm({ movementDate: movement.movement_date, cropYear: movement.crop_year == null ? '' : String(movement.crop_year), settlementNo: movement.settlement_no, origin: movement.origin, productName: movement.product_name, grade: movement.grade, quantity: String(movement.quantity), unit: movement.unit, fromWarehouseId: movement.from_warehouse_id ?? '', toWarehouseId: movement.to_warehouse_id ?? '' })
+    setEditForm({ movementDate: movement.movement_date, cropYear: movement.crop_year == null ? '' : String(movement.crop_year), settlementNo: movement.settlement_no, origin: movement.origin, productName: movement.product_name, grade: movement.grade, quantity: String(movement.quantity), unit: movement.unit, fromWarehouseId: movement.from_warehouse_id ?? '', toWarehouseId: movement.to_warehouse_id ?? '', note: movement.note ?? '' })
     setNotice(null)
   }
 
@@ -781,6 +785,7 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
       p_quantity: Number(editForm.quantity), p_unit: editForm.unit,
       p_from_warehouse_id: editMode === 'inbound' ? null : editForm.fromWarehouseId,
       p_to_warehouse_id: editMode === 'outbound' ? null : editForm.toWarehouseId,
+      p_note: editForm.note.trim(),
     })
     setBusy(false)
     if (error) return setNotice({ type: 'error', text: error.message })
@@ -883,7 +888,7 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
   }
 
   const listMovements = useMemo(() => view === 'statement-list' ? movements.filter((movement) => movement.source_type === 'settlement') : movements, [movements, view])
-  const visibleInventoryColumns = useMemo(() => view === 'statement-list' ? INVENTORY_COLUMNS : INVENTORY_COLUMNS.filter((column) => column.key !== 'producerName'), [view])
+  const visibleInventoryColumns = useMemo(() => view === 'statement-list' ? INVENTORY_COLUMNS.filter((column) => column.key !== 'note') : INVENTORY_COLUMNS.filter((column) => column.key !== 'producerName'), [view])
   const filterValues = useMemo(() => Object.fromEntries(visibleInventoryColumns.map((column) => [column.key, [...new Set(listMovements.map((movement) => movementValue(movement, column.key)))].sort((a, b) => a.localeCompare(b, 'ja', { numeric: true }))])) as Record<InventoryColumn, string[]>, [listMovements, visibleInventoryColumns])
   const displayedMovements = useMemo(() => {
     const term = search.trim().toLowerCase()
@@ -962,6 +967,7 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
       <label className="inventory-field-unit">単位<select value={target.unit} onChange={(e) => setTarget((current) => ({ ...current, unit: e.target.value }))} required><option value="本">本</option><option value="袋">袋</option><option value="kg">kg</option></select></label>
       <label className="inventory-field-from">移動元{mode === 'inbound' ? <input value="外部" readOnly /> : <select value={target.fromWarehouseId} onChange={(e) => setTarget((current) => ({ ...current, fromWarehouseId: e.target.value }))} required><option value="">未選択</option>{warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}{warehouse.active ? '' : '（無効）'}</option>)}</select>}</label>
       <label className="inventory-field-to">移動先{mode === 'outbound' ? <input value="外部" readOnly /> : <select value={target.toWarehouseId} onChange={(e) => setTarget((current) => ({ ...current, toWarehouseId: e.target.value }))} required><option value="">未選択</option>{selectableToWarehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}{warehouse.active ? '' : '（無効）'}</option>)}</select>}</label>
+      <label className="inventory-field-note">備考<textarea rows={1} maxLength={500} value={target.note} onChange={(e) => setTarget((current) => ({ ...current, note: e.target.value }))} /></label>
     </>
   }
 
@@ -1006,7 +1012,7 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
             openMovementEditor(movement)
           } : undefined}>
             {isAdmin && <td className="inventory-selection-cell">{editable && <input type="checkbox" checked={selected} onChange={() => toggleMovement(movement)} aria-label={`${movement.movement_date} ${movement.product_name}を選択`} />}</td>}
-            <td>{movementValue(movement, 'movementDate')}</td><td className="numeric-cell">{movementValue(movement, 'cropYear')}</td><td><span className={`inventory-movement-badge ${movementBadgeClass(movement)}`}>{mode === 'inbound' ? <ArrowDownToLine size={14} /> : mode === 'outbound' ? <ArrowUpFromLine size={14} /> : <ArrowRightLeft size={14} />}{movementTypeLabel(movement)}</span></td><td>{movement.settlement_no}</td><td>{movement.worker_name}</td>{view === 'statement-list' && <td>{movement.producer_name}</td>}<td>{movement.origin}</td><td>{movement.product_name}</td><td>{movementValue(movement, 'grade')}</td><td className="numeric-cell">{formatQuantity(movement.quantity)}</td><td>{movement.unit}</td><td className="numeric-cell">{movementValue(movement, 'purchasePrice')}</td><td>{movement.movement_from}</td><td className={routeError ? 'inventory-route-error' : ''}>{routeError ? <span><AlertTriangle size={16} />移動先未指定</span> : movement.movement_to}</td>{canOperate && <td className="inventory-actions-cell">{editable && <div className="inventory-row-actions"><button className="icon-button" type="button" title={manual ? '入出庫記録を編集' : '仕切り書をまとめて編集'} aria-label={manual ? '入出庫記録を編集' : '仕切り書をまとめて編集'} disabled={busy} onClick={() => openMovementEditor(movement)}><Pencil size={17} /></button><button className="icon-button delete-icon" type="button" title={manual ? '入出庫記録を削除' : '仕切り書明細を削除'} aria-label={manual ? '入出庫記録を削除' : '仕切り書明細を削除'} disabled={busy} onClick={() => manual ? void deleteMovement(movement) : void deleteStatementLine(movement)}><Trash2 size={17} /></button></div>}</td>}
+            <td>{movementValue(movement, 'movementDate')}</td><td className="numeric-cell">{movementValue(movement, 'cropYear')}</td><td><span className={`inventory-movement-badge ${movementBadgeClass(movement)}`}>{mode === 'inbound' ? <ArrowDownToLine size={14} /> : mode === 'outbound' ? <ArrowUpFromLine size={14} /> : <ArrowRightLeft size={14} />}{movementTypeLabel(movement)}</span></td><td>{movement.settlement_no}</td><td>{movement.worker_name}</td>{view === 'statement-list' && <td>{movement.producer_name}</td>}<td>{movement.origin}</td><td>{movement.product_name}</td><td>{movementValue(movement, 'grade')}</td><td className="numeric-cell">{formatQuantity(movement.quantity)}</td><td>{movement.unit}</td><td className="numeric-cell">{movementValue(movement, 'purchasePrice')}</td><td>{movement.movement_from}</td><td className={routeError ? 'inventory-route-error' : ''}>{routeError ? <span><AlertTriangle size={16} />移動先未指定</span> : movement.movement_to}</td>{view === 'history' && <td className="inventory-note-cell" title={movement.note ?? undefined}><span>{movement.note ?? ''}</span></td>}{canOperate && <td className="inventory-actions-cell">{editable && <div className="inventory-row-actions"><button className="icon-button" type="button" title={manual ? '入出庫記録を編集' : '仕切り書をまとめて編集'} aria-label={manual ? '入出庫記録を編集' : '仕切り書をまとめて編集'} disabled={busy} onClick={() => openMovementEditor(movement)}><Pencil size={17} /></button><button className="icon-button delete-icon" type="button" title={manual ? '入出庫記録を削除' : '仕切り書明細を削除'} aria-label={manual ? '入出庫記録を削除' : '仕切り書明細を削除'} disabled={busy} onClick={() => manual ? void deleteMovement(movement) : void deleteStatementLine(movement)}><Trash2 size={17} /></button></div>}</td>}
           </tr>
         })}{displayedMovements.length === 0 && <tr><td className="empty-state" colSpan={visibleInventoryColumns.length + (canOperate ? 1 : 0) + (isAdmin ? 1 : 0)}>{view === 'statement-list' ? '登録された仕切書はありません' : '該当する入出庫記録はありません'}</td></tr>}</tbody>
       </table></div>
