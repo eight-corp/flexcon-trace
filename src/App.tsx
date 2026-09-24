@@ -1,5 +1,5 @@
 import { useEffect, useState, type CSSProperties } from 'react'
-import { Boxes, Camera, ClipboardList, FileSignature, History, House, List, LogOut, ScanLine, Settings2, Truck, Wheat } from 'lucide-react'
+import { ArrowLeft, Boxes, Camera, ClipboardList, FileSignature, History, House, List, LogOut, Settings2, Truck, Wheat } from 'lucide-react'
 import { AuthorizationManager } from './components/AuthorizationManager'
 import { InspectionRecordManager, type InspectionRecordTarget } from './components/InspectionRecordManager'
 import { InspectionOptionManager } from './components/InspectionOptionManager'
@@ -20,7 +20,7 @@ function isStatementApplication() {
 }
 
 function initialTab(): Tab {
-  return isStatementApplication() ? 'statement-reader' : 'scan'
+  return isStatementApplication() ? 'statement-reader' : 'inventory-history'
 }
 
 function App() {
@@ -46,8 +46,7 @@ function App() {
           return
         }
         setWorker(sessionWorker)
-        if (sessionWorker.role === 'viewer') setTab(statementApplication ? 'statement-list' : 'history')
-        else if (!statementApplication && sessionWorker.role !== 'admin') setTab('shipping-record')
+        if (statementApplication && sessionWorker.role === 'viewer') setTab('statement-list')
       })
       .finally(() => setLoading(false))
   }, [statementApplication])
@@ -127,7 +126,7 @@ function App() {
   const canOperate = worker.role !== 'viewer'
   const isAdmin = worker.role === 'admin'
   const roleName = isAdmin ? '管理者' : canOperate ? '作業者' : '閲覧者'
-  const navStyle = { '--nav-count': statementApplication ? (isAdmin ? 3 : canOperate ? 2 : 1) : isAdmin ? 8 : canOperate ? 6 : 3 } as CSSProperties
+  const navStyle = { '--nav-count': statementApplication ? (isAdmin ? 3 : canOperate ? 2 : 1) : isAdmin ? 7 : canOperate ? 6 : 3 } as CSSProperties
 
   return (
     <div className="app-shell">
@@ -152,18 +151,22 @@ function App() {
 
       <main className={`app-main ${statementApplication || tab === 'history' || tab === 'inventory-history' || tab === 'inventory' || tab === 'authorizations' || tab === 'inspections' ? 'app-main-wide' : ''} ${statementApplication ? 'app-main-statements' : ''}`}>
         {!statementApplication && tab === 'scan' && isAdmin && (
-          <ShipmentScanner
-            key={worker.worker_id}
-            workerId={worker.worker_id}
-            workerName={worker.worker_name}
-            onRegistered={() => setHistoryVersion((value) => value + 1)}
-          />
+          <>
+            <button className="secondary-button qr-scan-back" type="button" onClick={() => setTab('shipping-record')}><ArrowLeft size={18} />出荷記録へ戻る</button>
+            <ShipmentScanner
+              key={worker.worker_id}
+              workerId={worker.worker_id}
+              workerName={worker.worker_name}
+              onRegistered={() => setHistoryVersion((value) => value + 1)}
+            />
+          </>
         )}
         {!statementApplication && tab === 'shipping-record' && canOperate && (
           <ShipmentRecord
             workerId={worker.worker_id}
             workerName={worker.worker_name}
             onRegistered={() => setHistoryVersion((value) => value + 1)}
+            onOpenQrScanner={isAdmin ? () => setTab('scan') : undefined}
           />
         )}
         {!statementApplication && tab === 'history' && <ShipmentHistory refreshKey={historyVersion} workerId={worker.worker_id} isAdmin={worker.role === 'admin'} />}
@@ -224,22 +227,19 @@ function App() {
           </button>}
         </> : <>
         <button className={tab === 'inventory-history' ? 'active' : ''} onClick={() => setTab('inventory-history')}>
-          <List size={22} /><span>入出庫記録</span>
-        </button>
-        <button className={tab === 'inventory' ? 'active' : ''} onClick={() => setTab('inventory')}>
-          <Boxes size={22} /><span>在庫</span>
+          <List size={22} /><span>入出庫管理</span>
         </button>
         {canOperate && <button className={tab === 'inspections' ? 'active' : ''} onClick={() => { setInspectionAuthorizationId(null); setInspectionRegistrationId(null); setInspectionRecordTarget(null); setInspectionReadOnly(false); setTab('inspections') }}>
           <ClipboardList size={22} /><span>検査記録</span>
         </button>}
-        {canOperate && <button className={tab === 'shipping-record' ? 'active' : ''} onClick={() => setTab('shipping-record')}>
+        {canOperate && <button className={tab === 'shipping-record' || tab === 'scan' ? 'active' : ''} onClick={() => setTab('shipping-record')}>
           <Truck size={22} /><span>出荷記録</span>
-        </button>}
-        {isAdmin && <button className={tab === 'scan' ? 'active' : ''} onClick={() => setTab('scan')}>
-          <ScanLine size={22} /><span>出荷作業(QR)</span>
         </button>}
         <button className={tab === 'history' ? 'active' : ''} onClick={() => setTab('history')}>
           <History size={22} /><span>出荷履歴</span>
+        </button>
+        <button className={tab === 'inventory' ? 'active' : ''} onClick={() => setTab('inventory')}>
+          <Boxes size={22} /><span>在庫</span>
         </button>
         {canOperate && <button className={tab === 'authorizations' ? 'active' : ''} onClick={() => setTab('authorizations')}>
           <FileSignature size={22} /><span>委任状一覧</span>

@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { RotateCcw, Send, UserRound } from 'lucide-react'
+import { RotateCcw, ScanLine, Send, UserRound } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import type { Destination, InspectionOption } from '../types'
 import { ShipmentRecordItemsEditor } from './ShipmentRecordItemsEditor'
@@ -9,6 +9,7 @@ type Props = {
   workerId: string
   workerName: string
   onRegistered: () => void
+  onOpenQrScanner?: () => void
 }
 
 function currentLocalDateTime() {
@@ -17,7 +18,7 @@ function currentLocalDateTime() {
   return date.toISOString().slice(0, 16)
 }
 
-export function ShipmentRecord({ workerId, workerName, onRegistered }: Props) {
+export function ShipmentRecord({ workerId, workerName, onRegistered, onOpenQrScanner }: Props) {
   const [destinations, setDestinations] = useState<Destination[]>([])
   const [warehouses, setWarehouses] = useState<InspectionOption[]>([])
   const [shipmentProducts, setShipmentProducts] = useState<InspectionOption[]>([])
@@ -106,7 +107,7 @@ export function ShipmentRecord({ workerId, workerName, onRegistered }: Props) {
   }
 
   return <div className="other-rice-page">
-    <div className="page-heading"><h1>出荷記録</h1></div>
+    <div className="page-heading shipment-record-heading"><h1>出荷記録</h1>{onOpenQrScanner && <button className="secondary-button" type="button" onClick={onOpenQrScanner}><ScanLine size={18} />QRで出荷</button>}</div>
     {notice && <div className={`notice ${notice.type}`} role={notice.type === 'error' ? 'alert' : 'status'}>{notice.text}</div>}
     <h2 className="other-rice-heading">出荷内容</h2>
     <div className="shipment-registration-summary" aria-label="出荷内容">
