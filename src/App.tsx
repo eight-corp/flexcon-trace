@@ -186,6 +186,7 @@ function App() {
         {!statementApplication && tab === 'authorizations' && canOperate && (
           <AuthorizationManager
             workerId={worker.worker_id}
+            isAdmin={isAdmin}
             onOpenInspections={(authorizationId) => {
               setInspectionAuthorizationId(authorizationId)
               setInspectionRegistrationId(null)

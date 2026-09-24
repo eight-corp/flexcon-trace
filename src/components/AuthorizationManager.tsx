@@ -9,6 +9,7 @@ import { TableColumnFilter } from './TableColumnFilter'
 
 type Props = {
   workerId: string
+  isAdmin: boolean
   onOpenInspections: (authorizationId: string) => void
 }
 type Notice = { type: 'success' | 'error'; text: string } | null
@@ -138,13 +139,15 @@ function nextAuthorizationNo(items: AuthorizationRecord[]): string {
   return String((numericNos.length > 0 ? Math.max(...numericNos) : 0) + 1)
 }
 
-function AuthorizationColumnHeader({ column, sort, values, selectedValues, onSort, onFilterChange }: {
+function AuthorizationColumnHeader({ column, sort, values, selectedValues, textValue, onSort, onFilterChange, onTextChange }: {
   column: (typeof AUTHORIZATION_COLUMNS)[number]
   sort: AuthorizationSort
   values: string[]
   selectedValues: string[] | undefined
+  textValue: string
   onSort: (key: AuthorizationColumn) => void
   onFilterChange: (key: AuthorizationColumn, values: string[] | undefined) => void
+  onTextChange: (key: AuthorizationColumn, value: string) => void
 }) {
   return <th className="authorization-filter-heading" aria-sort={sort?.key === column.key ? sort.direction === 'asc' ? 'ascending' : 'descending' : 'none'}>
     <div className="shipment-column-heading">
@@ -152,16 +155,17 @@ function AuthorizationColumnHeader({ column, sort, values, selectedValues, onSor
         <span>{column.label}</span>
         {sort?.key === column.key && (sort.direction === 'asc' ? <ArrowUp size={14} /> : <ArrowDown size={14} />)}
       </button>
-      <TableColumnFilter label={column.label} values={values} selectedValues={selectedValues} onChange={(next) => onFilterChange(column.key, next)} openRight={['authorization_no', 'full_name'].includes(column.key)} />
+      <TableColumnFilter label={column.label} values={values} selectedValues={selectedValues} onChange={(next) => onFilterChange(column.key, next)} textValue={textValue} onTextChange={(next) => onTextChange(column.key, next)} openRight={['authorization_no', 'full_name'].includes(column.key)} />
     </div>
   </th>
 }
 
-export function AuthorizationManager({ workerId, onOpenInspections }: Props) {
+export function AuthorizationManager({ workerId, isAdmin, onOpenInspections }: Props) {
   const [items, setItems] = useState<AuthorizationRecord[]>([])
   const [inspectionTargetAuthorizationIds, setInspectionTargetAuthorizationIds] = useState<Set<string>>(new Set())
   const [sort, setSort] = useState<AuthorizationSort>(null)
   const [columnFilters, setColumnFilters] = useState<AuthorizationFilters>({})
+  const [columnTextFilters, setColumnTextFilters] = useState<Partial<Record<AuthorizationColumn, string>>>({})
   const [notice, setNotice] = useState<Notice>(null)
   const [version, setVersion] = useState(0)
   const [modalOpen, setModalOpen] = useState(false)
@@ -212,7 +216,7 @@ export function AuthorizationManager({ workerId, onOpenInspections }: Props) {
     key,
     [...new Set(items.map((item) => authorizationColumnValue(item, key)))].sort(AUTHORIZATION_NO_COLLATOR.compare),
   ])) as Record<AuthorizationColumn, string[]>, [items])
-  const filtered = useMemo(() => selectAuthorizations(items, columnFilters, sort), [items, columnFilters, sort])
+  const filtered = useMemo(() => selectAuthorizations(items, columnFilters, sort, columnTextFilters), [items, columnFilters, sort, columnTextFilters])
   const changeSort = (key: AuthorizationColumn) => setSort((current) => {
     if (!current || current.key !== key) return { key, direction: 'asc' }
     if (current.direction === 'asc') return { key, direction: 'desc' }
@@ -222,6 +226,12 @@ export function AuthorizationManager({ workerId, onOpenInspections }: Props) {
     const next = { ...current }
     if (values === undefined) delete next[key]
     else next[key] = values
+    return next
+  })
+  const changeColumnTextFilter = (key: AuthorizationColumn, value: string) => setColumnTextFilters((current) => {
+    const next = { ...current }
+    if (value) next[key] = value
+    else delete next[key]
     return next
   })
 
@@ -449,11 +459,13 @@ export function AuthorizationManager({ workerId, onOpenInspections }: Props) {
   )
 
   const chooseImportFile = () => {
+    if (!isAdmin) return
     setNotice(null)
     fileInputRef.current?.click()
   }
 
   const prepareImport = async (file: File) => {
+    if (!isAdmin) return
     setBusy(true)
     setImportError('')
     try {
@@ -527,6 +539,7 @@ export function AuthorizationManager({ workerId, onOpenInspections }: Props) {
   }
 
   const executeImport = async () => {
+    if (!isAdmin) return
     setBusy(true)
     setImportError('')
     const { data, error } = await supabase.rpc('flexcon_import_authorizations', {
@@ -600,7 +613,7 @@ export function AuthorizationManager({ workerId, onOpenInspections }: Props) {
       <div className="page-heading"><p>登録済みの委任状情報を確認・更新します。</p></div>
 
       <div className="authorization-actions-row">
-        <input
+        {isAdmin && <input
           ref={fileInputRef}
           className="visually-hidden"
           type="file"
@@ -609,8 +622,8 @@ export function AuthorizationManager({ workerId, onOpenInspections }: Props) {
             const file = event.target.files?.[0]
             if (file) void prepareImport(file)
           }}
-        />
-        <button className="secondary-button" type="button" onClick={chooseImportFile} disabled={busy}><FileUp size={18} />Excel取込</button>
+        />}
+        {isAdmin && <button className="secondary-button" type="button" onClick={chooseImportFile} disabled={busy}><FileUp size={18} />Excel取込</button>}
         <button className="primary-button" type="button" onClick={beginAdd} disabled={busy}><Plus size={18} />追加</button>
       </div>
 
@@ -618,7 +631,7 @@ export function AuthorizationManager({ workerId, onOpenInspections }: Props) {
         <table className="authorization-table">
           <thead>
             <tr>
-              {AUTHORIZATION_COLUMNS.map((column) => <AuthorizationColumnHeader key={column.key} column={column} sort={sort} values={filterValues[column.key]} selectedValues={columnFilters[column.key]} onSort={changeSort} onFilterChange={changeColumnFilter} />)}
+              {AUTHORIZATION_COLUMNS.map((column) => <AuthorizationColumnHeader key={column.key} column={column} sort={sort} values={filterValues[column.key]} selectedValues={columnFilters[column.key]} textValue={columnTextFilters[column.key] ?? ''} onSort={changeSort} onFilterChange={changeColumnFilter} onTextChange={changeColumnTextFilter} />)}
               <th className="authorization-register-header">登録</th>
             </tr>
           </thead>
@@ -731,7 +744,7 @@ export function AuthorizationManager({ workerId, onOpenInspections }: Props) {
         </div>
       )}
 
-      {importOpen && (
+      {isAdmin && importOpen && (
         <div className="modal-backdrop" role="presentation">
           <section className="registration-modal authorization-import-modal" role="dialog" aria-modal="true" aria-labelledby="authorization-import-title">
             <div className="modal-header">

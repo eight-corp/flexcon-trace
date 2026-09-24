@@ -3,6 +3,7 @@ import { ArrowDown, ArrowLeft, ArrowUp, BarChart3, ChevronDown, CircleAlert, Cli
 import { supabase } from '../lib/supabase'
 import { formatDisplayDate, formatJapaneseDateForFilename } from '../lib/japaneseEra'
 import { useCalendarMode } from '../lib/calendarMode'
+import { matchesFilterText } from '../lib/tableFilters'
 import { JapaneseDateInput, JapaneseFiscalYearInput } from './JapaneseDateInput'
 import { TableColumnFilter } from './TableColumnFilter'
 import { formatPrefectureName } from '../lib/prefecture'
@@ -259,15 +260,19 @@ function InspectionSummaryColumnHeader({
   sort,
   values,
   selectedValues,
+  textValue,
   onSort,
   onFilterChange,
+  onTextChange,
 }: {
   column: { key: SummaryColumn; label: string }
   sort: { key: SummaryColumn; direction: SummarySortDirection } | null
   values: string[]
   selectedValues: string[] | undefined
+  textValue: string
   onSort: (key: SummaryColumn) => void
   onFilterChange: (key: SummaryColumn, values: string[] | undefined) => void
+  onTextChange: (key: SummaryColumn, value: string) => void
 }) {
   return <th className={`inspection-summary-column-heading inspection-summary-column-${column.key}`}>
     <div className="shipment-column-heading">
@@ -275,7 +280,7 @@ function InspectionSummaryColumnHeader({
         <span>{column.label}</span>
         {sort?.key === column.key && (sort.direction === 'asc' ? <ArrowUp size={14} /> : <ArrowDown size={14} />)}
       </button>
-      <TableColumnFilter label={column.label} values={values} selectedValues={selectedValues} onChange={(next) => onFilterChange(column.key, next)} openRight={column.key === 'registrationNo'} />
+      <TableColumnFilter label={column.label} values={values} selectedValues={selectedValues} onChange={(next) => onFilterChange(column.key, next)} textValue={textValue} onTextChange={(next) => onTextChange(column.key, next)} openRight={column.key === 'registrationNo'} />
     </div>
   </th>
 }
@@ -305,8 +310,10 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
   const [summaryView, setSummaryView] = useState<'list' | 'aggregate'>('list')
   const [summarySort, setSummarySort] = useState<{ key: SummaryColumn; direction: SummarySortDirection } | null>(null)
   const [summaryColumnFilters, setSummaryColumnFilters] = useState<Partial<Record<SummaryColumn, string[]>>>({})
+  const [summaryTextFilters, setSummaryTextFilters] = useState<Partial<Record<SummaryColumn, string>>>({})
   useEffect(() => {
     setSummaryColumnFilters((current) => ({ ...current, purchaseDates: undefined, inspectionDates: undefined }))
+    setSummaryTextFilters((current) => ({ ...current, purchaseDates: undefined, inspectionDates: undefined }))
   }, [calendarMode])
   const [notice, setNotice] = useState<Notice>(null)
   const [version, setVersion] = useState(0)
@@ -488,7 +495,8 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
     const rows = summaryRows.filter((row) => {
       return SUMMARY_COLUMNS.every((column) => {
         const selected = summaryColumnFilters[column.key]
-        return selected === undefined || selected.includes(summaryDisplayValue(row, column.key))
+        const value = summaryDisplayValue(row, column.key)
+        return (selected === undefined || selected.includes(value)) && matchesFilterText(value, summaryTextFilters[column.key] ?? '')
       })
     })
     if (!summarySort) return rows
@@ -500,7 +508,7 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
         : String(leftValue).localeCompare(String(rightValue), 'ja', { numeric: true })
       return summarySort.direction === 'asc' ? comparison : -comparison
     })
-  }, [summaryColumnFilters, summaryRows, summarySort])
+  }, [summaryColumnFilters, summaryTextFilters, summaryRows, summarySort])
   const changeSummarySort = (key: SummaryColumn) => {
     setSummarySort((current) => {
       if (!current || current.key !== key) return { key, direction: 'asc' }
@@ -701,6 +709,12 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
     onSelectedRegistrationChange(registrationId)
     onSelectedAuthorizationChange(addAuthorization.id)
   }
+  const changeSummaryTextFilter = (key: SummaryColumn, value: string) => setSummaryTextFilters((current) => {
+    const next = { ...current }
+    if (value) next[key] = value
+    else delete next[key]
+    return next
+  })
 
   const saveRegistrationSettlementNo = async (event: React.FormEvent) => {
     event.preventDefault()
@@ -1312,7 +1326,7 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
         </div>
       </section>}
       {summaryView === 'list' && <div className="inspection-summary-wrap"><table className="inspection-summary-table">
-        <thead><tr>{SUMMARY_COLUMNS.map((column) => <InspectionSummaryColumnHeader key={column.key} column={column} sort={summarySort} values={summaryFilterValues[column.key]} selectedValues={summaryColumnFilters[column.key]} onSort={changeSummarySort} onFilterChange={changeSummaryColumnFilter} />)}{!readOnly && <th className="inspection-summary-actions-heading">操作</th>}</tr></thead>
+        <thead><tr>{SUMMARY_COLUMNS.map((column) => <InspectionSummaryColumnHeader key={column.key} column={column} sort={summarySort} values={summaryFilterValues[column.key]} selectedValues={summaryColumnFilters[column.key]} textValue={summaryTextFilters[column.key] ?? ''} onSort={changeSummarySort} onFilterChange={changeSummaryColumnFilter} onTextChange={changeSummaryTextFilter} />)}{!readOnly && <th className="inspection-summary-actions-heading">操作</th>}</tr></thead>
         <tbody>{displayedSummary.map((row, index) => <tr className={index > 0 && displayedSummary[index - 1].registrationId !== row.registrationId ? 'inspection-summary-registration-start' : undefined} key={`${row.registrationId}-${row.grade}`} tabIndex={0} onClick={() => { onSelectedRecordTargetChange(null); onSelectedRegistrationChange(row.registrationId); onSelectedAuthorizationChange(row.authorizationId) }} onKeyDown={(event) => { if (event.key === 'Enter' && event.target === event.currentTarget) { onSelectedRecordTargetChange(null); onSelectedRegistrationChange(row.registrationId); onSelectedAuthorizationChange(row.authorizationId) } }}>
           <td className="numeric-cell">{row.registrationNo}</td><td>{row.settlementNo}</td><td>{row.purchaseDates}</td><td>{row.inspectionDates}</td><td><strong>{row.fullName}</strong></td><td>{row.origin}</td><td>{row.municipality}</td><td>{row.inspectionLocations}</td><td className="numeric-cell">{row.authorizationNo}</td><td>{row.brands}</td><td>{row.grade}</td><td className="numeric-cell">{row.flexconCount}本</td><td className="numeric-cell">{row.paperBagCount}袋</td><td className="numeric-cell">{row.bulkQuantity.toLocaleString()}kg</td><td className="inspection-progress-inspected numeric-cell">{row.inspectedQuantity.toLocaleString()}kg</td><td className="inspection-progress-uninspected numeric-cell">{row.uninspectedQuantity.toLocaleString()}kg</td>
           {!readOnly && <td className="inspection-summary-actions"><button className="icon-button delete-icon" type="button" title="この登録行を削除" aria-label={`登録No. ${row.registrationNo}を削除`} disabled={busy} onClick={(event) => { event.stopPropagation(); void deleteInspectionRegistration(row) }}><Trash2 size={17} /></button></td>}

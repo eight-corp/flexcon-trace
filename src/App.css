@@ -511,7 +511,9 @@
 .shipment-filter-menu-floating { position: fixed; z-index: 1000; overflow-y: auto; }
 .shipment-filter-menu > strong { display: block; margin-bottom: 8px; }
 .shipment-filter-menu label { min-height: 30px; display: flex; align-items: center; gap: 8px; font-weight: 500; }
-.shipment-filter-menu input { width: 16px; height: 16px; margin: 0; }
+.shipment-filter-menu input[type="checkbox"] { width: 16px; height: 16px; margin: 0; }
+.shipment-filter-search { width: 100%; height: 34px; margin: 0 0 5px; padding: 5px 8px; font-size: 14px; }
+.shipment-filter-empty { display: block; padding: 8px 2px; color: var(--muted); font-size: 12px; }
 .shipment-filter-values { max-height: 230px; overflow-y: auto; border-top: 1px solid var(--line); padding-top: 5px; }
 .authorization-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
 .authorization-heading > div { min-width: 0; }

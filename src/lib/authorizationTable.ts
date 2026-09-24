@@ -1,4 +1,5 @@
 import type { AuthorizationRecord } from '../types'
+import { matchesFilterText } from './tableFilters.ts'
 
 export const AUTHORIZATION_COLUMNS = [
   { key: 'authorization_no', label: '№' },
@@ -25,10 +26,11 @@ export function authorizationColumnValue(record: AuthorizationRecord, key: Autho
   return record[key] ?? ''
 }
 
-export function selectAuthorizations(items: AuthorizationRecord[], filters: AuthorizationFilters, sort: AuthorizationSort): AuthorizationRecord[] {
+export function selectAuthorizations(items: AuthorizationRecord[], filters: AuthorizationFilters, sort: AuthorizationSort, textFilters: Partial<Record<AuthorizationColumn, string>> = {}): AuthorizationRecord[] {
   const rows = items.filter((item) => AUTHORIZATION_COLUMNS.every(({ key }) => {
     const selected = filters[key]
-    return selected === undefined || selected.includes(authorizationColumnValue(item, key))
+    const value = authorizationColumnValue(item, key)
+    return (selected === undefined || selected.includes(value)) && matchesFilterText(value, textFilters[key] ?? '')
   }))
   if (!sort) return rows
   return [...rows].sort((left, right) => {

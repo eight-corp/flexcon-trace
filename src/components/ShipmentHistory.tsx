@@ -3,6 +3,7 @@ import { ArrowDown, ArrowUp, Building2, Download, LayoutGrid, Pencil, Save, Tabl
 import { supabase } from '../lib/supabase'
 import { formatDisplayDateTime, formatJapaneseDateForFilename } from '../lib/japaneseEra'
 import { useCalendarMode } from '../lib/calendarMode'
+import { matchesFilterText } from '../lib/tableFilters'
 import { TableColumnFilter } from './TableColumnFilter'
 import { JapaneseDateTimeInput } from './JapaneseDateInput'
 import { formatPrefectureName } from '../lib/prefecture'
@@ -164,15 +165,19 @@ function ShipmentColumnHeader({
   sort,
   values,
   selectedValues,
+  textValue,
   onSort,
   onFilterChange,
+  onTextChange,
 }: {
   column: { key: TableColumn; label: string }
   sort: { key: TableColumn; direction: SortDirection } | null
   values: string[]
   selectedValues: string[] | undefined
+  textValue: string
   onSort: (key: TableColumn) => void
   onFilterChange: (key: TableColumn, values: string[] | undefined) => void
+  onTextChange: (key: TableColumn, value: string) => void
 }) {
   return (
     <th className={`shipment-column-${column.key}`}>
@@ -181,7 +186,7 @@ function ShipmentColumnHeader({
           <span>{column.label}</span>
           {sort?.key === column.key && (sort.direction === 'asc' ? <ArrowUp size={14} /> : <ArrowDown size={14} />)}
         </button>
-        <TableColumnFilter label={column.label} values={values} selectedValues={selectedValues} onChange={(next) => onFilterChange(column.key, next)} openRight={column.key === 'shippedAt'} />
+        <TableColumnFilter label={column.label} values={values} selectedValues={selectedValues} onChange={(next) => onFilterChange(column.key, next)} textValue={textValue} onTextChange={(next) => onTextChange(column.key, next)} openRight={column.key === 'shippedAt'} />
       </div>
     </th>
   )
@@ -210,8 +215,10 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
   const [viewMode, setViewMode] = useState<ViewMode>('table')
   const [sort, setSort] = useState<{ key: TableColumn; direction: SortDirection } | null>(null)
   const [columnFilters, setColumnFilters] = useState<Partial<Record<TableColumn, string[]>>>({})
+  const [columnTextFilters, setColumnTextFilters] = useState<Partial<Record<TableColumn, string>>>({})
   useEffect(() => {
     setColumnFilters((current) => ({ ...current, shippedAt: undefined }))
+    setColumnTextFilters((current) => ({ ...current, shippedAt: undefined }))
   }, [calendarMode])
 
   useEffect(() => {
@@ -294,7 +301,8 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
     const rows = tableRows.filter((row) => {
       return TABLE_COLUMNS.every((column) => {
         const selected = columnFilters[column.key]
-        return selected === undefined || selected.includes(tableFilterValue(row, column.key))
+        const value = tableFilterValue(row, column.key)
+        return (selected === undefined || selected.includes(value)) && matchesFilterText(value, columnTextFilters[column.key] ?? '')
       })
     })
 
@@ -323,7 +331,7 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
         : String(left).localeCompare(String(right), 'ja', { numeric: true })
       return sort.direction === 'asc' ? comparison : -comparison
     })
-  }, [columnFilters, sort, tableRows])
+  }, [columnFilters, columnTextFilters, sort, tableRows])
 
   const destinationSummaryRows = useMemo(() => {
     const summaries = new Map<string, {
@@ -379,6 +387,12 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
       return next
     })
   }
+  const changeColumnTextFilter = (key: TableColumn, value: string) => setColumnTextFilters((current) => {
+    const next = { ...current }
+    if (value) next[key] = value
+    else delete next[key]
+    return next
+  })
 
   const beginEdit = (shipment: Shipment) => {
     setEditing(shipment)
@@ -677,8 +691,10 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
                       sort={sort}
                       values={filterValues[column.key]}
                       selectedValues={columnFilters[column.key]}
+                      textValue={columnTextFilters[column.key] ?? ''}
                       onSort={changeSort}
                       onFilterChange={changeColumnFilter}
+                      onTextChange={changeColumnTextFilter}
                     />
                   ))}
                   {isAdmin && <th className="shipment-actions-heading">操作</th>}

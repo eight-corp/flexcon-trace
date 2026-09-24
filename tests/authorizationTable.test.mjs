@@ -26,3 +26,9 @@ test('flags and blank values can be filtered together', () => {
   assert.deepEqual(filtered.map((item) => item.id), ['a', 'c'])
   assert.deepEqual(selectAuthorizations(records, { prefecture: [] }, null), [])
 })
+
+test('text filtering combines with checked values and matches Japanese width variants', () => {
+  assert.deepEqual(selectAuthorizations(records, {}, null, { authorization_no: '２' }).map((item) => item.id), ['b'])
+  assert.deepEqual(selectAuthorizations(records, { prefecture: ['青森県'] }, null, { full_name: '鈴' }).map((item) => item.id), ['c'])
+  assert.deepEqual(selectAuthorizations(records, {}, null, { address: '盛岡' }).map((item) => item.id), ['b'])
+})

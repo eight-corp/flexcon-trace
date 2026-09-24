@@ -3,6 +3,7 @@ import { AlertTriangle, ArrowDown, ArrowDownToLine, ArrowRightLeft, ArrowUp, Arr
 import { supabase } from '../lib/supabase'
 import { formatJapaneseDateForFilename, formatDisplayCropYear, formatDisplayDate, type CalendarMode } from '../lib/japaneseEra'
 import { useCalendarMode } from '../lib/calendarMode'
+import { matchesFilterText } from '../lib/tableFilters'
 import { JapaneseCropYearInput, JapaneseDateInput } from './JapaneseDateInput'
 import { TableColumnFilter } from './TableColumnFilter'
 import type { InspectionOption } from '../types'
@@ -267,16 +268,20 @@ function FilterableColumnHeader<Key extends string>({
   sort,
   values,
   selectedValues,
+  textValue,
   onSort,
   onFilterChange,
+  onTextChange,
   openRight = false,
 }: {
   column: { key: Key; label: string }
   sort?: { key: Key; direction: SortDirection } | null
   values: string[]
   selectedValues: string[] | undefined
+  textValue: string
   onSort?: (key: Key) => void
   onFilterChange: (key: Key, values: string[] | undefined) => void
+  onTextChange: (key: Key, value: string) => void
   openRight?: boolean
 }) {
   return <th className="inventory-filter-heading">
@@ -285,7 +290,7 @@ function FilterableColumnHeader<Key extends string>({
         <span>{column.label}</span>
         {sort?.key === column.key && (sort.direction === 'asc' ? <ArrowUp size={14} /> : <ArrowDown size={14} />)}
       </button> : <div className="shipment-column-sort"><span>{column.label}</span></div>}
-      <TableColumnFilter label={column.label} values={values} selectedValues={selectedValues} onChange={(next) => onFilterChange(column.key, next)} openRight={openRight} />
+      <TableColumnFilter label={column.label} values={values} selectedValues={selectedValues} onChange={(next) => onFilterChange(column.key, next)} textValue={textValue} onTextChange={(next) => onTextChange(column.key, next)} openRight={openRight} />
     </div>
   </th>
 }
@@ -303,9 +308,12 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
   const [search, setSearch] = useState('')
   const [sort, setSort] = useState<{ key: InventoryColumn; direction: SortDirection } | null>(null)
   const [columnFilters, setColumnFilters] = useState<Partial<Record<InventoryColumn, string[]>>>({})
+  const [columnTextFilters, setColumnTextFilters] = useState<Partial<Record<InventoryColumn, string>>>({})
   const [balanceColumnFilters, setBalanceColumnFilters] = useState<Record<string, string[]>>({})
+  const [balanceTextFilters, setBalanceTextFilters] = useState<Record<string, string>>({})
   useEffect(() => {
     setColumnFilters((current) => ({ ...current, movementDate: undefined, cropYear: undefined }))
+    setColumnTextFilters((current) => ({ ...current, movementDate: undefined, cropYear: undefined }))
   }, [calendarMode])
   const [notice, setNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [busy, setBusy] = useState(false)
@@ -430,8 +438,12 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
     [...new Set(balanceRows.map((row) => balanceValue(row, column.key)))].sort((left, right) => left.localeCompare(right, 'ja', { numeric: true })),
   ])) as Record<string, string[]>, [balanceRows, balanceColumns])
   const displayedBalanceRows = useMemo(() => {
-    return balanceRows.filter((row) => balanceColumns.every((column) => balanceColumnFilters[column.key] === undefined || balanceColumnFilters[column.key].includes(balanceValue(row, column.key))))
-  }, [balanceRows, balanceColumnFilters, balanceColumns])
+    return balanceRows.filter((row) => balanceColumns.every((column) => {
+      const value = balanceValue(row, column.key)
+      return (balanceColumnFilters[column.key] === undefined || balanceColumnFilters[column.key].includes(value))
+        && matchesFilterText(value, balanceTextFilters[column.key] ?? '')
+    }))
+  }, [balanceRows, balanceColumnFilters, balanceTextFilters, balanceColumns])
   const balanceYearGroups = useMemo(() => {
     const groups = new Map<number | null | undefined, { rows: InventoryBalanceRow[]; totals: Record<string, Record<string, number>> }>()
     balanceRows.forEach((row) => {
@@ -451,7 +463,7 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
     })
     return [...groups].sort(([left], [right]) => (right ?? -1) - (left ?? -1))
   }, [balanceGradeColumns, balanceRows, displayedBalanceRows])
-  const balanceIsFiltered = Object.keys(balanceColumnFilters).length > 0
+  const balanceIsFiltered = Object.keys(balanceColumnFilters).length > 0 || Object.keys(balanceTextFilters).length > 0
   const warehouseRouteAvailable = movementMode === 'inbound'
     ? activeWarehouses.length > 0
     : movementMode === 'outbound'
@@ -863,7 +875,11 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
     const term = view === 'statement-list' ? search.trim().toLowerCase() : ''
     const rows = listMovements.filter((movement) => {
       if (term && !visibleInventoryColumns.some((column) => movementValue(movement, column.key, calendarMode).toLowerCase().includes(term))) return false
-      return visibleInventoryColumns.every((column) => columnFilters[column.key] === undefined || columnFilters[column.key]!.includes(movementValue(movement, column.key, calendarMode)))
+      return visibleInventoryColumns.every((column) => {
+        const value = movementValue(movement, column.key, calendarMode)
+        return (columnFilters[column.key] === undefined || columnFilters[column.key]!.includes(value))
+          && matchesFilterText(value, columnTextFilters[column.key] ?? '')
+      })
     })
     if (!sort) return rows
     return [...rows].sort((left, right) => {
@@ -872,7 +888,7 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
       const comparison = typeof leftValue === 'number' && typeof rightValue === 'number' ? leftValue - rightValue : String(leftValue).localeCompare(String(rightValue), 'ja', { numeric: true })
       return sort.direction === 'asc' ? comparison : -comparison
     })
-  }, [columnFilters, listMovements, search, sort, visibleInventoryColumns, calendarMode, view])
+  }, [columnFilters, columnTextFilters, listMovements, search, sort, visibleInventoryColumns, calendarMode, view])
 
   const deletableMovements = listMovements.filter((movement) => movement.source_type === 'manual' || movement.source_type === 'settlement')
   const selectedMovements = deletableMovements.filter((movement) => selectedMovementKeys.has(movementSelectionKey(movement)))
@@ -915,10 +931,22 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
     else next[key] = values
     return next
   })
+  const changeColumnTextFilter = (key: InventoryColumn, value: string) => setColumnTextFilters((current) => {
+    const next = { ...current }
+    if (value) next[key] = value
+    else delete next[key]
+    return next
+  })
   const changeBalanceColumnFilter = (key: string, values: string[] | undefined) => setBalanceColumnFilters((current) => {
     const next = { ...current }
     if (values === undefined) delete next[key]
     else next[key] = values
+    return next
+  })
+  const changeBalanceTextFilter = (key: string, value: string) => setBalanceTextFilters((current) => {
+    const next = { ...current }
+    if (value) next[key] = value
+    else delete next[key]
     return next
   })
   const renderMovementFields = (target: MovementForm, setTarget: React.Dispatch<React.SetStateAction<MovementForm>>, mode: MovementMode, productNames: string[], grades: InspectionOption[]) => {
@@ -968,7 +996,7 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
         {isAdmin && <button className="danger-button inventory-bulk-delete-button" type="button" disabled={busy || selectedMovements.length === 0} onClick={() => void bulkDeleteMovements()}><Trash2 size={17} />選択した{selectedMovements.length}件を削除</button>}
       </div>}
       <div className="inventory-table-wrap"><table className={`inventory-table inventory-history-table ${view === 'history' ? 'without-producer' : ''} ${isAdmin ? 'with-selection' : ''}`}>
-        <thead><tr>{isAdmin && <th className="inventory-selection-heading"><input type="checkbox" checked={allDisplayedMovementsSelected} onChange={toggleDisplayedMovements} aria-label="表示中の在庫記録をすべて選択" title="表示中をすべて選択" /></th>}{visibleInventoryColumns.map((column) => <FilterableColumnHeader key={column.key} column={column} sort={sort} values={filterValues[column.key]} selectedValues={columnFilters[column.key]} onSort={changeSort} onFilterChange={changeColumnFilter} openRight={column.key === 'movementDate' || column.key === 'cropYear'} />)}{canOperate && <th className="inventory-actions-heading">操作</th>}</tr></thead>
+        <thead><tr>{isAdmin && <th className="inventory-selection-heading"><input type="checkbox" checked={allDisplayedMovementsSelected} onChange={toggleDisplayedMovements} aria-label="表示中の在庫記録をすべて選択" title="表示中をすべて選択" /></th>}{visibleInventoryColumns.map((column) => <FilterableColumnHeader key={column.key} column={column} sort={sort} values={filterValues[column.key]} selectedValues={columnFilters[column.key]} textValue={columnTextFilters[column.key] ?? ''} onSort={changeSort} onFilterChange={changeColumnFilter} onTextChange={changeColumnTextFilter} openRight={column.key === 'movementDate' || column.key === 'cropYear'} />)}{canOperate && <th className="inventory-actions-heading">操作</th>}</tr></thead>
         <tbody>{displayedMovements.map((movement) => {
           const mode = modeForMovement(movement)
           const manual = movement.source_type === 'manual'
@@ -990,7 +1018,7 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
         {cropYear !== undefined && <div className="inventory-subheading"><h2>{cropYear === null ? '産年未設定' : formatJapaneseCropYear(cropYear)}</h2><span>{group.rows.length}件</span></div>}
         <div className="inventory-table-wrap"><table className="inventory-table inventory-balance-table" style={{ '--inventory-balance-mobile-width': `${358 + balanceGradeColumns.length * 62}px` } as React.CSSProperties}>
           <colgroup><col className="inventory-balance-warehouse-col" /><col className="inventory-balance-origin-col" /><col className="inventory-balance-product-col" /><col className="inventory-balance-unit-col" />{balanceGradeColumns.map((grade) => <col className="inventory-balance-grade-col" key={grade} />)}</colgroup>
-          <thead><tr>{balanceColumns.map((column, index) => <FilterableColumnHeader key={column.key} column={column} values={balanceFilterValues[column.key]} selectedValues={balanceColumnFilters[column.key]} onFilterChange={changeBalanceColumnFilter} openRight={index === 0} />)}</tr></thead>
+          <thead><tr>{balanceColumns.map((column, index) => <FilterableColumnHeader key={column.key} column={column} values={balanceFilterValues[column.key]} selectedValues={balanceColumnFilters[column.key]} textValue={balanceTextFilters[column.key] ?? ''} onFilterChange={changeBalanceColumnFilter} onTextChange={changeBalanceTextFilter} openRight={index === 0} />)}</tr></thead>
           <tbody>
             <tr className="inventory-balance-total"><td><span className="warehouse-name"><Warehouse size={17} />{balanceIsFiltered ? '絞り込み合計' : '全倉庫合計'}</span></td><td>{balanceIsFiltered ? '表示中' : '全産地'}</td><td>{balanceIsFiltered ? '表示中' : '全名称'}</td><td>単位別</td>{balanceGradeColumns.map((grade) => { const totals = group.totals[grade] ?? {}; const values = ['本', '袋', 'kg', '俵'].filter((unit) => totals[unit]).map((unit) => `${formatQuantity(totals[unit])}${unit}`); const negative = Object.values(totals).some((quantity) => quantity < 0); return <td className={`numeric-cell inventory-balance-grade ${negative ? 'inventory-negative' : ''}`} key={grade}>{values.join(' / ')}</td> })}</tr>
             {group.rows.map((row) => <tr key={`${row.warehouseId}-${row.origin}-${row.productName}-${row.unit}`}><td><span className="warehouse-name"><Warehouse size={17} />{row.warehouseName}</span></td><td>{row.origin}</td><td>{row.productName}</td><td>{row.unit}</td>{balanceGradeColumns.map((grade) => { const quantity = row.quantities[grade] ?? 0; return <td className={`numeric-cell inventory-balance-grade ${quantity < 0 ? 'inventory-negative' : ''}`} key={grade}>{quantity === 0 ? '' : formatQuantity(quantity)}</td> })}</tr>)}
