@@ -223,26 +223,26 @@ function App() {
             <Settings2 size={22} /><span>マスタ</span>
           </button>}
         </> : <>
-        {isAdmin && <button className={tab === 'scan' ? 'active' : ''} onClick={() => setTab('scan')}>
-          <ScanLine size={22} /><span>出荷作業(QR)</span>
-        </button>}
-        {canOperate && <button className={tab === 'shipping-record' ? 'active' : ''} onClick={() => setTab('shipping-record')}>
-          <Truck size={22} /><span>出荷記録</span>
-        </button>}
-        <button className={tab === 'history' ? 'active' : ''} onClick={() => setTab('history')}>
-          <History size={22} /><span>出荷履歴</span>
-        </button>
         <button className={tab === 'inventory-history' ? 'active' : ''} onClick={() => setTab('inventory-history')}>
           <List size={22} /><span>入出庫記録</span>
         </button>
         <button className={tab === 'inventory' ? 'active' : ''} onClick={() => setTab('inventory')}>
           <Boxes size={22} /><span>在庫</span>
         </button>
-        {canOperate && <button className={tab === 'authorizations' ? 'active' : ''} onClick={() => setTab('authorizations')}>
-          <FileSignature size={22} /><span>委任状一覧</span>
-        </button>}
         {canOperate && <button className={tab === 'inspections' ? 'active' : ''} onClick={() => { setInspectionAuthorizationId(null); setInspectionRegistrationId(null); setInspectionRecordTarget(null); setInspectionReadOnly(false); setTab('inspections') }}>
           <ClipboardList size={22} /><span>検査記録</span>
+        </button>}
+        {canOperate && <button className={tab === 'shipping-record' ? 'active' : ''} onClick={() => setTab('shipping-record')}>
+          <Truck size={22} /><span>出荷記録</span>
+        </button>}
+        {isAdmin && <button className={tab === 'scan' ? 'active' : ''} onClick={() => setTab('scan')}>
+          <ScanLine size={22} /><span>出荷作業(QR)</span>
+        </button>}
+        <button className={tab === 'history' ? 'active' : ''} onClick={() => setTab('history')}>
+          <History size={22} /><span>出荷履歴</span>
+        </button>
+        {canOperate && <button className={tab === 'authorizations' ? 'active' : ''} onClick={() => setTab('authorizations')}>
+          <FileSignature size={22} /><span>委任状一覧</span>
         </button>}
         {isAdmin && <button className={tab === 'master' ? 'active' : ''} onClick={() => setTab('master')}>
           <Settings2 size={22} /><span>マスタ</span>
