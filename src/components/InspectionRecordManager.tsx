@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowDown, ArrowLeft, ArrowUp, BarChart3, ChevronDown, CircleAlert, ClipboardList, ExternalLink, FileText, Filter, List, Plus, Printer, Save, Search, TableRowsSplit, Trash2, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { formatPrefectureName } from '../lib/prefecture'
+import { selectedInspectionGrade } from '../lib/inspectionGrade'
 import type { AuthorizationRecord, FlexconInspection, InspectionOption, InspectionRegistration, InspectionWeight, PaperBagInspection } from '../types'
 
 type Props = {
@@ -167,10 +168,12 @@ function flexconRecordKind(item: FlexconInspection, weights: Record<InspectionWe
 }
 function isGradeAllowedForBrand(brand: string, grade: string) {
   if (!grade) return true
-  return isFeedRiceBrand(brand) ? grade === '合格' : grade !== '合格'
+  const selectedGrade = selectedInspectionGrade(grade)
+  return Boolean(selectedGrade) && (isFeedRiceBrand(brand) ? selectedGrade === '合格' : selectedGrade !== '合格')
 }
 function isInspectionResultComplete(item: FlexconInspection | PaperBagInspection) {
-  const reasonOptional = item.grade === '1等' || item.grade === '合格'
+  const grade = selectedInspectionGrade(item.grade)
+  const reasonOptional = grade === '1等' || grade === '合格'
   const quantity = 'quantity_kg' in item ? item.quantity_kg : item.bag_count
   return item.fiscal_year > 0
     && Boolean(item.purchase_date)
@@ -180,12 +183,13 @@ function isInspectionResultComplete(item: FlexconInspection | PaperBagInspection
     && Boolean(item.brand?.trim())
     && quantity > 0
     && item.moisture !== null
-    && Boolean(item.grade?.trim())
-    && isGradeAllowedForBrand(item.brand ?? '', item.grade ?? '')
+    && Boolean(grade)
+    && isGradeAllowedForBrand(item.brand ?? '', grade)
     && (reasonOptional || Boolean(item.reason?.trim()))
 }
 function incompleteInspectionFields(item: FlexconInspection | PaperBagInspection) {
   const fields: string[] = []
+  const grade = selectedInspectionGrade(item.grade)
   const quantity = 'quantity_kg' in item ? item.quantity_kg : item.bag_count
   if (item.fiscal_year <= 0) fields.push('年度')
   if (!item.purchase_date) fields.push('仕入日')
@@ -195,12 +199,12 @@ function incompleteInspectionFields(item: FlexconInspection | PaperBagInspection
   if (!item.brand?.trim()) fields.push('銘柄')
   if (quantity <= 0) fields.push('数量')
   if (item.moisture === null) fields.push('水分')
-  if (!item.grade?.trim()) {
+  if (!grade) {
     fields.push('等級')
-  } else if (!isGradeAllowedForBrand(item.brand ?? '', item.grade)) {
+  } else if (!isGradeAllowedForBrand(item.brand ?? '', grade)) {
     fields.push('銘柄に対応する等級')
   }
-  if (item.grade?.trim() && item.grade !== '1等' && item.grade !== '合格' && !item.reason?.trim()) fields.push('理由')
+  if (grade && grade !== '1等' && grade !== '合格' && !item.reason?.trim()) fields.push('理由')
   return fields
 }
 function gradingNoticeFailureFor(items: Array<FlexconInspection | PaperBagInspection>): GradingNoticeFailure {
@@ -428,7 +432,7 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
     inspection_date: commonRegistrationValue(selectedRegistrationRecords.map((item) => item.inspection_date)),
     inspector_name: commonRegistrationValue(selectedRegistrationRecords.map((item) => item.inspector_name)),
     inspection_location: commonRegistrationValue(selectedRegistrationRecords.map((item) => item.inspection_location)),
-    grade: commonRegistrationValue(selectedRegistrationRecords.map((item) => item.grade)),
+    grade: commonRegistrationValue(selectedRegistrationRecords.map((item) => selectedInspectionGrade(item.grade))),
   }
   const changeBatchMetadata = (values: Partial<BatchInspectionMetadata>) => {
     setBatchMetadataDraft({ ...batchMetadata, registration_id: selectedRegistrationId, ...values })
@@ -458,7 +462,7 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
 
       const gradeGroups = new Map<string, Array<FlexconInspection | PaperBagInspection>>()
       records.forEach((item) => {
-        const grade = item.grade?.trim() || '未入力'
+        const grade = selectedInspectionGrade(item.grade) || '未入力'
         gradeGroups.set(grade, [...(gradeGroups.get(grade) ?? []), item])
       })
 
@@ -577,7 +581,7 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
         uninspectedQuantity: 0,
       }
       if (isInspectionResultComplete(item)) {
-        const grade = item.grade?.trim()
+        const grade = selectedInspectionGrade(item.grade)
         row.inspectedQuantity += quantity
         if (grade) row.inspectedByGrade[grade] = (row.inspectedByGrade[grade] ?? 0) + quantity
       } else {
@@ -597,10 +601,10 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
     const masterGrades = inspectionOptions
       .filter((item) => item.option_type === 'grade')
       .map((item) => item.name.trim())
-      .filter(Boolean)
+      .filter((grade) => Boolean(selectedInspectionGrade(grade)))
     const usedGrades = [...flexcons, ...paperBags]
       .filter(isInspectionResultComplete)
-      .map((item) => item.grade?.trim() ?? '')
+      .map((item) => selectedInspectionGrade(item.grade))
       .filter(Boolean)
     return [...new Set([...masterGrades, ...usedGrades])]
   }, [flexcons, inspectionOptions, paperBags])
@@ -624,7 +628,7 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
         purchaseDate: item.purchase_date,
         inspectionDate: item.inspection_date,
         moisture: item.moisture,
-        grade: item.grade,
+        grade: selectedInspectionGrade(item.grade) || null,
         missingFields: incompleteInspectionFields(item),
         complete: isInspectionResultComplete(item),
       }
@@ -660,7 +664,7 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
 
   const locationOptions = inspectionOptions.filter((item) => item.option_type === 'location')
   const inspectorOptions = inspectionOptions.filter((item) => item.option_type === 'inspector')
-  const gradeOptions = inspectionOptions.filter((item) => item.option_type === 'grade')
+  const gradeOptions = inspectionOptions.filter((item) => item.option_type === 'grade' && Boolean(selectedInspectionGrade(item.name)))
   const batchGradeOptions = gradeOptions.filter((option) => selectedRegistrationRecords.every((item) => isGradeAllowedForBrand(item.brand ?? '', option.name)))
   const reasonOptions = inspectionOptions.filter((item) => item.option_type === 'grade_reason')
   const warehouseOptions = inspectionOptions.filter((item) => item.option_type === 'warehouse')
@@ -756,7 +760,7 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
     inspection_location: item.inspection_location ?? '',
     brand: item.brand ?? '',
     quantity: String('quantity_kg' in item ? item.quantity_kg : item.bag_count),
-    grade: item.grade ?? '',
+    grade: selectedInspectionGrade(item.grade),
     reason: item.reason ?? '',
     moisture: item.moisture === null ? '' : String(item.moisture),
   }
@@ -889,8 +893,8 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
   </>
   const renderReadOnlyResultFields = (item: FlexconInspection | PaperBagInspection) => <>
     <td className={[item.moisture === null ? 'inspection-missing' : '', isHighMoisture(item.moisture) ? 'moisture-high' : ''].filter(Boolean).join(' ') || undefined}>{item.moisture === null ? '' : `${item.moisture.toFixed(1)}%`}</td>
-    <td className={item.grade ? undefined : 'inspection-missing'}>{item.grade ?? ''}</td>
-    <td className={item.grade && item.grade !== '1等' && item.grade !== '合格' && !item.reason ? 'inspection-missing' : undefined}>{item.reason ?? ''}</td>
+    <td className={selectedInspectionGrade(item.grade) ? undefined : 'inspection-missing'}>{selectedInspectionGrade(item.grade)}</td>
+    <td className={selectedInspectionGrade(item.grade) && item.grade !== '1等' && item.grade !== '合格' && !item.reason ? 'inspection-missing' : undefined}>{selectedInspectionGrade(item.grade) ? item.reason ?? '' : ''}</td>
   </>
 
   const deleteFlexcon = async (item: FlexconInspection) => {

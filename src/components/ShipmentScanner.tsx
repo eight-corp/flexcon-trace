@@ -2,6 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { Check, Minus, Package, Plus, Send, Trash2, UserRound, Wheat, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { formatPrefectureName } from '../lib/prefecture'
+import { selectedInspectionGrade } from '../lib/inspectionGrade'
 import type { Destination, InspectionOption, TransportProfile } from '../types'
 import { ManualShipmentItemsEditor, type ManualShipmentItemDraft } from './ManualShipmentItemsEditor'
 
@@ -188,7 +189,7 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
           const detail = {
             origin: origin || '産地未登録',
             brand: String(flexcon.brand ?? '').trim() || '銘柄未登録',
-            grade: String(flexcon.grade ?? '').trim(),
+            grade: selectedInspectionGrade(flexcon.grade),
           }
           details[flexcon.lot_number] = detail
           if (/^\d{11}$/.test(flexcon.lot_number)) {
@@ -212,7 +213,7 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
             details[mixed.lot_number] = {
               origin: formatPrefectureName(mixed.origin_prefecture) || '産地未登録',
               brand: String(mixed.brand ?? '').trim() || '銘柄未登録',
-              grade: String(mixed.grade ?? '').trim(),
+              grade: selectedInspectionGrade(mixed.grade),
             }
           }
           setLotProducerNames(mixedNames)
