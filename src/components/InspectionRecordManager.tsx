@@ -7,6 +7,7 @@ import type { AuthorizationRecord, FlexconInspection, InspectionOption, Inspecti
 
 type Props = {
   workerId: string
+  isAdmin: boolean
   readOnly: boolean
   selectedAuthorizationId: string | null
   selectedRegistrationId: string | null
@@ -309,7 +310,7 @@ function brandTypeForPrefecture(prefecture: string | null): 'brand_aomori' | 'br
   if (normalized === '岩手') return 'brand_iwate'
   return null
 }
-export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizationId, selectedRegistrationId, selectedRecordTarget, onSelectedAuthorizationChange, onSelectedRegistrationChange, onSelectedRecordTargetChange, onBack }: Props) {
+export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedAuthorizationId, selectedRegistrationId, selectedRecordTarget, onSelectedAuthorizationChange, onSelectedRegistrationChange, onSelectedRecordTargetChange, onBack }: Props) {
   const [authorizations, setAuthorizations] = useState<AuthorizationRecord[]>([])
   const [registrations, setRegistrations] = useState<InspectionRegistration[]>([])
   const [flexcons, setFlexcons] = useState<FlexconInspection[]>([])
@@ -998,6 +999,7 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
     try {
       const { generateInspectionCertificatePdf } = await import('../lib/certificatePdf')
       const blob = await generateInspectionCertificatePdf({
+        includeManagementQr: isAdmin,
         authorization: {
           authorizationNo: selectedAuthorization.authorization_no,
           fullName: selectedAuthorization.full_name,

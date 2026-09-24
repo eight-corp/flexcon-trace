@@ -24,6 +24,7 @@ export type CertificateFlexcon = {
 type CertificateData = {
   authorization: CertificateAuthorization
   flexcons: CertificateFlexcon[]
+  includeManagementQr: boolean
 }
 
 const DESIGN_WIDTH = 595.2
@@ -140,6 +141,7 @@ function createOverlayCanvas() {
 async function drawCertificateOverlay(
   authorization: CertificateAuthorization,
   flexcon: CertificateFlexcon,
+  includeManagementQr: boolean,
 ) {
   const { canvas, context } = createOverlayCanvas()
 
@@ -165,22 +167,24 @@ async function drawCertificateOverlay(
   drawCenteredText(context, japaneseDate(flexcon.inspectionDate), 266, 310, 103, 9.5)
   drawFittedText(context, flexcon.inspectorName, 350, 344, 105, 9.5, 'left', 7)
 
-  const qrCanvas = document.createElement('canvas')
-  await QRCode.toCanvas(qrCanvas, flexcon.lotNumber, {
-    width: 512,
-    margin: 1,
-    errorCorrectionLevel: 'M',
-    color: { dark: '#000000', light: '#00000000' },
-  })
-  context.imageSmoothingEnabled = false
-  context.drawImage(
-    qrCanvas,
-    87.5 * CANVAS_SCALE,
-    312 * CANVAS_SCALE,
-    68 * CANVAS_SCALE,
-    68 * CANVAS_SCALE,
-  )
-  drawCenteredText(context, '当検査機関の管理用ロット情報', 66.5, 378.5, 110, 6.5, 5)
+  if (includeManagementQr) {
+    const qrCanvas = document.createElement('canvas')
+    await QRCode.toCanvas(qrCanvas, flexcon.lotNumber, {
+      width: 512,
+      margin: 1,
+      errorCorrectionLevel: 'M',
+      color: { dark: '#000000', light: '#00000000' },
+    })
+    context.imageSmoothingEnabled = false
+    context.drawImage(
+      qrCanvas,
+      87.5 * CANVAS_SCALE,
+      312 * CANVAS_SCALE,
+      68 * CANVAS_SCALE,
+      68 * CANVAS_SCALE,
+    )
+    drawCenteredText(context, '当検査機関の管理用ロット情報', 66.5, 378.5, 110, 6.5, 5)
+  }
 
   return canvas
 }
@@ -194,7 +198,7 @@ function canvasToPng(canvas: HTMLCanvasElement) {
   })
 }
 
-export async function generateInspectionCertificatePdf({ authorization, flexcons }: CertificateData) {
+export async function generateInspectionCertificatePdf({ authorization, flexcons, includeManagementQr }: CertificateData) {
   if (flexcons.length === 0) throw new Error('PDFに出力するフレコンがありません。')
 
   const [standardTemplateResponse, feedTemplateResponse] = await Promise.all([
@@ -216,7 +220,7 @@ export async function generateInspectionCertificatePdf({ authorization, flexcons
   viewerPreferences.setPickTrayByPDFSize(true)
 
   for (const flexcon of flexcons) {
-    const overlayCanvas = await drawCertificateOverlay(authorization, flexcon)
+    const overlayCanvas = await drawCertificateOverlay(authorization, flexcon, includeManagementQr)
     const overlay = await pdf.embedPng(await canvasToPng(overlayCanvas))
     const page = pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT])
     const templatePage = isFeedRice(flexcon.brand) ? feedTemplatePage : standardTemplatePage

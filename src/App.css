@@ -39,7 +39,8 @@
   position: fixed; left: 0; right: 0; bottom: 0; height: 66px; z-index: 30; display: grid; grid-template-columns: repeat(var(--nav-count, 5), 1fr);
   background: #fff; border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom);
 }
-.bottom-nav button { border: 0; background: transparent; color: #707b73; display: grid; place-content: center; justify-items: center; gap: 2px; font-size: 11px; }
+.bottom-nav button { min-width: 0; border: 0; background: transparent; color: #707b73; display: grid; grid-template-columns: minmax(0, 1fr); place-content: center; justify-items: center; gap: 2px; font-size: 11px; }
+.bottom-nav button span { width: 100%; min-width: 0; text-align: center; overflow-wrap: anywhere; }
 .bottom-nav button.active { color: var(--green); background: var(--green-soft); }
 .scanner-frame { width: 100%; aspect-ratio: 4 / 3; min-height: 240px; max-height: 480px; overflow: hidden; background: #101512; border-radius: 7px; position: relative; }
 .scanner-source { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }

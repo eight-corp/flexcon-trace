@@ -1,9 +1,10 @@
 import { useEffect, useState, type CSSProperties } from 'react'
-import { Boxes, Camera, ClipboardList, FileSignature, History, House, List, LogOut, ScanLine, Settings2, Wheat } from 'lucide-react'
+import { Boxes, Camera, ClipboardList, FileSignature, History, House, List, LogOut, ScanLine, Settings2, Truck, Wheat } from 'lucide-react'
 import { AuthorizationManager } from './components/AuthorizationManager'
 import { InspectionRecordManager, type InspectionRecordTarget } from './components/InspectionRecordManager'
 import { InspectionOptionManager } from './components/InspectionOptionManager'
 import { InventoryManager } from './components/InventoryManager'
+import { OtherRiceShipment } from './components/OtherRiceShipment'
 import { PurchaseStatementManager } from './components/PurchaseStatementManager'
 import { ShipmentHistory } from './components/ShipmentHistory'
 import { ShipmentScanner } from './components/ShipmentScanner'
@@ -11,7 +12,7 @@ import { logoutBusinessSession, MANAGEMENT_MENU_URL, restoreBusinessSession } fr
 import type { Worker } from './types'
 import './App.css'
 
-type Tab = 'scan' | 'history' | 'inventory-history' | 'inventory' | 'statement-reader' | 'statement-list' | 'statement-master' | 'authorizations' | 'inspections' | 'master'
+type Tab = 'scan' | 'shipping-record' | 'history' | 'inventory-history' | 'inventory' | 'statement-reader' | 'statement-list' | 'statement-master' | 'authorizations' | 'inspections' | 'master'
 
 function isStatementApplication() {
   const params = new URLSearchParams(window.location.search)
@@ -46,6 +47,7 @@ function App() {
         }
         setWorker(sessionWorker)
         if (sessionWorker.role === 'viewer') setTab(statementApplication ? 'statement-list' : 'history')
+        else if (!statementApplication && sessionWorker.role !== 'admin') setTab('shipping-record')
       })
       .finally(() => setLoading(false))
   }, [statementApplication])
@@ -125,7 +127,7 @@ function App() {
   const canOperate = worker.role !== 'viewer'
   const isAdmin = worker.role === 'admin'
   const roleName = isAdmin ? '管理者' : canOperate ? '作業者' : '閲覧者'
-  const navStyle = { '--nav-count': statementApplication ? (isAdmin ? 3 : canOperate ? 2 : 1) : isAdmin ? 7 : canOperate ? 6 : 3 } as CSSProperties
+  const navStyle = { '--nav-count': statementApplication ? (isAdmin ? 3 : canOperate ? 2 : 1) : isAdmin ? 8 : canOperate ? 6 : 3 } as CSSProperties
 
   return (
     <div className="app-shell">
@@ -149,9 +151,16 @@ function App() {
       </header>
 
       <main className={`app-main ${statementApplication || tab === 'history' || tab === 'inventory-history' || tab === 'inventory' || tab === 'authorizations' || tab === 'inspections' ? 'app-main-wide' : ''} ${statementApplication ? 'app-main-statements' : ''}`}>
-        {!statementApplication && tab === 'scan' && canOperate && (
+        {!statementApplication && tab === 'scan' && isAdmin && (
           <ShipmentScanner
             key={worker.worker_id}
+            workerId={worker.worker_id}
+            workerName={worker.worker_name}
+            onRegistered={() => setHistoryVersion((value) => value + 1)}
+          />
+        )}
+        {!statementApplication && tab === 'shipping-record' && canOperate && (
+          <OtherRiceShipment
             workerId={worker.worker_id}
             workerName={worker.worker_name}
             onRegistered={() => setHistoryVersion((value) => value + 1)}
@@ -181,6 +190,7 @@ function App() {
               <InspectionRecordManager
                 key={`${inspectionReadOnly ? 'readonly' : 'editable'}-${inspectionAuthorizationId ?? 'inspection-summary'}-${inspectionRegistrationId ?? 'all'}`}
                 workerId={worker.worker_id}
+                isAdmin={isAdmin}
                 readOnly={inspectionReadOnly}
                 selectedAuthorizationId={inspectionAuthorizationId}
                 selectedRegistrationId={inspectionRegistrationId}
@@ -213,8 +223,11 @@ function App() {
             <Settings2 size={22} /><span>マスタ</span>
           </button>}
         </> : <>
-        {canOperate && <button className={tab === 'scan' ? 'active' : ''} onClick={() => setTab('scan')}>
-          <ScanLine size={22} /><span>出荷作業</span>
+        {isAdmin && <button className={tab === 'scan' ? 'active' : ''} onClick={() => setTab('scan')}>
+          <ScanLine size={22} /><span>出荷作業(QR)</span>
+        </button>}
+        {canOperate && <button className={tab === 'shipping-record' ? 'active' : ''} onClick={() => setTab('shipping-record')}>
+          <Truck size={22} /><span>出荷記録</span>
         </button>}
         <button className={tab === 'history' ? 'active' : ''} onClick={() => setTab('history')}>
           <History size={22} /><span>出荷履歴</span>

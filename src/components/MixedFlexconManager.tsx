@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase'
 import { formatPrefectureName } from '../lib/prefecture'
 import type { AuthorizationRecord, FlexconInspection, InspectionOption, InspectionWeight, MixedFlexcon } from '../types'
 
-type Props = { workerId: string }
+type Props = { workerId: string; isAdmin: boolean }
 type Notice = { type: 'success' | 'error'; text: string } | null
 type SourceFlexcon = { flexcon: FlexconInspection; authorization: AuthorizationRecord }
 type MemberDraft = SourceFlexcon & { quantity: string }
@@ -66,7 +66,7 @@ function brandTypeForOrigin(origin: string): 'brand_aomori' | 'brand_iwate' | nu
   return null
 }
 
-export function MixedFlexconManager({ workerId }: Props) {
+export function MixedFlexconManager({ workerId, isAdmin }: Props) {
   const [items, setItems] = useState<MixedFlexcon[]>([])
   const [authorizations, setAuthorizations] = useState<AuthorizationRecord[]>([])
   const [options, setOptions] = useState<InspectionOption[]>([])
@@ -280,6 +280,7 @@ export function MixedFlexconManager({ workerId }: Props) {
         .map((member) => member.flexcon_authorizations?.feed_rice_variety?.trim())
         .filter((value): value is string => Boolean(value)))].join('、')
       const blob = await generateInspectionCertificatePdf({
+        includeManagementQr: isAdmin,
         authorization: {
           authorizationNo: String(selected.mixed_no + 5000),
           fullName: fullMemberNames(selected),
