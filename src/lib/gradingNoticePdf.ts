@@ -1,4 +1,5 @@
 import { PDFDocument, PrintScaling } from 'pdf-lib'
+import { formatJapaneseDateLong } from './japaneseEra'
 
 export type GradingNoticeRecord = {
   authorizationNo: string
@@ -138,9 +139,7 @@ function drawTextInBox(
 }
 
 function japaneseDate(value: string) {
-  const [year, month, day] = value.split('-').map(Number)
-  if (!year || !month || !day) return ''
-  return `令和 ${year - 2018} 年 ${month} 月 ${day} 日`
+  return formatJapaneseDateLong(value)
 }
 
 function createOverlayCanvas() {

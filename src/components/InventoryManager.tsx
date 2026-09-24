@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { AlertTriangle, ArrowDown, ArrowDownToLine, ArrowRightLeft, ArrowUp, ArrowUpFromLine, Camera, FileUp, Filter, Pencil, Plus, Save, Search, Trash2, Warehouse, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { formatJapaneseCropYear, formatJapaneseDate, formatJapaneseDateForFilename } from '../lib/japaneseEra'
+import { JapaneseCropYearInput, JapaneseDateInput } from './JapaneseDateInput'
 import type { InspectionOption } from '../types'
 
 type Props = { view: ViewMode; workerId: string; workerName: string; canOperate: boolean; isAdmin: boolean }
@@ -227,8 +229,8 @@ function movementBadgeClass(movement: InventoryMovement) {
 }
 
 function movementValue(movement: InventoryMovement, key: InventoryColumn) {
-  if (key === 'movementDate') return movement.movement_date.replaceAll('-', '/')
-  if (key === 'cropYear') return movement.crop_year == null ? '' : String(movement.crop_year)
+  if (key === 'movementDate') return formatJapaneseDate(movement.movement_date)
+  if (key === 'cropYear') return formatJapaneseCropYear(movement.crop_year)
   if (key === 'movementType') return movementTypeLabel(movement)
   if (key === 'settlementNo') return movement.settlement_no
   if (key === 'workerName') return movement.worker_name
@@ -458,7 +460,7 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
   const displayedBalanceRows = useMemo(() => {
     const term = balanceSearch.trim().toLowerCase()
     return balanceRows.filter((row) => {
-      if (term && !String(row.cropYear ?? '').includes(term) && !balanceColumns.some((column) => balanceValue(row, column.key).toLowerCase().includes(term))) return false
+      if (term && !formatJapaneseCropYear(row.cropYear).toLowerCase().includes(term) && !String(row.cropYear ?? '').includes(term) && !balanceColumns.some((column) => balanceValue(row, column.key).toLowerCase().includes(term))) return false
       return balanceColumns.every((column) => balanceColumnFilters[column.key] === undefined || balanceColumnFilters[column.key].includes(balanceValue(row, column.key)))
     })
   }, [balanceRows, balanceColumnFilters, balanceColumns, balanceSearch])
@@ -658,7 +660,7 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
       })
 
       setImportSource('camera')
-      setImportFileName(`仕切書撮影_${new Date().toLocaleString('ja-JP')}.jpg`)
+      setImportFileName(`仕切書撮影_${formatJapaneseDateForFilename(today())}.jpg`)
       setImportPreviewUrl(image.previewUrl)
       setImportRecords(records)
       setImportErrors([])
@@ -720,7 +722,7 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
 
   const validateForm = (target: MovementForm, mode: MovementMode, productNames: string[], grades: InspectionOption[]) => {
     if (!target.movementDate) return '日付を入力してください。'
-    if (target.cropYear && (!/^\d{4}$/.test(target.cropYear) || Number(target.cropYear) < 1900 || Number(target.cropYear) > 2100)) return '産年は1900～2100の西暦4桁で入力してください。'
+    if (target.cropYear && (!/^\d{4}$/.test(target.cropYear) || Number(target.cropYear) < 1900 || Number(target.cropYear) > 2100)) return '産年を元号と年数で入力してください。'
     if (target.settlementNo.trim().length > 80) return '仕切書№は80文字以内で入力してください。'
     if (!originOptions.some((item) => item.name === target.origin)) return '産地をマスタから選択してください。'
     if (!productNames.includes(target.productName)) return '名称をマスタから選択してください。'
@@ -789,7 +791,7 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
 
   const deleteMovement = async (movement: InventoryMovement) => {
     if (busy || !canOperate) return
-    const description = `${movement.movement_date.replaceAll('-', '/')} ${movementTypeLabel(movement)} ${movement.origin} ${movement.product_name} ${formatQuantity(movement.quantity)}${movement.unit}`
+    const description = `${formatJapaneseDate(movement.movement_date)} ${movementTypeLabel(movement)} ${movement.origin} ${movement.product_name} ${formatQuantity(movement.quantity)}${movement.unit}`
     if (!window.confirm(`${description}\n\nこの入出庫記録を削除しますか？`)) return
     setBusy(true); setNotice(null)
     const { error } = await supabase.rpc('flexcon_delete_inventory_movement', {
@@ -943,8 +945,8 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
     const otherProduct = otherProductNames.has(target.productName)
     const selectableToWarehouses = editing ? warehouses.filter((warehouse) => warehouse.active || warehouse.id === target.toWarehouseId) : activeWarehouses
     return <>
-      <label className="inventory-field-date">日付{weekdayLabel(target.movementDate)}<input type="date" value={target.movementDate} onChange={(e) => setTarget((current) => ({ ...current, movementDate: e.target.value }))} required /></label>
-      <label className="inventory-field-year">産年<input type="number" min="1900" max="2100" step="1" inputMode="numeric" placeholder="西暦" value={target.cropYear} onChange={(e) => setTarget((current) => ({ ...current, cropYear: e.target.value }))} /></label>
+      <label className="inventory-field-date">日付{weekdayLabel(target.movementDate)}<JapaneseDateInput value={target.movementDate} onChange={(movementDate) => setTarget((current) => ({ ...current, movementDate }))} required /></label>
+      <label className="inventory-field-year">産年<JapaneseCropYearInput value={target.cropYear} onChange={(cropYear) => setTarget((current) => ({ ...current, cropYear }))} /></label>
       <label className="inventory-field-settlement">仕切書№<input value={target.settlementNo} maxLength={80} onChange={(e) => setTarget((current) => ({ ...current, settlementNo: e.target.value }))} /></label>
       <label className="inventory-field-worker">作業者<input value={editing?.worker_name ?? workerName} readOnly /></label>
       <label className="inventory-field-origin">産地<select value={target.origin} onChange={(e) => setTarget((current) => ({ ...current, origin: e.target.value, productName: '', grade: '' }))} required><option value="">選択</option>{originOptions.map((origin) => <option key={origin.id} value={origin.name}>{origin.name}</option>)}</select></label>
@@ -1002,7 +1004,7 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
     </> : view === 'balance' ? <>
       <div className="search-row inventory-search-row"><div className="search-input-wrap"><Search size={18} /><input value={balanceSearch} onChange={(event) => setBalanceSearch(event.target.value)} placeholder="在庫を検索" /></div></div>
       {balanceYearGroups.map(([cropYear, group]) => <section className="inventory-year-section" key={cropYear ?? 'unknown'}>
-        <div className="inventory-subheading"><h2>{cropYear == null ? '産年未設定' : `${cropYear}年産`}</h2><span>{group.rows.length}件</span></div>
+        <div className="inventory-subheading"><h2>{cropYear == null ? '産年未設定' : formatJapaneseCropYear(cropYear)}</h2><span>{group.rows.length}件</span></div>
         <div className="inventory-table-wrap"><table className="inventory-table inventory-balance-table" style={{ '--inventory-balance-mobile-width': `${358 + balanceGradeColumns.length * 62}px` } as React.CSSProperties}>
           <colgroup><col className="inventory-balance-warehouse-col" /><col className="inventory-balance-origin-col" /><col className="inventory-balance-product-col" /><col className="inventory-balance-unit-col" />{balanceGradeColumns.map((grade) => <col className="inventory-balance-grade-col" key={grade} />)}</colgroup>
           <thead><tr>{balanceColumns.map((column, index) => <FilterableColumnHeader key={column.key} column={column} values={balanceFilterValues[column.key]} selectedValues={balanceColumnFilters[column.key]} onFilterChange={changeBalanceColumnFilter} openRight={index === 0} />)}</tr></thead>
@@ -1025,7 +1027,7 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
       {notice?.type === 'error' && <div className="notice error" role="alert">{notice.text}</div>}
       <form className="inventory-statement-edit-form" noValidate onSubmit={(event) => void saveStatementEdit(event)}>
         <div className="inventory-statement-common-fields">
-          <label>日付<input type="date" value={statementEditForm.movementDate} onChange={(event) => setStatementEditForm((current) => current ? { ...current, movementDate: event.target.value } : current)} required /></label>
+          <label>日付<JapaneseDateInput value={statementEditForm.movementDate} onChange={(movementDate) => setStatementEditForm((current) => current ? { ...current, movementDate } : current)} required /></label>
           <label>仕切り書№<input value={statementEditForm.settlementNo} maxLength={80} onChange={(event) => setStatementEditForm((current) => current ? { ...current, settlementNo: event.target.value } : current)} required /></label>
           <label>生産者名<input value={statementEditForm.producerName} maxLength={120} onChange={(event) => setStatementEditForm((current) => current ? { ...current, producerName: event.target.value } : current)} required /></label>
           <label>入庫先倉庫<select value={statementEditForm.toWarehouseId} onChange={(event) => setStatementEditForm((current) => current ? { ...current, toWarehouseId: event.target.value } : current)}><option value="">未指定</option>{warehouses.filter((warehouse) => warehouse.active || warehouse.id === statementEditForm.toWarehouseId).map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}{warehouse.active ? '' : '（無効）'}</option>)}</select></label>
@@ -1049,8 +1051,8 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
         {importPreviewUrl && <img src={importPreviewUrl} alt="撮影した仕切書" />}
         <div className="inventory-camera-common-fields">
           <label>仕切り書№<input value={importRecords[0].settlement_no} maxLength={80} onChange={(event) => changeCameraSettlementNo(event.target.value)} /></label>
-          <label>産年<input type="number" min="1900" max="2100" step="1" value={importRecords[0].crop_year ?? ''} onChange={(event) => updateImportCommon({ crop_year: event.target.value ? Number(event.target.value) : null })} /></label>
-          <label>仕入日<input type="date" value={importRecords[0].purchased_at.slice(0, 10)} onChange={(event) => updateImportCommon({ purchased_at: event.target.value ? `${event.target.value}T00:00:00+09:00` : '' })} /></label>
+          <label>産年<JapaneseCropYearInput value={String(importRecords[0].crop_year ?? '')} onChange={(crop_year) => updateImportCommon({ crop_year: crop_year ? Number(crop_year) : null })} /></label>
+          <label>仕入日<JapaneseDateInput value={importRecords[0].purchased_at.slice(0, 10)} onChange={(purchased_at) => updateImportCommon({ purchased_at: purchased_at ? `${purchased_at}T00:00:00+09:00` : '' })} /></label>
           <label>生産者名<input value={importRecords[0].producer_name} maxLength={120} onChange={(event) => updateImportCommon({ producer_name: event.target.value })} /></label>
           <label>産地<select value={importRecords[0].origin} onChange={(event) => updateImportCommon({ origin: event.target.value })}><option value="">選択</option>{originOptions.map((origin) => <option key={origin.id} value={origin.name}>{origin.name}</option>)}</select></label>
           <label>仕入価格（合計・円）<input type="number" min="0" step="1" inputMode="decimal" value={importRecords[0].purchase_price ?? ''} onChange={(event) => updateImportCommon({ purchase_price: event.target.value ? Number(event.target.value) : null })} /></label>
@@ -1059,8 +1061,8 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
       {importWarnings.length > 0 && <div className="inventory-import-warnings"><div><AlertTriangle size={20} /><strong>読取結果を確認してください</strong></div>{importWarnings.map((warning) => <span key={warning}>{warning}</span>)}</div>}
       {importErrors.length > 0 && <div className="inventory-import-errors" role="alert"><div className="inventory-import-error-heading"><AlertTriangle size={24} /><strong>取込できない行があります（{importErrors.length}行）</strong></div><b>該当する仕切り書№は除外し、正常な仕切り書だけ取り込みます。</b>{importErrors.slice(0, 20).map((error) => <span key={error}>{error}</span>)}{importErrors.length > 20 && <span>ほか {importErrors.length - 20}件</span>}</div>}
       {unmappedImportProducts.length > 0 && <div className="inventory-import-mappings"><strong>名称の対応を選択（選択しない名称は除外）</strong>{unmappedImportProducts.map((sourceName) => <label key={sourceName}><span>{sourceName}</span><select value={importProductMappings[sourceName] ?? ''} onChange={(event) => setImportProductMappings((current) => ({ ...current, [sourceName]: event.target.value }))}><option value="">取込から除外</option>{productOptions.filter((item) => ['brand', 'brand_aomori', 'brand_iwate', 'shipment_product'].includes(item.option_type)).map((item) => <option key={`${item.option_type}-${item.id}`} value={item.name}>{item.name}</option>)}</select></label>)}</div>}
-      {importSettlements.length > 0 && <div className="inventory-import-warehouses"><strong>仕切り書№ごとの入庫先</strong><div className="inventory-import-warehouse-list">{importSettlements.map((settlement) => <label key={settlement.settlementNo}><span><b>{settlement.settlementNo}</b><small>{settlement.producerName}　{settlement.purchaseDate.replaceAll('-', '/')}　{settlement.lineCount}行</small></span><select value={importWarehouseIds[settlement.settlementNo] ?? ''} onChange={(event) => setImportWarehouseIds((current) => ({ ...current, [settlement.settlementNo]: event.target.value }))}><option value="">未指定で取込</option>{activeWarehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</select></label>)}</div></div>}
-      {importSource === 'camera' ? <div className="import-preview inventory-import-preview inventory-camera-lines"><table><thead><tr><th>行</th><th>名称</th><th>数量</th><th>単位</th><th>仕入価格</th></tr></thead><tbody>{importRecords.map((record, index) => <tr key={`${record.detail_no}-${record.part_no}-${index}`}><td data-label="明細">{index + 1}</td><td data-label="名称"><select value={record.product_name} onChange={(event) => { const productName = event.target.value; updateImportRecord(index, { product_name: productName, grade: otherProductNames.has(productName) ? '対象外' : '未検査' }) }}><option value="">選択</option>{!knownProductNames.has(record.product_name) && record.product_name && <option value={record.product_name}>{record.product_name}（未登録）</option>}{productNamesFor(record.origin).map((product) => <option key={product} value={product}>{product}</option>)}</select></td><td data-label="数量"><input type="number" min="0.001" step="1" inputMode="decimal" value={record.quantity} onChange={(event) => updateImportRecord(index, { quantity: Number(event.target.value), raw_quantity: Number(event.target.value) })} /></td><td data-label="単位"><select value={record.unit} onChange={(event) => updateImportRecord(index, { unit: event.target.value, raw_unit: event.target.value })}><option value="本">本</option><option value="袋">袋</option><option value="kg">kg</option><option value="俵">俵</option></select></td><td data-label="仕入価格" className="numeric-cell">{record.purchase_price == null ? '' : `${record.purchase_price.toLocaleString('ja-JP')}円`}</td></tr>)}</tbody></table></div> : <div className="import-preview inventory-import-preview"><table><thead><tr><th>仕切り書№</th><th>日付</th><th>生産者名</th><th>産地</th><th>名称</th><th>元数量</th><th>在庫数量</th></tr></thead><tbody>{mappedImportRecords.slice(0, 30).map((record) => <tr key={`${record.settlement_no}-${record.detail_no}-${record.part_no}`}><td>{record.settlement_no}</td><td>{record.purchased_at.slice(0, 10).replaceAll('-', '/')}</td><td>{record.producer_name}</td><td>{record.origin}</td><td>{record.product_name}</td><td className="numeric-cell">{formatQuantity(record.raw_quantity)}{record.raw_unit}</td><td className="numeric-cell">{formatQuantity(record.quantity)}{record.unit}</td></tr>)}</tbody></table></div>}
+      {importSettlements.length > 0 && <div className="inventory-import-warehouses"><strong>仕切り書№ごとの入庫先</strong><div className="inventory-import-warehouse-list">{importSettlements.map((settlement) => <label key={settlement.settlementNo}><span><b>{settlement.settlementNo}</b><small>{settlement.producerName}　{formatJapaneseDate(settlement.purchaseDate)}　{settlement.lineCount}行</small></span><select value={importWarehouseIds[settlement.settlementNo] ?? ''} onChange={(event) => setImportWarehouseIds((current) => ({ ...current, [settlement.settlementNo]: event.target.value }))}><option value="">未指定で取込</option>{activeWarehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</select></label>)}</div></div>}
+      {importSource === 'camera' ? <div className="import-preview inventory-import-preview inventory-camera-lines"><table><thead><tr><th>行</th><th>名称</th><th>数量</th><th>単位</th><th>仕入価格</th></tr></thead><tbody>{importRecords.map((record, index) => <tr key={`${record.detail_no}-${record.part_no}-${index}`}><td data-label="明細">{index + 1}</td><td data-label="名称"><select value={record.product_name} onChange={(event) => { const productName = event.target.value; updateImportRecord(index, { product_name: productName, grade: otherProductNames.has(productName) ? '対象外' : '未検査' }) }}><option value="">選択</option>{!knownProductNames.has(record.product_name) && record.product_name && <option value={record.product_name}>{record.product_name}（未登録）</option>}{productNamesFor(record.origin).map((product) => <option key={product} value={product}>{product}</option>)}</select></td><td data-label="数量"><input type="number" min="0.001" step="1" inputMode="decimal" value={record.quantity} onChange={(event) => updateImportRecord(index, { quantity: Number(event.target.value), raw_quantity: Number(event.target.value) })} /></td><td data-label="単位"><select value={record.unit} onChange={(event) => updateImportRecord(index, { unit: event.target.value, raw_unit: event.target.value })}><option value="本">本</option><option value="袋">袋</option><option value="kg">kg</option><option value="俵">俵</option></select></td><td data-label="仕入価格" className="numeric-cell">{record.purchase_price == null ? '' : `${record.purchase_price.toLocaleString('ja-JP')}円`}</td></tr>)}</tbody></table></div> : <div className="import-preview inventory-import-preview"><table><thead><tr><th>仕切り書№</th><th>日付</th><th>生産者名</th><th>産地</th><th>名称</th><th>元数量</th><th>在庫数量</th></tr></thead><tbody>{mappedImportRecords.slice(0, 30).map((record) => <tr key={`${record.settlement_no}-${record.detail_no}-${record.part_no}`}><td>{record.settlement_no}</td><td>{formatJapaneseDate(record.purchased_at)}</td><td>{record.producer_name}</td><td>{record.origin}</td><td>{record.product_name}</td><td className="numeric-cell">{formatQuantity(record.raw_quantity)}{record.raw_unit}</td><td className="numeric-cell">{formatQuantity(record.quantity)}{record.unit}</td></tr>)}</tbody></table></div>}
       {mappedImportRecords.length > 30 && <p className="import-preview-more">ほか {mappedImportRecords.length - 30}行</p>}
       <div className="modal-actions"><button className="secondary-button" type="button" onClick={() => setImportOpen(false)} disabled={busy}>取消</button><button className="primary-button" type="button" onClick={() => void executePurchaseImport()} disabled={busy || mappedImportRecords.length === 0}><FileUp size={18} />{busy ? '取込中...' : '確認した明細を取り込む'}</button></div>
     </section></div>}

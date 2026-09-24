@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { RotateCcw, ScanLine, Send, UserRound } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { JapaneseDateTimeInput } from './JapaneseDateInput'
 import type { Destination, InspectionOption } from '../types'
 import { ShipmentRecordItemsEditor } from './ShipmentRecordItemsEditor'
 import { type ShipmentRecordItemDraft, validateShipmentRecordItems } from '../lib/shipmentRecordValidation'
@@ -119,7 +120,7 @@ export function ShipmentRecord({ workerId, workerName, onRegistered, onOpenQrSca
       <div className="modal-actions other-rice-actions"><button className="secondary-button" type="button" onClick={clearForm} disabled={busy}><RotateCcw size={18} />入力をクリア</button><button className="primary-button" type="submit" disabled={busy || items.length === 0}><Send size={18} />{busy ? '登録中...' : '出荷を登録'}</button></div>
       <ShipmentRecordItemsEditor key={editorVersion} items={items} onChange={setItems} options={shipmentProducts} disabled={busy} />
       <div className="shipment-form-row worker-summary"><span className="worker-summary-label"><UserRound size={18} />担当者</span><strong>{workerName}</strong></div>
-      <label className="shipment-form-row"><span>出荷日時</span><input className={!shippedAt ? 'shipment-required-missing' : ''} type="datetime-local" step={60} value={shippedAt} onChange={(event) => setShippedAt(event.target.value)} required /></label>
+      <label className="shipment-form-row"><span>出荷日時</span><JapaneseDateTimeInput className={!shippedAt ? 'shipment-required-missing' : ''} value={shippedAt} onChange={setShippedAt} required /></label>
       <label className="shipment-form-row"><span>納品先</span><select className={!destinationId ? 'shipment-required-missing' : ''} value={destinationId} onChange={(event) => setDestinationId(event.target.value)} required><option value="">選択してください</option>{destinations.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
       <label className="shipment-form-row"><span>出庫元倉庫</span><select className={!fromWarehouseId ? 'shipment-required-missing' : ''} value={fromWarehouseId} onChange={(event) => setFromWarehouseId(event.target.value)} required><option value="">選択してください</option>{warehouses.map((item) => <option key={item.id} value={item.id}>{item.name}{item.active || item.name === '倉庫未設定' ? '' : '（無効）'}</option>)}</select></label>
       <label className="shipment-form-row"><span>仕入値（任意・1俵当たり）</span><input type="number" min="0" step="1" inputMode="decimal" value={purchasePrice} onChange={(event) => setPurchasePrice(event.target.value)} /></label>

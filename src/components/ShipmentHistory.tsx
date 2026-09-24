@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowDown, ArrowUp, Building2, Download, Filter, LayoutGrid, Pencil, Save, Search, Table2, Trash2, Truck, UserRound, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { formatJapaneseDateForFilename, formatJapaneseDateTime } from '../lib/japaneseEra'
+import { JapaneseDateTimeInput } from './JapaneseDateInput'
 import { formatPrefectureName } from '../lib/prefecture'
 import type { Destination, InspectionOption, Shipment, TransportProfile } from '../types'
 import { ManualShipmentItemsEditor, type ManualShipmentItemDraft } from './ManualShipmentItemsEditor'
@@ -87,9 +89,7 @@ function toLocalDateTime(value: string) {
 }
 
 function formatShipmentDateTime(value: string) {
-  const date = new Date(value)
-  const pad = (part: number) => String(part).padStart(2, '0')
-  return `${date.getFullYear()}/${pad(date.getMonth() + 1)}/${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
+  return formatJapaneseDateTime(value)
 }
 
 function shipmentProductSummary(shipment: Shipment) {
@@ -661,7 +661,8 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
     const anchor = document.createElement('a')
     anchor.href = url
-    anchor.download = `出荷履歴_${new Date().toISOString().slice(0, 10)}.csv`
+    const now = new Date()
+    anchor.download = `出荷履歴_${formatJapaneseDateForFilename(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`)}.csv`
     anchor.click()
     URL.revokeObjectURL(url)
   }
@@ -810,7 +811,7 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
               {editing.shipment_kind === 'manual_record' && <ShipmentRecordItemsEditor key={editing.id} items={recordItems} onChange={setRecordItems} options={shipmentProducts} disabled={busy} />}
               {(editing.shipment_kind === 'paper_bag' || editing.shipment_kind === 'other_rice') && <ManualShipmentItemsEditor key={editing.id} kind={editing.shipment_kind} items={manualItems} onChange={setManualItems} shipmentProducts={shipmentProducts} disabled={busy} />}
               <div className="form-grid two">
-                <label>出荷日時<input type="datetime-local" step={60} value={shippedAt} onChange={(e) => setShippedAt(e.target.value)} required /></label>
+                <label>出荷日時<JapaneseDateTimeInput value={shippedAt} onChange={setShippedAt} required /></label>
                 <label>納品先
                   <select value={destinationId} onChange={(e) => setDestinationId(e.target.value)} required>
                     <option value="">選択してください</option>

@@ -138,6 +138,21 @@
 .shipment-form-row { display: grid; grid-template-columns: 132px minmax(0, 1fr); align-items: center; gap: 12px; margin: 0; }
 .shipment-form-row > span:first-child { color: #3f4a42; font-size: 14px; font-weight: 700; }
 .shipment-form-row input, .shipment-form-row select, .shipment-form-row textarea { width: 100%; min-width: 0; margin: 0; }
+.japanese-date-input { position: relative; display: inline-flex; align-items: center; width: 100%; min-width: 0; }
+.japanese-date-input > input[type="text"] { width: 100%; min-width: 0; padding-right: 34px; font-variant-numeric: tabular-nums; }
+.japanese-date-picker { position: absolute; right: 1px; top: 1px; bottom: 1px; width: 30px; display: grid; place-items: center; overflow: hidden; color: #52645a; cursor: pointer; }
+.japanese-date-picker > input[type="date"] { position: absolute; inset: 0; width: 100%; height: 100%; min-width: 0; opacity: 0; cursor: pointer; }
+.japanese-date-picker:focus-within { outline: 2px solid var(--green); outline-offset: -2px; }
+.japanese-date-error { position: absolute; top: 100%; left: 0; z-index: 5; padding: 2px 6px; border: 1px solid #efc2bd; background: #fff5f4; color: #8f2d26; font-size: 11px; white-space: nowrap; }
+.japanese-date-input > input[aria-invalid="true"] { border-color: #c7463e; background: #fff5f4; }
+.japanese-datetime-input { display: flex; flex-wrap: wrap; width: 100%; min-width: 0; gap: 5px; }
+.japanese-datetime-input > .japanese-date-input { flex: 1 1 150px; }
+.japanese-datetime-input > input[type="time"] { flex: 0 0 86px; width: 86px; min-width: 0; }
+.japanese-crop-year-input, .japanese-fiscal-year-input { display: inline-flex; align-items: center; width: 100%; min-width: 0; gap: 3px; white-space: nowrap; }
+.japanese-crop-year-input > select { flex: 1 1 66px; min-width: 60px; padding-inline: 3px; }
+.japanese-crop-year-input > input, .japanese-fiscal-year-input > input { flex: 0 1 53px; width: 53px; min-width: 46px; padding-inline: 3px; }
+.japanese-crop-year-input > span { flex: 0 0 auto; }
+.japanese-fiscal-year-input { font-size: 12px; }
 .shipment-required-missing { background: #fff1bf !important; border-color: #d39a28 !important; box-shadow: inset 0 0 0 1px rgba(211, 154, 40, .12); }
 .shipment-required-missing:focus { outline-color: rgba(177, 113, 8, .22); border-color: #a86b08 !important; }
 .shipment-registration-form .worker-summary { grid-template-columns: 132px minmax(0, 1fr); }
@@ -247,7 +262,7 @@
 .inventory-import-actions { display: flex; align-items: center; gap: 7px; }
 .inventory-mode-switch button, .inventory-view-tabs button { min-height: 34px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 5px 12px; border: 0; border-radius: 4px; background: transparent; color: #536057; font-weight: 700; }
 .inventory-mode-switch button.active, .inventory-view-tabs button.active { background: #fff; color: var(--green-dark); box-shadow: 0 1px 3px rgb(29 55 37 / 16%); }
-.inventory-entry-form { display: grid; grid-template-columns: 110px 78px 100px 100px 90px minmax(130px, 1fr) 75px 75px 60px 100px 100px auto; align-items: end; gap: 8px; }
+.inventory-entry-form { display: grid; grid-template-columns: 150px 136px 100px 100px 90px minmax(130px, 1fr) 75px 75px 60px 100px 100px auto; align-items: end; gap: 8px; }
 .inventory-entry-form label { min-width: 0; margin: 0; font-size: 12px; }
 .inventory-entry-form input, .inventory-entry-form select { width: 100%; min-width: 0; height: 34px; min-height: 34px; }
 .inventory-entry-form input[readonly] { background: #edf1ee; color: #4b5650; }
@@ -786,9 +801,9 @@
 .inspection-inline-cell { min-width: 96px; padding: 4px 6px !important; }
 .inspection-inline-cell input, .inspection-inline-cell select { width: 100%; min-width: 96px; height: 30px; min-height: 30px; padding: 3px 6px; border-radius: 4px; background: #fff; }
 .inspection-inline-reason-cell { min-width: 150px; }
-.inspection-year-cell { min-width: 76px; width: 76px; }
-.inspection-year-cell input { min-width: 62px; }
-.inspection-date-cell { min-width: 122px; }
+.inspection-year-cell { min-width: 118px; width: 118px; }
+.inspection-year-cell input { min-width: 46px; }
+.inspection-date-cell { min-width: 157px; }
 .inspection-inspector-cell { min-width: 122px; }
 .inspection-location-cell { min-width: 130px; }
 .inspection-prefecture-cell { min-width: 84px; white-space: nowrap; }

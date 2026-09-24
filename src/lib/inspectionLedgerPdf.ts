@@ -1,4 +1,5 @@
 import { PDFDocument, PrintScaling } from 'pdf-lib'
+import { formatJapaneseDate } from './japaneseEra'
 
 export type InspectionLedgerAuthorization = {
   authorizationNo: string
@@ -157,9 +158,7 @@ function drawTextInBox(
 }
 
 function ledgerDate(value: string) {
-  const [year, month, day] = value.split('-').map(Number)
-  if (!year || !month || !day) return ''
-  return `${year - 2018}・${month}・${day}`
+  return formatJapaneseDate(value).replaceAll('/', '・')
 }
 
 function cropType(brand: string) {

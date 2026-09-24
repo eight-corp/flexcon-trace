@@ -1,5 +1,6 @@
 import { PDFDocument, PrintScaling } from 'pdf-lib'
 import QRCode from 'qrcode'
+import { formatJapaneseDateLong } from './japaneseEra'
 
 export type CertificateAuthorization = {
   authorizationNo: string
@@ -102,9 +103,7 @@ function drawCenteredTextInBox(
 
 function japaneseDate(value: string | null) {
   if (!value) return '令和　　年　　月　　日'
-  const [year, month, day] = value.split('-').map(Number)
-  if (!year || !month || !day) return '令和　　年　　月　　日'
-  return `令和 ${year - 2018} 年 ${month} 月 ${day} 日`
+  return formatJapaneseDateLong(value)
 }
 
 function prefectureLabel(prefecture: string) {

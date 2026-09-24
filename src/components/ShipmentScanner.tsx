@@ -1,6 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { Check, Minus, Plus, Send, Trash2, UserRound, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { JapaneseDateTimeInput } from './JapaneseDateInput'
 import { formatPrefectureName } from '../lib/prefecture'
 import { selectedInspectionGrade } from '../lib/inspectionGrade'
 import type { Destination, InspectionOption, TransportProfile } from '../types'
@@ -536,7 +537,7 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
                 <span className="worker-summary-label"><UserRound size={18} />担当者</span>
                 <strong>{workerName}</strong>
               </div>
-              <label className="shipment-form-row"><span>出荷日時</span><input className={!shippedAt ? 'shipment-required-missing' : ''} aria-invalid={!shippedAt} type="datetime-local" step={60} value={shippedAt} onChange={(e) => setShippedAt(e.target.value)} required /></label>
+              <label className="shipment-form-row"><span>出荷日時</span><JapaneseDateTimeInput className={!shippedAt ? 'shipment-required-missing' : ''} aria-invalid={!shippedAt} value={shippedAt} onChange={setShippedAt} required /></label>
               <label className="shipment-form-row"><span>納品先</span>
                 <select className={!destinationId ? 'shipment-required-missing' : ''} aria-invalid={!destinationId} value={destinationId} onChange={(e) => setDestinationId(e.target.value)} required>
                   <option value="">選択してください</option>

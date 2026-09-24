@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, FileText, Plus, Search, Trash2, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { formatJapaneseCropYear, formatJapaneseDate } from '../lib/japaneseEra'
+import { JapaneseDateInput } from './JapaneseDateInput'
 import { formatPrefectureName } from '../lib/prefecture'
 import type { AuthorizationRecord, FlexconInspection, InspectionOption, InspectionWeight, MixedFlexcon } from '../types'
 
@@ -330,13 +332,13 @@ export function MixedFlexconManager({ workerId, isAdmin }: Props) {
       {notice && <div className={`notice ${notice.type}`}>{notice.text}</div>}
       <section className="section-band mixed-members-summary">
         <div className="section-title"><h2>生産者別内訳</h2><strong>合計 {selected.flexcon_mixed_flexcon_members.reduce((total, member) => total + Number(memberQuantities[member.id] ?? 0), 0).toLocaleString()}kg</strong></div>
-        <div className="mixed-member-summary-list">{[...selected.flexcon_mixed_flexcon_members].sort((a, b) => a.sort_order - b.sort_order).map((member) => { const source = sourceFlexcons.find((item) => item.id === member.source_flexcon_id); const otherAllocated = (allocatedBySource[member.source_flexcon_id ?? ''] ?? 0) - member.quantity_kg; const maxQuantity = Math.max(member.quantity_kg, (source?.quantity_kg ?? member.quantity_kg) - otherAllocated); return <div key={member.id}><span>委任状№ {member.flexcon_authorizations?.authorization_no}　{member.flexcon_authorizations?.full_name}<small>仕入日 {source?.purchase_date ?? '-'}　元フレコン№{source?.flexcon_no ?? '-'}　上限{maxQuantity.toLocaleString()}kg</small></span><label><input type="number" min="1" max={maxQuantity} step="1" value={memberQuantities[member.id] ?? ''} onChange={(event) => setMemberQuantities((current) => ({ ...current, [member.id]: event.target.value }))} /><span>kg</span></label></div> })}</div>
+        <div className="mixed-member-summary-list">{[...selected.flexcon_mixed_flexcon_members].sort((a, b) => a.sort_order - b.sort_order).map((member) => { const source = sourceFlexcons.find((item) => item.id === member.source_flexcon_id); const otherAllocated = (allocatedBySource[member.source_flexcon_id ?? ''] ?? 0) - member.quantity_kg; const maxQuantity = Math.max(member.quantity_kg, (source?.quantity_kg ?? member.quantity_kg) - otherAllocated); return <div key={member.id}><span>委任状№ {member.flexcon_authorizations?.authorization_no}　{member.flexcon_authorizations?.full_name}<small>仕入日 {formatJapaneseDate(source?.purchase_date) || '-'}　元フレコン№{source?.flexcon_no ?? '-'}　上限{maxQuantity.toLocaleString()}kg</small></span><label><input type="number" min="1" max={maxQuantity} step="1" value={memberQuantities[member.id] ?? ''} onChange={(event) => setMemberQuantities((current) => ({ ...current, [member.id]: event.target.value }))} /><span>kg</span></label></div> })}</div>
         <div className="modal-actions"><button className="secondary-button" type="button" disabled={busy} onClick={() => void saveMemberQuantities()}>{busy ? '保存中...' : '使用数量を保存'}</button></div>
       </section>
       <form className="section-band mixed-inspection-form" noValidate onSubmit={(event) => void saveInspection(event)}>
         <div className="mixed-inspection-grid">
-          <label>年度<input value={selected.fiscal_year} readOnly /></label>
-          <label>検査日<input className={!draft.inspectionDate ? 'inspection-missing' : ''} type="date" value={draft.inspectionDate} onChange={(event) => setDraft((current) => current ? { ...current, inspectionDate: event.target.value } : current)} /></label>
+          <label>年度<input value={formatJapaneseCropYear(selected.fiscal_year).replace('年産', '年度')} readOnly /></label>
+          <label>検査日<JapaneseDateInput className={!draft.inspectionDate ? 'inspection-missing' : ''} value={draft.inspectionDate} onChange={(inspectionDate) => setDraft((current) => current ? { ...current, inspectionDate } : current)} /></label>
           <label>検査員<select className={!draft.inspectorName ? 'inspection-missing' : ''} value={draft.inspectorName} onChange={(event) => setDraft((current) => current ? { ...current, inspectorName: event.target.value } : current)}><option value="">未選択</option>{inspectorOptions.map((option) => <option key={option.id}>{option.name}</option>)}</select></label>
           <label>検査場所<select className={!draft.inspectionLocation ? 'inspection-missing' : ''} value={draft.inspectionLocation} onChange={(event) => setDraft((current) => current ? { ...current, inspectionLocation: event.target.value } : current)}><option value="">未選択</option>{locationOptions.map((option) => <option key={option.id}>{option.name}</option>)}</select></label>
           <label>産地<input value={selected.origin_prefecture} readOnly /></label>
@@ -367,7 +369,7 @@ export function MixedFlexconManager({ workerId, isAdmin }: Props) {
       {notice && <div className={`notice ${notice.type}`}>{notice.text}</div>}
       <form className="mixed-add-form" noValidate onSubmit={(event) => void registerMixedFlexcon(event)}>
         <div className="mixed-base-fields">
-          <label>年度<input type="number" min="1" max="99" step="1" value={addForm.fiscalYear} onChange={(event) => setAddForm((current) => ({ ...current, fiscalYear: event.target.value }))} required /></label>
+          <label>年度<span className="japanese-fiscal-year-input">令和<input type="number" min="1" max="99" step="1" value={addForm.fiscalYear} onChange={(event) => setAddForm((current) => ({ ...current, fiscalYear: event.target.value }))} required />年度</span></label>
           <label>産地<select value={addForm.origin} onChange={(event) => { const origin = event.target.value; setAddForm((current) => ({ ...current, origin, brand: '', candidateSearch: '' })); setMembers([]) }} required><option value="">選択してください</option>{originOptions.map((origin) => <option key={origin}>{origin}</option>)}</select></label>
           <label>銘柄名<select value={addForm.brand} disabled={!addForm.origin} onChange={(event) => { const brand = event.target.value; setAddForm((current) => ({ ...current, brand, candidateSearch: '' })); setMembers([]) }} required><option value="">選択してください</option>{brandOptions.map((option) => <option key={option.id}>{option.name}</option>)}</select></label>
         </div>
