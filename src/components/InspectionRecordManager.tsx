@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowDown, ArrowLeft, ArrowUp, BarChart3, ChevronDown, CircleAlert, ClipboardList, ExternalLink, FileText, Filter, List, Plus, Printer, Save, TableRowsSplit, Trash2, X } from 'lucide-react'
+import { ArrowDown, ArrowLeft, ArrowUp, BarChart3, ChevronDown, CircleAlert, ClipboardList, ExternalLink, FileText, List, Plus, Printer, Save, TableRowsSplit, Trash2, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { formatDisplayDate, formatJapaneseDateForFilename } from '../lib/japaneseEra'
 import { useCalendarMode } from '../lib/calendarMode'
 import { JapaneseDateInput, JapaneseFiscalYearInput } from './JapaneseDateInput'
+import { TableColumnFilter } from './TableColumnFilter'
 import { formatPrefectureName } from '../lib/prefecture'
 import { selectedInspectionGrade } from '../lib/inspectionGrade'
 import type { AuthorizationRecord, FlexconInspection, InspectionOption, InspectionRegistration, InspectionWeight, PaperBagInspection } from '../types'
@@ -268,44 +269,13 @@ function InspectionSummaryColumnHeader({
   onSort: (key: SummaryColumn) => void
   onFilterChange: (key: SummaryColumn, values: string[] | undefined) => void
 }) {
-  const allSelected = selectedValues === undefined || selectedValues.length === values.length
-  const filterRef = useRef<HTMLDetailsElement>(null)
-
-  useEffect(() => {
-    const closeOnOutsideClick = (event: PointerEvent) => {
-      const filter = filterRef.current
-      if (filter?.open && event.target instanceof Node && !filter.contains(event.target)) filter.open = false
-    }
-    document.addEventListener('pointerdown', closeOnOutsideClick)
-    return () => document.removeEventListener('pointerdown', closeOnOutsideClick)
-  }, [])
-
   return <th className={`inspection-summary-column-heading inspection-summary-column-${column.key}`}>
     <div className="shipment-column-heading">
       <button type="button" className="shipment-column-sort" onClick={() => onSort(column.key)}>
         <span>{column.label}</span>
         {sort?.key === column.key && (sort.direction === 'asc' ? <ArrowUp size={14} /> : <ArrowDown size={14} />)}
       </button>
-      <details ref={filterRef} className={`shipment-column-filter ${column.key === 'registrationNo' ? 'open-right' : ''} ${selectedValues === undefined ? '' : 'active'}`}>
-        <summary title={`${column.label}を絞り込む`} aria-label={`${column.label}を絞り込む`}><Filter size={14} /></summary>
-        <div className="shipment-filter-menu">
-          <strong>{column.label}</strong>
-          <label><input type="checkbox" checked={allSelected} onChange={() => onFilterChange(column.key, allSelected ? [] : undefined)} />すべて</label>
-          <div className="shipment-filter-values">
-            {values.map((value) => {
-              const checked = selectedValues === undefined || selectedValues.includes(value)
-              return <label key={value}>
-                <input type="checkbox" checked={checked} onChange={() => {
-                  const current = selectedValues ?? values
-                  const next = checked ? current.filter((item) => item !== value) : [...current, value]
-                  onFilterChange(column.key, next.length === values.length ? undefined : next)
-                }} />
-                {value || '（空白）'}
-              </label>
-            })}
-          </div>
-        </div>
-      </details>
+      <TableColumnFilter label={column.label} values={values} selectedValues={selectedValues} onChange={(next) => onFilterChange(column.key, next)} openRight={column.key === 'registrationNo'} />
     </div>
   </th>
 }

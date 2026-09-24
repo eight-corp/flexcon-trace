@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowDown, ArrowUp, FileUp, Filter, Plus, Save, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, FileUp, Plus, Save, X } from 'lucide-react'
 import type { CellValue } from 'read-excel-file/browser'
 import { supabase } from '../lib/supabase'
 import { AUTHORIZATION_COLUMNS, AUTHORIZATION_NO_COLLATOR, authorizationColumnValue, selectAuthorizations, type AuthorizationColumn, type AuthorizationFilters, type AuthorizationSort } from '../lib/authorizationTable'
 import type { AuthorizationRecord } from '../types'
 import { ToggleSwitch } from './ToggleSwitch'
+import { TableColumnFilter } from './TableColumnFilter'
 
 type Props = {
   workerId: string
@@ -145,44 +146,13 @@ function AuthorizationColumnHeader({ column, sort, values, selectedValues, onSor
   onSort: (key: AuthorizationColumn) => void
   onFilterChange: (key: AuthorizationColumn, values: string[] | undefined) => void
 }) {
-  const filterRef = useRef<HTMLDetailsElement>(null)
-  const allSelected = selectedValues === undefined || selectedValues.length === values.length
-
-  useEffect(() => {
-    const closeOnOutsideClick = (event: PointerEvent) => {
-      const filter = filterRef.current
-      if (filter?.open && event.target instanceof Node && !filter.contains(event.target)) filter.open = false
-    }
-    document.addEventListener('pointerdown', closeOnOutsideClick)
-    return () => document.removeEventListener('pointerdown', closeOnOutsideClick)
-  }, [])
-
   return <th className="authorization-filter-heading" aria-sort={sort?.key === column.key ? sort.direction === 'asc' ? 'ascending' : 'descending' : 'none'}>
     <div className="shipment-column-heading">
       <button type="button" className="shipment-column-sort" onClick={() => onSort(column.key)}>
         <span>{column.label}</span>
         {sort?.key === column.key && (sort.direction === 'asc' ? <ArrowUp size={14} /> : <ArrowDown size={14} />)}
       </button>
-      <details ref={filterRef} className={`shipment-column-filter ${['authorization_no', 'full_name'].includes(column.key) ? 'open-right' : ''} ${selectedValues === undefined ? '' : 'active'}`}>
-        <summary title={`${column.label}を絞り込む`} aria-label={`${column.label}を絞り込む`}><Filter size={14} /></summary>
-        <div className="shipment-filter-menu">
-          <strong>{column.label}</strong>
-          <label><input type="checkbox" checked={allSelected} onChange={() => onFilterChange(column.key, allSelected ? [] : undefined)} />すべて</label>
-          <div className="shipment-filter-values">
-            {values.map((value) => {
-              const checked = selectedValues === undefined || selectedValues.includes(value)
-              return <label key={value}>
-                <input type="checkbox" checked={checked} onChange={() => {
-                  const current = selectedValues ?? values
-                  const next = checked ? current.filter((item) => item !== value) : [...current, value]
-                  onFilterChange(column.key, next.length === values.length ? undefined : next)
-                }} />
-                {value || '（空白）'}
-              </label>
-            })}
-          </div>
-        </div>
-      </details>
+      <TableColumnFilter label={column.label} values={values} selectedValues={selectedValues} onChange={(next) => onFilterChange(column.key, next)} openRight={['authorization_no', 'full_name'].includes(column.key)} />
     </div>
   </th>
 }
