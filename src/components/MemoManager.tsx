@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Pencil, Plus, Save, X } from 'lucide-react'
+import { Pencil, Plus, Save, Trash2, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useCalendarMode } from '../lib/calendarMode'
 
@@ -80,6 +80,29 @@ export function MemoManager({ workerId }: { workerId: string }) {
     setVersion((current) => current + 1)
   }
 
+  const remove = async () => {
+    if (!dialog?.memo || dialog.mode !== 'view' || busy) return
+    if (dialog.memo.created_by_worker_id !== workerId) {
+      setError('作成者本人のメモのみ削除できます。')
+      return
+    }
+    if (!window.confirm(`No. ${dialog.memo.memo_no} のメモを削除しますか？\nこの操作は取り消せません。`)) return
+
+    setBusy(true)
+    setError('')
+    const { error: deleteError } = await supabase.rpc('flexcon_delete_memo', {
+      p_worker_id: workerId,
+      p_memo_no: dialog.memo.memo_no,
+    })
+    setBusy(false)
+    if (deleteError) {
+      setError(deleteError.code === 'PGRST202' ? 'メモ削除用のSQLを実行してください。' : deleteError.message)
+      return
+    }
+    setDialog(null)
+    setVersion((current) => current + 1)
+  }
+
   return <div className="memo-page">
     <div className="memo-actions"><button className="primary-button" type="button" onClick={openNew}><Plus size={18} />追加</button></div>
     {error && !dialog && <div className="notice error" role="alert">{error}</div>}
@@ -109,7 +132,10 @@ export function MemoManager({ workerId }: { workerId: string }) {
       {error && <div className="notice error" role="alert">{error}</div>}
       {dialog.mode === 'view' ? <>
         <div className="memo-dialog-actions">
-          {dialog.memo?.created_by_worker_id === workerId && <button className="secondary-button" type="button" onClick={() => { setDraft(dialog.memo!.body); setError(''); setDialog({ ...dialog, mode: 'edit' }) }}><Pencil size={17} />編集</button>}
+          {dialog.memo?.created_by_worker_id === workerId && <>
+            <button className="secondary-button" type="button" disabled={busy} onClick={() => { setDraft(dialog.memo!.body); setError(''); setDialog({ ...dialog, mode: 'edit' }) }}><Pencil size={17} />編集</button>
+            <button className="danger-button" type="button" disabled={busy} onClick={() => void remove()}><Trash2 size={17} />削除</button>
+          </>}
         </div>
         <div className="memo-full-text">{dialog.memo?.body}</div>
       </> : <form onSubmit={(event) => void save(event)}>
