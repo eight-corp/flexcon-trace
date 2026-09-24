@@ -8,13 +8,14 @@ type MovementMode = 'inbound' | 'outbound' | 'transfer'
 type InventoryMovementType = MovementMode | 'settlement'
 type ViewMode = 'history' | 'balance' | 'statement-reader' | 'statement-list'
 type SortDirection = 'asc' | 'desc'
-type InventoryColumn = 'movementDate' | 'movementType' | 'settlementNo' | 'workerName' | 'producerName' | 'origin' | 'productName' | 'grade' | 'quantity' | 'unit' | 'purchasePrice' | 'movementFrom' | 'movementTo'
+type InventoryColumn = 'movementDate' | 'cropYear' | 'movementType' | 'settlementNo' | 'workerName' | 'producerName' | 'origin' | 'productName' | 'grade' | 'quantity' | 'unit' | 'purchasePrice' | 'movementFrom' | 'movementTo'
 type InventoryMovement = {
   id: string
   registration_order?: number
   source_type: 'manual' | 'settlement' | 'inspection_flexcon' | 'inspection_paper_bag' | 'shipment_flexcon' | 'shipment_manual' | 'shipment_record'
   movement_type: InventoryMovementType
   movement_date: string
+  crop_year: number | null
   worker_name: string
   producer_name: string
   settlement_no: string
@@ -31,7 +32,7 @@ type InventoryMovement = {
 }
 type InventoryBalance = { warehouse_id: string | null; warehouse_name: string; origin: string; product_name: string; grade: string; quantity: number; unit: string }
 type InventoryBalanceRow = { warehouseId: string | null; warehouseName: string; origin: string; productName: string; unit: string; quantities: Record<string, number> }
-type MovementForm = { movementDate: string; origin: string; productName: string; grade: string; quantity: string; unit: string; fromWarehouseId: string; toWarehouseId: string }
+type MovementForm = { movementDate: string; cropYear: string; origin: string; productName: string; grade: string; quantity: string; unit: string; fromWarehouseId: string; toWarehouseId: string }
 type PurchaseImportRecord = {
   settlement_no: string
   detail_no: number
@@ -78,6 +79,7 @@ type StatementEditForm = {
 
 const INVENTORY_COLUMNS: Array<{ key: InventoryColumn; label: string }> = [
   { key: 'movementDate', label: '日付' },
+  { key: 'cropYear', label: '産年' },
   { key: 'movementType', label: '区分' },
   { key: 'settlementNo', label: '仕切り書№' },
   { key: 'workerName', label: '作業者名' },
@@ -99,7 +101,7 @@ function today() {
 }
 
 function emptyForm(): MovementForm {
-  return { movementDate: today(), origin: '', productName: '', grade: '', quantity: '', unit: 'kg', fromWarehouseId: '', toWarehouseId: '' }
+  return { movementDate: today(), cropYear: '', origin: '', productName: '', grade: '', quantity: '', unit: 'kg', fromWarehouseId: '', toWarehouseId: '' }
 }
 
 function formatQuantity(value: number) {
@@ -226,6 +228,7 @@ function movementBadgeClass(movement: InventoryMovement) {
 
 function movementValue(movement: InventoryMovement, key: InventoryColumn) {
   if (key === 'movementDate') return movement.movement_date.replaceAll('-', '/')
+  if (key === 'cropYear') return movement.crop_year == null ? '' : String(movement.crop_year)
   if (key === 'movementType') return movementTypeLabel(movement)
   if (key === 'settlementNo') return movement.settlement_no
   if (key === 'workerName') return movement.worker_name
@@ -720,6 +723,7 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
 
   const validateForm = (target: MovementForm, mode: MovementMode, productNames: string[], grades: InspectionOption[]) => {
     if (!target.movementDate) return '日付を入力してください。'
+    if (target.cropYear && (!/^\d{4}$/.test(target.cropYear) || Number(target.cropYear) < 1900 || Number(target.cropYear) > 2100)) return '産年は1900～2100の西暦4桁で入力してください。'
     if (!originOptions.some((item) => item.name === target.origin)) return '産地をマスタから選択してください。'
     if (!productNames.includes(target.productName)) return '名称をマスタから選択してください。'
     if (!otherProductNames.has(target.productName) && !grades.some((item) => item.name === target.grade)) return '等級をマスタから選択してください。'
@@ -745,7 +749,7 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
     if (errorText) return setNotice({ type: 'error', text: errorText })
     setBusy(true); setNotice(null)
     const { error } = await supabase.rpc('flexcon_add_inventory_movement', {
-      p_worker_id: workerId, p_movement_date: form.movementDate, p_producer_name: '', p_origin: form.origin, p_product_name: form.productName,
+      p_worker_id: workerId, p_movement_date: form.movementDate, p_crop_year: form.cropYear ? Number(form.cropYear) : null, p_producer_name: '', p_origin: form.origin, p_product_name: form.productName,
       p_grade: otherProductNames.has(form.productName) ? '' : form.grade, p_quantity: Number(form.quantity), p_unit: form.unit,
       p_from_warehouse_id: movementMode === 'inbound' ? null : form.fromWarehouseId,
       p_to_warehouse_id: movementMode === 'outbound' ? null : form.toWarehouseId,
@@ -753,14 +757,14 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
     setBusy(false)
     if (error) return setNotice({ type: 'error', text: error.message })
     setNotice({ type: 'success', text: `${movementMode === 'inbound' ? '入庫' : movementMode === 'outbound' ? '出庫' : '倉庫間移動'}を記録しました。` })
-    setForm((current) => ({ ...emptyForm(), movementDate: current.movementDate, origin: current.origin, productName: current.productName, grade: current.grade, unit: current.unit }))
+    setForm((current) => ({ ...emptyForm(), movementDate: current.movementDate, cropYear: current.cropYear, origin: current.origin, productName: current.productName, grade: current.grade, unit: current.unit }))
     setVersion((value) => value + 1)
   }
 
   const beginEdit = (movement: InventoryMovement) => {
     setEditing(movement)
     setEditMode(modeForMovement(movement))
-    setEditForm({ movementDate: movement.movement_date, origin: movement.origin, productName: movement.product_name, grade: movement.grade, quantity: String(movement.quantity), unit: movement.unit, fromWarehouseId: movement.from_warehouse_id ?? '', toWarehouseId: movement.to_warehouse_id ?? '' })
+    setEditForm({ movementDate: movement.movement_date, cropYear: movement.crop_year == null ? '' : String(movement.crop_year), origin: movement.origin, productName: movement.product_name, grade: movement.grade, quantity: String(movement.quantity), unit: movement.unit, fromWarehouseId: movement.from_warehouse_id ?? '', toWarehouseId: movement.to_warehouse_id ?? '' })
     setNotice(null)
   }
 
@@ -771,7 +775,7 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
     if (errorText) return setNotice({ type: 'error', text: errorText })
     setBusy(true); setNotice(null)
     const { error } = await supabase.rpc('flexcon_update_inventory_movement', {
-      p_worker_id: workerId, p_movement_id: editing.id, p_movement_date: editForm.movementDate, p_origin: editForm.origin,
+      p_worker_id: workerId, p_movement_id: editing.id, p_movement_date: editForm.movementDate, p_crop_year: editForm.cropYear ? Number(editForm.cropYear) : null, p_origin: editForm.origin,
       p_producer_name: editMode === 'inbound' ? editing.producer_name : '',
       p_product_name: editForm.productName, p_grade: otherProductNames.has(editForm.productName) ? '' : editForm.grade,
       p_quantity: Number(editForm.quantity), p_unit: editForm.unit,
@@ -942,6 +946,7 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
     const selectableToWarehouses = editing ? warehouses.filter((warehouse) => warehouse.active || warehouse.id === target.toWarehouseId) : activeWarehouses
     return <>
       <label className="inventory-field-date">日付{weekdayLabel(target.movementDate)}<input type="date" value={target.movementDate} onChange={(e) => setTarget((current) => ({ ...current, movementDate: e.target.value }))} required /></label>
+      <label className="inventory-field-year">産年<input type="number" min="1900" max="2100" step="1" inputMode="numeric" placeholder="西暦" value={target.cropYear} onChange={(e) => setTarget((current) => ({ ...current, cropYear: e.target.value }))} /></label>
       <label className="inventory-field-worker">作業者<input value={editing?.worker_name ?? workerName} readOnly /></label>
       <label className="inventory-field-origin">産地<select value={target.origin} onChange={(e) => setTarget((current) => ({ ...current, origin: e.target.value, productName: '', grade: '' }))} required><option value="">選択</option>{originOptions.map((origin) => <option key={origin.id} value={origin.name}>{origin.name}</option>)}</select></label>
       <label className="inventory-field-product">名称<select value={target.productName} onChange={(e) => setTarget((current) => ({ ...current, productName: e.target.value, grade: '' }))} disabled={!target.origin} required><option value="">{target.origin ? '選択' : '先に産地を選択'}</option>{productNames.map((product) => <option key={product} value={product}>{product}</option>)}</select></label>
@@ -991,7 +996,7 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
           const selected = selectedMovementKeys.has(movementSelectionKey(movement))
           return <tr className={`inventory-movement-${mode} ${routeError ? 'inventory-movement-error' : ''} ${selected ? 'inventory-movement-selected' : ''}`} title={routeError ? 'エラー：移動先が未指定です' : undefined} key={movement.id}>
             {isAdmin && <td className="inventory-selection-cell">{editable && <input type="checkbox" checked={selected} onChange={() => toggleMovement(movement)} aria-label={`${movement.movement_date} ${movement.product_name}を選択`} />}</td>}
-            <td>{movementValue(movement, 'movementDate')}</td><td><span className={`inventory-movement-badge ${movementBadgeClass(movement)}`}>{mode === 'inbound' ? <ArrowDownToLine size={14} /> : mode === 'outbound' ? <ArrowUpFromLine size={14} /> : <ArrowRightLeft size={14} />}{movementTypeLabel(movement)}</span></td>{view === 'statement-list' && <td>{movement.settlement_no}</td>}<td>{movement.worker_name}</td>{view === 'statement-list' && <td>{movement.producer_name}</td>}<td>{movement.origin}</td><td>{movement.product_name}</td><td>{movementValue(movement, 'grade')}</td><td className="numeric-cell">{formatQuantity(movement.quantity)}</td><td>{movement.unit}</td><td className="numeric-cell">{movementValue(movement, 'purchasePrice')}</td><td>{movement.movement_from}</td><td className={routeError ? 'inventory-route-error' : ''}>{routeError ? <span><AlertTriangle size={16} />移動先未指定</span> : movement.movement_to}</td>{canOperate && <td className="inventory-actions-cell">{editable && <div className="inventory-row-actions"><button className="icon-button" type="button" title={manual ? '入出庫記録を編集' : '仕切り書をまとめて編集'} aria-label={manual ? '入出庫記録を編集' : '仕切り書をまとめて編集'} disabled={busy} onClick={() => { if (manual) beginEdit(movement); else void beginStatementEdit(movement) }}><Pencil size={17} /></button><button className="icon-button delete-icon" type="button" title={manual ? '入出庫記録を削除' : '仕切り書明細を削除'} aria-label={manual ? '入出庫記録を削除' : '仕切り書明細を削除'} disabled={busy} onClick={() => manual ? void deleteMovement(movement) : void deleteStatementLine(movement)}><Trash2 size={17} /></button></div>}</td>}
+            <td>{movementValue(movement, 'movementDate')}</td><td className="numeric-cell">{movementValue(movement, 'cropYear')}</td><td><span className={`inventory-movement-badge ${movementBadgeClass(movement)}`}>{mode === 'inbound' ? <ArrowDownToLine size={14} /> : mode === 'outbound' ? <ArrowUpFromLine size={14} /> : <ArrowRightLeft size={14} />}{movementTypeLabel(movement)}</span></td>{view === 'statement-list' && <td>{movement.settlement_no}</td>}<td>{movement.worker_name}</td>{view === 'statement-list' && <td>{movement.producer_name}</td>}<td>{movement.origin}</td><td>{movement.product_name}</td><td>{movementValue(movement, 'grade')}</td><td className="numeric-cell">{formatQuantity(movement.quantity)}</td><td>{movement.unit}</td><td className="numeric-cell">{movementValue(movement, 'purchasePrice')}</td><td>{movement.movement_from}</td><td className={routeError ? 'inventory-route-error' : ''}>{routeError ? <span><AlertTriangle size={16} />移動先未指定</span> : movement.movement_to}</td>{canOperate && <td className="inventory-actions-cell">{editable && <div className="inventory-row-actions"><button className="icon-button" type="button" title={manual ? '入出庫記録を編集' : '仕切り書をまとめて編集'} aria-label={manual ? '入出庫記録を編集' : '仕切り書をまとめて編集'} disabled={busy} onClick={() => { if (manual) beginEdit(movement); else void beginStatementEdit(movement) }}><Pencil size={17} /></button><button className="icon-button delete-icon" type="button" title={manual ? '入出庫記録を削除' : '仕切り書明細を削除'} aria-label={manual ? '入出庫記録を削除' : '仕切り書明細を削除'} disabled={busy} onClick={() => manual ? void deleteMovement(movement) : void deleteStatementLine(movement)}><Trash2 size={17} /></button></div>}</td>}
           </tr>
         })}{displayedMovements.length === 0 && <tr><td className="empty-state" colSpan={visibleInventoryColumns.length + (canOperate ? 1 : 0) + (isAdmin ? 1 : 0)}>{view === 'statement-list' ? '登録された仕切書はありません' : '該当する入出庫記録はありません'}</td></tr>}</tbody>
       </table></div>
