@@ -287,7 +287,7 @@
 .inventory-bulk-delete-button { min-height: 34px; white-space: nowrap; }
 .inventory-selection-heading, .inventory-selection-cell { width: 38px; min-width: 38px; padding: 0 !important; text-align: center; }
 .inventory-selection-heading input, .inventory-selection-cell input { width: 18px; height: 18px; margin: 0; cursor: pointer; accent-color: var(--green-dark); }
-.inventory-actions-heading, .inventory-actions-cell { width: 76px; min-width: 76px; text-align: center; }
+.inventory-actions-heading, .inventory-actions-cell { width: 42px; min-width: 42px; text-align: center; }
 .inventory-actions-cell { padding: 2px 5px !important; }
 .inventory-row-actions { display: flex; align-items: center; justify-content: center; gap: 4px; }
 .inventory-actions-cell .icon-button { width: 30px; height: 30px; margin: 0; }
