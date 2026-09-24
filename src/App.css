@@ -504,6 +504,9 @@
 .shipment-column-filter > summary:hover, .shipment-column-filter.active > summary { background: #d8e8dd; color: var(--green); }
 .shipment-filter-menu { position: absolute; top: calc(100% + 2px); right: 0; z-index: 20; width: 230px; padding: 10px; border: 1px solid #aebbb2; border-radius: 6px; background: #fff; box-shadow: 0 10px 24px rgba(23, 45, 31, .18); color: #26372c; }
 .shipment-column-filter.open-right .shipment-filter-menu { right: auto; left: 0; }
+.inventory-filter-heading .shipment-column-filter.open-right { position: static; }
+.inventory-filter-heading .shipment-column-filter.open-right .shipment-filter-menu { right: auto; left: 0; }
+.inventory-history-table .shipment-filter-menu { box-sizing: border-box; }
 .shipment-filter-menu > strong { display: block; margin-bottom: 8px; }
 .shipment-filter-menu label { min-height: 30px; display: flex; align-items: center; gap: 8px; font-weight: 500; }
 .shipment-filter-menu input { width: 16px; height: 16px; margin: 0; }
@@ -894,6 +897,9 @@ table thead th { text-align: center !important; }
 }
 
 @media (max-width: 760px) {
+  .inventory-history-table .shipment-filter-menu { width: min(230px, calc(100vw - 48px)); }
+  .inventory-history-table:not(.with-selection) th:nth-child(2) .shipment-filter-menu { left: -70px; }
+  .inventory-history-table.with-selection th:nth-child(3) .shipment-filter-menu { left: -108px; }
   input, select, textarea, button { scroll-margin-block: 88px; }
   .software-keyboard-open .bottom-nav { display: none; }
   .software-keyboard-open .app-shell { padding-bottom: env(safe-area-inset-bottom); }
