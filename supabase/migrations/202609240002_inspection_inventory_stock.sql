@@ -11,6 +11,10 @@ alter table public.flexcon_shipments
   add column if not exists inventory_from_warehouse_id uuid
   references public.flexcon_inspection_options(id);
 
+alter table public.flexcon_inspection_registrations
+  add column if not exists warehouse_id uuid
+  references public.flexcon_inspection_options(id);
+
 drop view if exists public.flexcon_inventory_ledger;
 drop view if exists public.flexcon_inventory_balances;
 
@@ -35,22 +39,24 @@ inventory_delta as (
   select line.to_warehouse_id, line.origin, line.product_name, line.grade, line.unit, line.quantity
   from public.flexcon_purchase_statement_lines as line
   union all
-  select unassigned.id,
+  select coalesce(registration.warehouse_id, unassigned.id),
     case when right(btrim(auth_record.prefecture), 1) in ('都', '道', '府', '県') then btrim(auth_record.prefecture) else btrim(auth_record.prefecture) || '県' end,
     btrim(flexcon.brand), coalesce(nullif(btrim(flexcon.grade), ''), '未検査'),
     case when flexcon.record_kind = 'bulk' then 'kg' else '本' end,
     case when flexcon.record_kind = 'bulk' then flexcon.quantity_kg::numeric else 1::numeric end
   from public.flexcon_inspection_flexcons as flexcon
+  join public.flexcon_inspection_registrations as registration on registration.id = flexcon.registration_id
   join public.flexcon_authorizations as auth_record on auth_record.id = flexcon.authorization_id
   cross join unassigned_warehouse as unassigned
   where nullif(btrim(auth_record.prefecture), '') is not null
     and nullif(btrim(flexcon.brand), '') is not null
     and flexcon.quantity_kg > 0
   union all
-  select unassigned.id,
+  select coalesce(registration.warehouse_id, unassigned.id),
     case when right(btrim(auth_record.prefecture), 1) in ('都', '道', '府', '県') then btrim(auth_record.prefecture) else btrim(auth_record.prefecture) || '県' end,
     btrim(paper.brand), coalesce(nullif(btrim(paper.grade), ''), '未検査'), '袋', paper.bag_count::numeric
   from public.flexcon_inspection_paper_bags as paper
+  join public.flexcon_inspection_registrations as registration on registration.id = paper.registration_id
   join public.flexcon_authorizations as auth_record on auth_record.id = paper.authorization_id
   cross join unassigned_warehouse as unassigned
   where nullif(btrim(auth_record.prefecture), '') is not null
@@ -135,10 +141,12 @@ select 'inspection-flexcon:' || flexcon.id::text, null::bigint, 'inspection_flex
   btrim(flexcon.brand), coalesce(nullif(btrim(flexcon.grade), ''), '未検査'),
   case when flexcon.record_kind = 'bulk' then flexcon.quantity_kg::numeric else 1::numeric end,
   case when flexcon.record_kind = 'bulk' then 'kg' else '本' end,
-  null::uuid, unassigned.id, '検査記録', unassigned.name, flexcon.created_at, null::numeric
+  null::uuid, coalesce(registration.warehouse_id, unassigned.id), '検査記録', coalesce(warehouse.name, unassigned.name), flexcon.created_at, null::numeric
 from public.flexcon_inspection_flexcons as flexcon
+join public.flexcon_inspection_registrations as registration on registration.id = flexcon.registration_id
 join public.flexcon_authorizations as auth_record on auth_record.id = flexcon.authorization_id
 left join public.workers as worker on worker.worker_id = flexcon.created_by_worker_id
+left join public.flexcon_inspection_options as warehouse on warehouse.id = registration.warehouse_id and warehouse.option_type = 'warehouse'
 cross join unassigned_warehouse as unassigned
 where nullif(btrim(auth_record.prefecture), '') is not null and nullif(btrim(flexcon.brand), '') is not null
 union all
@@ -146,10 +154,12 @@ select 'inspection-paper:' || paper.id::text, null::bigint, 'inspection_paper_ba
   paper.purchase_date, coalesce(worker.worker_name, '登録者不明'), auth_record.full_name, '',
   case when right(btrim(auth_record.prefecture), 1) in ('都', '道', '府', '県') then btrim(auth_record.prefecture) else btrim(auth_record.prefecture) || '県' end,
   btrim(paper.brand), coalesce(nullif(btrim(paper.grade), ''), '未検査'), paper.bag_count::numeric, '袋',
-  null::uuid, unassigned.id, '検査記録', unassigned.name, paper.created_at, null::numeric
+  null::uuid, coalesce(registration.warehouse_id, unassigned.id), '検査記録', coalesce(warehouse.name, unassigned.name), paper.created_at, null::numeric
 from public.flexcon_inspection_paper_bags as paper
+join public.flexcon_inspection_registrations as registration on registration.id = paper.registration_id
 join public.flexcon_authorizations as auth_record on auth_record.id = paper.authorization_id
 left join public.workers as worker on worker.worker_id = paper.created_by_worker_id
+left join public.flexcon_inspection_options as warehouse on warehouse.id = registration.warehouse_id and warehouse.option_type = 'warehouse'
 cross join unassigned_warehouse as unassigned
 where nullif(btrim(auth_record.prefecture), '') is not null and nullif(btrim(paper.brand), '') is not null
 union all
@@ -191,6 +201,49 @@ join public.flexcon_destinations as destination on destination.id = shipment.des
 left join public.workers as worker on worker.worker_id = shipment.created_by_worker_id
 left join public.flexcon_inspection_options as warehouse on warehouse.id = shipment.inventory_from_warehouse_id
 where shipment.shipment_kind in ('paper_bag', 'other_rice') and shipment.inventory_from_warehouse_id is not null;
+
+create or replace function public.flexcon_add_inspection_group_with_warehouse(
+  p_worker_id text,
+  p_authorization_id uuid,
+  p_fiscal_year integer,
+  p_purchase_date date,
+  p_inspection_date date,
+  p_inspection_location text,
+  p_brand text,
+  p_flexcon_count integer,
+  p_paper_bag_count integer,
+  p_flexcon_quantity_kg integer,
+  p_bulk_quantity_kg integer,
+  p_warehouse_id uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_result jsonb;
+  v_registration_no bigint;
+begin
+  if not exists (
+    select 1 from public.flexcon_inspection_options
+    where id = p_warehouse_id and option_type = 'warehouse' and active = true
+  ) then raise exception '搬入先を選択してください。'; end if;
+
+  v_result := public.flexcon_add_inspection_group(
+    p_worker_id, p_authorization_id, p_fiscal_year, p_purchase_date, p_inspection_date,
+    p_inspection_location, p_brand, p_flexcon_count, p_paper_bag_count,
+    p_flexcon_quantity_kg, p_bulk_quantity_kg
+  );
+  v_registration_no := (v_result->>'registration_no')::bigint;
+
+  update public.flexcon_inspection_registrations
+  set warehouse_id = p_warehouse_id
+  where registration_no = v_registration_no;
+
+  return v_result || jsonb_build_object('warehouse_id', p_warehouse_id);
+end;
+$$;
 
 create or replace function public.flexcon_add_inventory_movement(
   p_worker_id text,
@@ -307,8 +360,10 @@ $$;
 grant select on public.flexcon_inventory_ledger, public.flexcon_inventory_balances to anon, authenticated;
 revoke all on function public.flexcon_register_inventory_shipment(text, uuid, uuid, timestamptz, text, text, text[], numeric, uuid, text) from public;
 revoke all on function public.flexcon_register_inventory_manual_shipment(text, uuid, uuid, timestamptz, text, text, text, jsonb, numeric, uuid, text) from public;
+revoke all on function public.flexcon_add_inspection_group_with_warehouse(text, uuid, integer, date, date, text, text, integer, integer, integer, integer, uuid) from public;
 grant execute on function public.flexcon_register_inventory_shipment(text, uuid, uuid, timestamptz, text, text, text[], numeric, uuid, text) to anon, authenticated;
 grant execute on function public.flexcon_register_inventory_manual_shipment(text, uuid, uuid, timestamptz, text, text, text, jsonb, numeric, uuid, text) to anon, authenticated;
+grant execute on function public.flexcon_add_inspection_group_with_warehouse(text, uuid, integer, date, date, text, text, integer, integer, integer, integer, uuid) to anon, authenticated;
 
 notify pgrst, 'reload schema';
 

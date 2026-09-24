@@ -950,7 +950,7 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
   }
 
   return <div className="inventory-page">
-    <div className="page-heading"><h1>{view === 'history' ? '入出庫記録' : view === 'statement-reader' ? '仕切書読込み' : view === 'statement-list' ? '仕切書一覧' : '在庫'}</h1><p>{view === 'history' ? (isAdmin ? '手動入力と仕切り書Excelから米穀の入出庫を記録します。' : '手動入力で米穀の入出庫を記録します。') : view === 'statement-reader' ? '仕切書を撮影し、米穀明細と仕入価格を読み取って登録します。' : view === 'statement-list' ? '撮影して登録した仕切書の明細を確認・編集します。' : '倉庫ごとの現在庫を産地、名称、等級別に表示します。'}</p></div>
+    <div className="page-heading"><h1>{view === 'history' ? '入出庫記録' : view === 'statement-reader' ? '仕切書読込み' : view === 'statement-list' ? '仕切書一覧' : '在庫'}</h1><p>{view === 'history' ? '検査対象のお米は【検査記録】から登録して下さい。' : view === 'statement-reader' ? '仕切書を撮影し、米穀明細と仕入価格を読み取って登録します。' : view === 'statement-list' ? '撮影して登録した仕切書の明細を確認・編集します。' : '倉庫ごとの現在庫を産地、名称、等級別に表示します。'}</p></div>
     {view === 'history' && canOperate && <section className="section-band inventory-entry-section">
       <div className="inventory-entry-toolbar">
         <div className="inventory-mode-switch" role="group" aria-label="移動区分">

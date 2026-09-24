@@ -23,6 +23,7 @@ type AddGroupForm = {
   fiscal_year: string
   purchase_date: string
   inspection_date: string
+  warehouse_id: string
   brand: string
   flexcon_count: string
   paper_bag_count: string
@@ -146,6 +147,7 @@ function emptyAddGroupForm(): AddGroupForm {
     fiscal_year: String(currentFiscalYear()),
     purchase_date: today(),
     inspection_date: '',
+    warehouse_id: '',
     brand: '',
     flexcon_count: '',
     paper_bag_count: '',
@@ -661,6 +663,7 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
   const gradeOptions = inspectionOptions.filter((item) => item.option_type === 'grade')
   const batchGradeOptions = gradeOptions.filter((option) => selectedRegistrationRecords.every((item) => isGradeAllowedForBrand(item.brand ?? '', option.name)))
   const reasonOptions = inspectionOptions.filter((item) => item.option_type === 'grade_reason')
+  const warehouseOptions = inspectionOptions.filter((item) => item.option_type === 'warehouse')
   const selectedBrandType = brandTypeForPrefecture(selectedAuthorization?.prefecture ?? null)
   const brandOptions = inspectionOptions.filter((item) => item.option_type === selectedBrandType || item.option_type === 'brand')
   const addBrandType = brandTypeForPrefecture(addAuthorization?.prefecture ?? null)
@@ -673,18 +676,20 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
     const paperBagCount = Number(addGroupForm.paper_bag_count || 0)
     const bulkQuantityKg = Number(addGroupForm.bulk_quantity_kg || 0)
     if (!addGroupForm.purchase_date) return setNotice({ type: 'error', text: '仕入日を入力してください。' })
+    if (!addGroupForm.warehouse_id) return setNotice({ type: 'error', text: '搬入先を選択してください。' })
     if (!addGroupForm.brand) return setNotice({ type: 'error', text: '銘柄を選択してください。' })
     if (!Number.isInteger(bulkQuantityKg) || bulkQuantityKg < 0) return setNotice({ type: 'error', text: 'バラは0kg以上の整数で入力してください。' })
     if (flexconCount <= 0 && paperBagCount <= 0 && bulkQuantityKg <= 0) return setNotice({ type: 'error', text: 'フレコン本数、紙袋数、バラのいずれかを入力してください。' })
     const flexconQuantity = addGroupForm.brand === '飼料用玄米' ? weights.feed_rice : weights.branded_rice
     setBusy(true); setNotice(null)
-    const { data, error } = await supabase.rpc('flexcon_add_inspection_group', {
+    const { data, error } = await supabase.rpc('flexcon_add_inspection_group_with_warehouse', {
       p_worker_id: workerId,
       p_authorization_id: addAuthorization.id,
       p_fiscal_year: Number(addGroupForm.fiscal_year),
       p_purchase_date: addGroupForm.purchase_date,
       p_inspection_date: addGroupForm.inspection_date || null,
       p_inspection_location: null,
+      p_warehouse_id: addGroupForm.warehouse_id,
       p_brand: addGroupForm.brand,
       p_flexcon_count: flexconCount,
       p_paper_bag_count: paperBagCount,
@@ -1273,6 +1278,7 @@ export function InspectionRecordManager({ workerId, readOnly, selectedAuthorizat
         <label>年度<input type="number" min="1" max="99" step="1" value={addGroupForm.fiscal_year} onChange={(event) => setAddGroupForm((current) => ({ ...current, fiscal_year: event.target.value }))} required /></label>
         <label>仕入日<input type="date" value={addGroupForm.purchase_date} onChange={(event) => setAddGroupForm((current) => ({ ...current, purchase_date: event.target.value }))} required /></label>
         <label>検査日<input type="date" value={addGroupForm.inspection_date} onChange={(event) => setAddGroupForm((current) => ({ ...current, inspection_date: event.target.value }))} /></label>
+        <label>搬入先<select value={addGroupForm.warehouse_id} onChange={(event) => setAddGroupForm((current) => ({ ...current, warehouse_id: event.target.value }))} required><option value="">選択してください</option>{warehouseOptions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
         <label>産地<input value={formatPrefectureName(addAuthorization?.prefecture) || ''} readOnly aria-label="産地" /></label>
         <label>銘柄<select value={addGroupForm.brand} onChange={(event) => setAddGroupForm((current) => ({ ...current, brand: event.target.value }))} required disabled={!addAuthorization}><option value="">選択してください</option>{addBrandOptions.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}</select></label>
         <label>推フレ数<input type="number" min="0" max="999" step="1" value={addGroupForm.flexcon_count} onChange={(event) => setAddGroupForm((current) => ({ ...current, flexcon_count: event.target.value }))} placeholder="0" /></label>
