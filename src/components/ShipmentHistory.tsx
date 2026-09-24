@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowDown, ArrowUp, Building2, Download, Filter, LayoutGrid, Pencil, Save, Search, Table2, Trash2, Truck, UserRound, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, Building2, Download, Filter, LayoutGrid, Pencil, Save, Table2, Trash2, Truck, UserRound, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { formatDisplayDateTime, formatJapaneseDateForFilename } from '../lib/japaneseEra'
 import { useCalendarMode } from '../lib/calendarMode'
@@ -53,7 +53,6 @@ type ShipmentTableRow = {
   vehicle: string
   worker: string
   note: string
-  searchText: string
 }
 
 type DestinationSummaryRow = {
@@ -243,7 +242,6 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
   const [transportProfiles, setTransportProfiles] = useState<TransportProfile[]>([])
   const [shipmentProducts, setShipmentProducts] = useState<InspectionOption[]>([])
   const [mixedShipmentByLot, setMixedShipmentByLot] = useState<Record<string, MixedShipmentInfo>>({})
-  const [search, setSearch] = useState('')
   const [notice, setNotice] = useState<Notice>(null)
   const [localVersion, setLocalVersion] = useState(0)
   const [editing, setEditing] = useState<Shipment | null>(null)
@@ -307,23 +305,7 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
     })
   }, [isAdmin])
 
-  const filtered = useMemo(() => {
-    const term = search.trim().toLowerCase()
-    if (!term) return shipments
-    return shipments.filter((item) =>
-      item.flexcon_destinations?.name.toLowerCase().includes(term)
-      || item.carrier_name?.toLowerCase().includes(term)
-      || item.driver_name?.toLowerCase().includes(term)
-      || item.vehicle_no?.toLowerCase().includes(term)
-      || item.product_name?.toLowerCase().includes(term)
-      || shipmentProductSummary(item).toLowerCase().includes(term)
-      || item.workers?.worker_name.toLowerCase().includes(term)
-      || item.flexcon_shipment_items.some((detail) => {
-        const mixed = mixedShipmentByLot[detail.lot_number]
-        return detail.lot_number.includes(term)
-          || (mixed ? `混在№${mixed.mixedNo} ${mixed.producerLabel}`.toLowerCase().includes(term) : false)
-      }))
-  }, [mixedShipmentByLot, search, shipments])
+  const filtered = shipments
 
   const tableRows = useMemo(() => shipments.flatMap((shipment, shipmentIndex) =>
     shipmentProductGroups(shipment).map((group, groupIndex) => ({
@@ -349,11 +331,7 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
       vehicle: shipment.vehicle_no ?? '',
       worker: shipment.workers?.worker_name ?? '',
       note: shipment.note ?? '',
-      searchText: shipment.flexcon_shipment_items.map((item) => {
-        const mixed = mixedShipmentByLot[item.lot_number]
-        return `${item.lot_number} ${mixed ? `混在№${mixed.mixedNo} ${mixed.producerLabel}` : ''}`
-      }).join(' ').toLowerCase(),
-    }))), [mixedShipmentByLot, shipments, calendarMode])
+    }))), [shipments, calendarMode])
 
   const filterValues = useMemo(() => Object.fromEntries(TABLE_COLUMNS.map((column) => [
     column.key,
@@ -361,9 +339,7 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
   ])) as Record<TableColumn, string[]>, [tableRows])
 
   const displayedTableRows = useMemo(() => {
-    const term = search.trim().toLowerCase()
     const rows = tableRows.filter((row) => {
-      if (term && !TABLE_COLUMNS.some((column) => tableFilterValue(row, column.key).toLowerCase().includes(term)) && !row.searchText.includes(term)) return false
       return TABLE_COLUMNS.every((column) => {
         const selected = columnFilters[column.key]
         return selected === undefined || selected.includes(tableFilterValue(row, column.key))
@@ -395,7 +371,7 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
         : String(left).localeCompare(String(right), 'ja', { numeric: true })
       return sort.direction === 'asc' ? comparison : -comparison
     })
-  }, [columnFilters, search, sort, tableRows])
+  }, [columnFilters, sort, tableRows])
 
   const destinationSummaryRows = useMemo(() => {
     const summaries = new Map<string, {
@@ -670,10 +646,8 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
 
   return (
     <div>
-      <div className="page-heading"><p>納品先、担当者、運送会社、ドライバー、車両番号、ロット番号、混在№、生産者名で検索できます。</p></div>
       {notice && <div className={`notice ${notice.type}`}>{notice.text}</div>}
-      <div className="search-row">
-        <div style={{ position: 'relative', flex: 1 }}><Search size={18} style={{ position: 'absolute', left: 12, top: 13, color: '#6b756d' }} /><input style={{ paddingLeft: 38 }} value={search} onChange={(e) => setSearch(e.target.value)} placeholder="検索" /></div>
+      <div className="shipment-history-actions">
         <div className="view-mode-switch" role="group" aria-label="表示形式">
           <button type="button" className={viewMode === 'cards' ? 'active' : ''} title="パネル表示" aria-label="パネル表示" onClick={() => setViewMode('cards')}><LayoutGrid size={18} /></button>
           <button type="button" className={viewMode === 'table' ? 'active' : ''} title="一覧表示" aria-label="一覧表示" onClick={() => setViewMode('table')}><Table2 size={18} /></button>

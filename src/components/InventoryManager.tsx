@@ -337,7 +337,6 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
   const [search, setSearch] = useState('')
   const [sort, setSort] = useState<{ key: InventoryColumn; direction: SortDirection } | null>(null)
   const [columnFilters, setColumnFilters] = useState<Partial<Record<InventoryColumn, string[]>>>({})
-  const [balanceSearch, setBalanceSearch] = useState('')
   const [balanceColumnFilters, setBalanceColumnFilters] = useState<Record<string, string[]>>({})
   useEffect(() => {
     setColumnFilters((current) => ({ ...current, movementDate: undefined, cropYear: undefined }))
@@ -465,12 +464,8 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
     [...new Set(balanceRows.map((row) => balanceValue(row, column.key)))].sort((left, right) => left.localeCompare(right, 'ja', { numeric: true })),
   ])) as Record<string, string[]>, [balanceRows, balanceColumns])
   const displayedBalanceRows = useMemo(() => {
-    const term = balanceSearch.trim().toLowerCase()
-    return balanceRows.filter((row) => {
-      if (term && !formatDisplayCropYear(row.cropYear, calendarMode).toLowerCase().includes(term) && !String(row.cropYear ?? '').includes(term) && !balanceColumns.some((column) => balanceValue(row, column.key).toLowerCase().includes(term))) return false
-      return balanceColumns.every((column) => balanceColumnFilters[column.key] === undefined || balanceColumnFilters[column.key].includes(balanceValue(row, column.key)))
-    })
-  }, [balanceRows, balanceColumnFilters, balanceColumns, balanceSearch, calendarMode])
+    return balanceRows.filter((row) => balanceColumns.every((column) => balanceColumnFilters[column.key] === undefined || balanceColumnFilters[column.key].includes(balanceValue(row, column.key))))
+  }, [balanceRows, balanceColumnFilters, balanceColumns])
   const balanceYearGroups = useMemo(() => {
     const groups = new Map<number | null, { rows: InventoryBalanceRow[]; totals: Record<string, Record<string, number>> }>()
     displayedBalanceRows.forEach((row) => {
@@ -486,7 +481,7 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
     })
     return [...groups].sort(([left], [right]) => (right ?? -1) - (left ?? -1))
   }, [balanceGradeColumns, displayedBalanceRows])
-  const balanceIsFiltered = balanceSearch.trim() !== '' || Object.keys(balanceColumnFilters).length > 0
+  const balanceIsFiltered = Object.keys(balanceColumnFilters).length > 0
   const warehouseRouteAvailable = movementMode === 'inbound'
     ? activeWarehouses.length > 0
     : movementMode === 'outbound'
@@ -895,7 +890,7 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
   const visibleInventoryColumns = useMemo(() => view === 'statement-list' ? INVENTORY_COLUMNS.filter((column) => column.key !== 'note') : INVENTORY_COLUMNS.filter((column) => column.key !== 'producerName'), [view])
   const filterValues = useMemo(() => Object.fromEntries(visibleInventoryColumns.map((column) => [column.key, [...new Set(listMovements.map((movement) => movementValue(movement, column.key, calendarMode)))].sort((a, b) => a.localeCompare(b, 'ja', { numeric: true }))])) as Record<InventoryColumn, string[]>, [listMovements, visibleInventoryColumns, calendarMode])
   const displayedMovements = useMemo(() => {
-    const term = search.trim().toLowerCase()
+    const term = view === 'statement-list' ? search.trim().toLowerCase() : ''
     const rows = listMovements.filter((movement) => {
       if (term && !visibleInventoryColumns.some((column) => movementValue(movement, column.key, calendarMode).toLowerCase().includes(term))) return false
       return visibleInventoryColumns.every((column) => columnFilters[column.key] === undefined || columnFilters[column.key]!.includes(movementValue(movement, column.key, calendarMode)))
@@ -907,7 +902,7 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
       const comparison = typeof leftValue === 'number' && typeof rightValue === 'number' ? leftValue - rightValue : String(leftValue).localeCompare(String(rightValue), 'ja', { numeric: true })
       return sort.direction === 'asc' ? comparison : -comparison
     })
-  }, [columnFilters, listMovements, search, sort, visibleInventoryColumns, calendarMode])
+  }, [columnFilters, listMovements, search, sort, visibleInventoryColumns, calendarMode, view])
 
   const deletableMovements = listMovements.filter((movement) => movement.source_type === 'manual' || movement.source_type === 'settlement')
   const selectedMovements = deletableMovements.filter((movement) => selectedMovementKeys.has(movementSelectionKey(movement)))
@@ -998,10 +993,10 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
     </section>}
     {notice && <div className={`notice ${notice.type}`} role={notice.type === 'error' ? 'alert' : 'status'}>{notice.text}</div>}
     {view === 'history' || view === 'statement-list' ? <>
-      <div className="search-row inventory-search-row">
-        <div className="search-input-wrap"><Search size={18} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={view === 'statement-list' ? '仕切書を検索' : '入出庫記録を検索'} /></div>
+      {(view === 'statement-list' || isAdmin) && <div className={`search-row inventory-search-row ${view === 'history' ? 'inventory-actions-only' : ''}`}>
+        {view === 'statement-list' && <div className="search-input-wrap"><Search size={18} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="仕切書を検索" /></div>}
         {isAdmin && <button className="danger-button inventory-bulk-delete-button" type="button" disabled={busy || selectedMovements.length === 0} onClick={() => void bulkDeleteMovements()}><Trash2 size={17} />選択した{selectedMovements.length}件を削除</button>}
-      </div>
+      </div>}
       <div className="inventory-table-wrap"><table className={`inventory-table inventory-history-table ${view === 'history' ? 'without-producer' : ''} ${isAdmin ? 'with-selection' : ''}`}>
         <thead><tr>{isAdmin && <th className="inventory-selection-heading"><input type="checkbox" checked={allDisplayedMovementsSelected} onChange={toggleDisplayedMovements} aria-label="表示中の在庫記録をすべて選択" title="表示中をすべて選択" /></th>}{visibleInventoryColumns.map((column) => <FilterableColumnHeader key={column.key} column={column} sort={sort} values={filterValues[column.key]} selectedValues={columnFilters[column.key]} onSort={changeSort} onFilterChange={changeColumnFilter} openRight={column.key === 'movementDate' || column.key === 'cropYear'} />)}{canOperate && <th className="inventory-actions-heading">操作</th>}</tr></thead>
         <tbody>{displayedMovements.map((movement) => {
@@ -1021,7 +1016,6 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
         })}{displayedMovements.length === 0 && <tr><td className="empty-state" colSpan={visibleInventoryColumns.length + (canOperate ? 1 : 0) + (isAdmin ? 1 : 0)}>{view === 'statement-list' ? '登録された仕切書はありません' : '該当する入出庫記録はありません'}</td></tr>}</tbody>
       </table></div>
     </> : view === 'balance' ? <>
-      <div className="search-row inventory-search-row"><div className="search-input-wrap"><Search size={18} /><input value={balanceSearch} onChange={(event) => setBalanceSearch(event.target.value)} placeholder="在庫を検索" /></div></div>
       {balanceYearGroups.map(([cropYear, group]) => <section className="inventory-year-section" key={cropYear ?? 'unknown'}>
         <div className="inventory-subheading"><h2>{cropYear == null ? '産年未設定' : formatJapaneseCropYear(cropYear)}</h2><span>{group.rows.length}件</span></div>
         <div className="inventory-table-wrap"><table className="inventory-table inventory-balance-table" style={{ '--inventory-balance-mobile-width': `${358 + balanceGradeColumns.length * 62}px` } as React.CSSProperties}>

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { FileUp, Plus, Save, Search, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, FileUp, Filter, Plus, Save, X } from 'lucide-react'
 import type { CellValue } from 'read-excel-file/browser'
 import { supabase } from '../lib/supabase'
+import { AUTHORIZATION_COLUMNS, AUTHORIZATION_NO_COLLATOR, authorizationColumnValue, selectAuthorizations, type AuthorizationColumn, type AuthorizationFilters, type AuthorizationSort } from '../lib/authorizationTable'
 import type { AuthorizationRecord } from '../types'
 import { ToggleSwitch } from './ToggleSwitch'
 
@@ -60,11 +61,6 @@ const EMPTY_FORM: FormState = {
   feed_rice_variety: '',
   notes: '',
 }
-
-const AUTHORIZATION_NO_COLLATOR = new Intl.Collator('ja', {
-  numeric: true,
-  sensitivity: 'base',
-})
 
 const PREFECTURES = [
   '北海道', '青森県', '岩手県', '宮城県', '秋田県', '山形県', '福島県',
@@ -141,10 +137,61 @@ function nextAuthorizationNo(items: AuthorizationRecord[]): string {
   return String((numericNos.length > 0 ? Math.max(...numericNos) : 0) + 1)
 }
 
+function AuthorizationColumnHeader({ column, sort, values, selectedValues, onSort, onFilterChange }: {
+  column: (typeof AUTHORIZATION_COLUMNS)[number]
+  sort: AuthorizationSort
+  values: string[]
+  selectedValues: string[] | undefined
+  onSort: (key: AuthorizationColumn) => void
+  onFilterChange: (key: AuthorizationColumn, values: string[] | undefined) => void
+}) {
+  const filterRef = useRef<HTMLDetailsElement>(null)
+  const allSelected = selectedValues === undefined || selectedValues.length === values.length
+
+  useEffect(() => {
+    const closeOnOutsideClick = (event: PointerEvent) => {
+      const filter = filterRef.current
+      if (filter?.open && event.target instanceof Node && !filter.contains(event.target)) filter.open = false
+    }
+    document.addEventListener('pointerdown', closeOnOutsideClick)
+    return () => document.removeEventListener('pointerdown', closeOnOutsideClick)
+  }, [])
+
+  return <th className="authorization-filter-heading" aria-sort={sort?.key === column.key ? sort.direction === 'asc' ? 'ascending' : 'descending' : 'none'}>
+    <div className="shipment-column-heading">
+      <button type="button" className="shipment-column-sort" onClick={() => onSort(column.key)}>
+        <span>{column.label}</span>
+        {sort?.key === column.key && (sort.direction === 'asc' ? <ArrowUp size={14} /> : <ArrowDown size={14} />)}
+      </button>
+      <details ref={filterRef} className={`shipment-column-filter ${['authorization_no', 'full_name'].includes(column.key) ? 'open-right' : ''} ${selectedValues === undefined ? '' : 'active'}`}>
+        <summary title={`${column.label}を絞り込む`} aria-label={`${column.label}を絞り込む`}><Filter size={14} /></summary>
+        <div className="shipment-filter-menu">
+          <strong>{column.label}</strong>
+          <label><input type="checkbox" checked={allSelected} onChange={() => onFilterChange(column.key, allSelected ? [] : undefined)} />すべて</label>
+          <div className="shipment-filter-values">
+            {values.map((value) => {
+              const checked = selectedValues === undefined || selectedValues.includes(value)
+              return <label key={value}>
+                <input type="checkbox" checked={checked} onChange={() => {
+                  const current = selectedValues ?? values
+                  const next = checked ? current.filter((item) => item !== value) : [...current, value]
+                  onFilterChange(column.key, next.length === values.length ? undefined : next)
+                }} />
+                {value || '（空白）'}
+              </label>
+            })}
+          </div>
+        </div>
+      </details>
+    </div>
+  </th>
+}
+
 export function AuthorizationManager({ workerId, onOpenInspections }: Props) {
   const [items, setItems] = useState<AuthorizationRecord[]>([])
   const [inspectionTargetAuthorizationIds, setInspectionTargetAuthorizationIds] = useState<Set<string>>(new Set())
-  const [search, setSearch] = useState('')
+  const [sort, setSort] = useState<AuthorizationSort>(null)
+  const [columnFilters, setColumnFilters] = useState<AuthorizationFilters>({})
   const [notice, setNotice] = useState<Notice>(null)
   const [version, setVersion] = useState(0)
   const [modalOpen, setModalOpen] = useState(false)
@@ -191,21 +238,22 @@ export function AuthorizationManager({ workerId, onOpenInspections }: Props) {
     })
   }, [version])
 
-  const filtered = useMemo(() => {
-    const term = search.trim().toLowerCase()
-    if (!term) return items
-    return items.filter((item) => [
-      item.authorization_no,
-      item.full_name,
-      item.address,
-      item.prefecture,
-      item.municipality,
-      item.phone,
-      item.crop_type,
-      item.feed_rice_variety,
-      item.notes,
-    ].some((value) => value?.toLowerCase().includes(term)))
-  }, [items, search])
+  const filterValues = useMemo(() => Object.fromEntries(AUTHORIZATION_COLUMNS.map(({ key }) => [
+    key,
+    [...new Set(items.map((item) => authorizationColumnValue(item, key)))].sort(AUTHORIZATION_NO_COLLATOR.compare),
+  ])) as Record<AuthorizationColumn, string[]>, [items])
+  const filtered = useMemo(() => selectAuthorizations(items, columnFilters, sort), [items, columnFilters, sort])
+  const changeSort = (key: AuthorizationColumn) => setSort((current) => {
+    if (!current || current.key !== key) return { key, direction: 'asc' }
+    if (current.direction === 'asc') return { key, direction: 'desc' }
+    return null
+  })
+  const changeColumnFilter = (key: AuthorizationColumn, values: string[] | undefined) => setColumnFilters((current) => {
+    const next = { ...current }
+    if (values === undefined) delete next[key]
+    else next[key] = values
+    return next
+  })
 
   const setText = (field: keyof FormState, value: string) => {
     setForm((current) => ({ ...current, [field]: value }))
@@ -581,8 +629,7 @@ export function AuthorizationManager({ workerId, onOpenInspections }: Props) {
     <div className="authorization-page">
       <div className="page-heading"><p>登録済みの委任状情報を確認・更新します。</p></div>
 
-      <div className="search-row authorization-search-row">
-        <div className="search-input-wrap authorization-search-input"><Search size={18} aria-hidden="true" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="№・氏名・住所などで検索" aria-label="委任状を検索" /></div>
+      <div className="authorization-actions-row">
         <input
           ref={fileInputRef}
           className="visually-hidden"
@@ -601,17 +648,7 @@ export function AuthorizationManager({ workerId, onOpenInspections }: Props) {
         <table className="authorization-table">
           <thead>
             <tr>
-              <th>№</th>
-              <th>氏名</th>
-              <th>種子購入伝票</th>
-              <th>営農計画書</th>
-              <th>住所</th>
-              <th>産地</th>
-              <th>市町村</th>
-              <th>電話番号</th>
-              <th>農作物の種類</th>
-              <th>飼料用米の品種</th>
-              <th>備考</th>
+              {AUTHORIZATION_COLUMNS.map((column) => <AuthorizationColumnHeader key={column.key} column={column} sort={sort} values={filterValues[column.key]} selectedValues={columnFilters[column.key]} onSort={changeSort} onFilterChange={changeColumnFilter} />)}
               <th className="authorization-register-header">登録</th>
             </tr>
           </thead>

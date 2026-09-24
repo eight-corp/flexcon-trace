@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowDown, ArrowLeft, ArrowUp, BarChart3, ChevronDown, CircleAlert, ClipboardList, ExternalLink, FileText, Filter, List, Plus, Printer, Save, Search, TableRowsSplit, Trash2, X } from 'lucide-react'
+import { ArrowDown, ArrowLeft, ArrowUp, BarChart3, ChevronDown, CircleAlert, ClipboardList, ExternalLink, FileText, Filter, List, Plus, Printer, Save, TableRowsSplit, Trash2, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { formatDisplayDate, formatJapaneseDateForFilename } from '../lib/japaneseEra'
 import { useCalendarMode } from '../lib/calendarMode'
@@ -333,7 +333,6 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
   const [splitPaper, setSplitPaper] = useState<PaperBagInspection | null>(null)
   const [splitCounts, setSplitCounts] = useState({ first: '', second: '' })
   const [summaryView, setSummaryView] = useState<'list' | 'aggregate'>('list')
-  const [search, setSearch] = useState('')
   const [summarySort, setSummarySort] = useState<{ key: SummaryColumn; direction: SummarySortDirection } | null>(null)
   const [summaryColumnFilters, setSummaryColumnFilters] = useState<Partial<Record<SummaryColumn, string[]>>>({})
   useEffect(() => {
@@ -516,9 +515,7 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
     Array.from(new Set(summaryRows.map((row) => summaryDisplayValue(row, column.key)))).sort((left, right) => left.localeCompare(right, 'ja', { numeric: true })),
   ])) as Record<SummaryColumn, string[]>, [summaryRows])
   const displayedSummary = useMemo(() => {
-    const term = search.trim().toLowerCase()
     const rows = summaryRows.filter((row) => {
-      if (term && !SUMMARY_COLUMNS.some((column) => summaryDisplayValue(row, column.key).toLowerCase().includes(term))) return false
       return SUMMARY_COLUMNS.every((column) => {
         const selected = summaryColumnFilters[column.key]
         return selected === undefined || selected.includes(summaryDisplayValue(row, column.key))
@@ -533,7 +530,7 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
         : String(leftValue).localeCompare(String(rightValue), 'ja', { numeric: true })
       return summarySort.direction === 'asc' ? comparison : -comparison
     })
-  }, [search, summaryColumnFilters, summaryRows, summarySort])
+  }, [summaryColumnFilters, summaryRows, summarySort])
   const changeSummarySort = (key: SummaryColumn) => {
     setSummarySort((current) => {
       if (!current || current.key !== key) return { key, direction: 'asc' }
@@ -1305,7 +1302,7 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
         <button type="button" role="tab" aria-selected={summaryView === 'aggregate'} className={summaryView === 'aggregate' ? 'active' : ''} onClick={() => { setProducerPickerOpen(false); setAddGroupFormOpen(false); setSummaryView('aggregate') }}><BarChart3 size={18} />集計</button>
       </div>
       {summaryView === 'list' && <>
-      <div className="search-row"><div className="search-input-wrap"><Search size={18} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="登録No.・氏名・産地・銘柄などで検索" /></div>{!readOnly && <button className={addGroupFormOpen ? 'secondary-button' : 'primary-button'} type="button" aria-expanded={addGroupFormOpen} onClick={() => { setProducerPickerOpen(false); setAddGroupFormOpen((current) => !current) }}>{addGroupFormOpen ? <><X size={18} />閉じる</> : <><Plus size={18} />追加</>}</button>}</div>
+      {!readOnly && <div className="inspection-summary-actions"><button className={addGroupFormOpen ? 'secondary-button' : 'primary-button'} type="button" aria-expanded={addGroupFormOpen} onClick={() => { setProducerPickerOpen(false); setAddGroupFormOpen((current) => !current) }}>{addGroupFormOpen ? <><X size={18} />閉じる</> : <><Plus size={18} />追加</>}</button></div>}
       {!readOnly && addGroupFormOpen && <form className="inspection-group-add inspection-summary-add section-band" noValidate onSubmit={(event) => void addInspectionGroup(event)}>
         <div className="inspection-producer-picker" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setProducerPickerOpen(false) }}>
           <label>生産者名<input value={addGroupForm.producer_name} onFocus={() => setProducerPickerOpen(true)} onChange={(event) => { const producerName = event.target.value; const exactMatches = authorizations.filter((item) => item.full_name.trim() === producerName.trim()); setAddGroupForm((current) => ({ ...current, authorization_id: exactMatches.length === 1 ? exactMatches[0].id : '', producer_name: producerName, brand: '' })); setProducerPickerOpen(true) }} placeholder="氏名・委任状No.で絞り込み" autoComplete="off" role="combobox" aria-expanded={producerPickerOpen} aria-controls="inspection-producer-candidates" required /></label>

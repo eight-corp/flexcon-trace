@@ -282,6 +282,7 @@
 .inventory-table th.inventory-filter-heading { padding: 0; }
 .inventory-history-table .shipment-column-heading { grid-template-columns: max-content 28px; }
 .inventory-search-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0; }
+.inventory-search-row.inventory-actions-only { justify-content: flex-end; }
 .inventory-search-row .search-input-wrap { width: min(100%, 430px); }
 .inventory-bulk-delete-button { min-height: 34px; white-space: nowrap; }
 .inventory-selection-heading, .inventory-selection-cell { width: 38px; min-width: 38px; padding: 0 !important; text-align: center; }
@@ -468,6 +469,7 @@
 .auth-brand p { margin: 0; color: var(--muted); font-size: 13px; }
 .search-row { display: flex; gap: 8px; margin-bottom: 14px; }
 .search-row input { flex: 1; }
+.shipment-history-actions, .inspection-summary-actions { display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 14px; }
 .view-mode-switch { display: flex; flex: 0 0 auto; border: 1px solid #b8c1ba; border-radius: 6px; overflow: hidden; background: #fff; }
 .view-mode-switch button { width: 42px; min-height: 42px; display: grid; place-items: center; border: 0; border-right: 1px solid #d6dcd7; background: #fff; color: #5d685f; }
 .view-mode-switch button:last-child { border-right: 0; }
@@ -517,18 +519,23 @@
 .shipment-filter-values { max-height: 230px; overflow-y: auto; border-top: 1px solid var(--line); padding-top: 5px; }
 .authorization-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
 .authorization-heading > div { min-width: 0; }
-.search-row.authorization-search-row { align-items: center; flex-wrap: nowrap; }
-.search-row.authorization-search-row > .authorization-search-input { flex: 1 1 0 !important; min-width: 0; }
-.authorization-search-row > button { flex: 0 0 auto; white-space: nowrap; }
+.authorization-actions-row { display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 14px; }
 .visually-hidden { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; margin: -1px !important; overflow: hidden !important; clip: rect(0, 0, 0, 0) !important; white-space: nowrap !important; border: 0 !important; }
 .authorization-table-wrap { max-width: 100%; overflow: auto; border: 1px solid var(--line); border-radius: 7px; background: #fff; }
-.authorization-table { width: 1320px; table-layout: fixed; border-collapse: separate; border-spacing: 0; font-size: 13px; }
+.authorization-table { width: 1338px; table-layout: fixed; border-collapse: separate; border-spacing: 0; font-size: 13px; }
 .authorization-table th, .authorization-table td { padding: 5px 5px; border-bottom: 1px solid var(--line); border-right: 1px solid #e5e8e5; text-align: left; vertical-align: middle; overflow-wrap: anywhere; }
-.authorization-table th:nth-child(1) { width: 50px; }
+.authorization-table th.authorization-filter-heading { padding: 0; }
+.authorization-filter-heading .shipment-column-heading { grid-template-columns: minmax(0, 1fr) 24px; }
+.authorization-filter-heading .shipment-column-sort { gap: 2px; padding: 4px 2px; font-size: 12px; }
+.authorization-filter-heading .shipment-column-sort > svg { position: static; flex: 0 0 14px; }
+.authorization-filter-heading:has(.shipment-column-filter[open]) { z-index: 10; }
+.authorization-filter-heading .shipment-column-filter.open-right { position: static; }
+.authorization-filter-heading .shipment-column-filter.open-right .shipment-filter-menu { left: 0; right: auto; }
+.authorization-table th:nth-child(1) { width: 60px; }
 .authorization-table th:nth-child(2) { width: 150px; }
 .authorization-table th:nth-child(3), .authorization-table th:nth-child(4) { width: 84px; }
 .authorization-table th:nth-child(5) { width: 230px; }
-.authorization-table th:nth-child(6) { width: 62px; }
+.authorization-table th:nth-child(6) { width: 70px; }
 .authorization-table th:nth-child(7) { width: 100px; }
 .authorization-table th:nth-child(8) { width: 115px; }
 .authorization-table th:nth-child(9) { width: 110px; }
