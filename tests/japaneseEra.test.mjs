@@ -6,6 +6,10 @@ import {
   formatJapaneseDateForFilename,
   formatJapaneseDateLong,
   formatJapaneseDateTime,
+  formatDisplayCropYear,
+  formatDisplayDate,
+  formatDisplayDateTime,
+  parseDisplayDate,
   parseJapaneseDate,
 } from '../src/lib/japaneseEra.ts'
 
@@ -39,4 +43,17 @@ test('crop year and PDF text use Japanese eras', () => {
 
 test('date-time display uses the same full date format', () => {
   assert.equal(formatJapaneseDateTime('2026-09-24T15:30:00'), '令和8年9月24日 15:30')
+})
+
+test('screen calendar mode changes only presentation and keeps ISO dates', () => {
+  assert.equal(formatDisplayDate('2026-09-24', 'wareki'), '令和8年9月24日')
+  assert.equal(formatDisplayDate('2026-09-24', 'seireki'), '2026年9月24日')
+  assert.equal(formatDisplayDateTime('2026-09-24T15:30:00', 'seireki'), '2026年9月24日 15:30')
+  assert.equal(formatDisplayCropYear(8, 'seireki'), '2026年産')
+  assert.equal(formatDisplayCropYear(2026, 'seireki'), '2026年産')
+  assert.equal(parseDisplayDate('2026年9月24日', 'seireki'), '2026-09-24')
+  assert.equal(parseDisplayDate('２０２６/９/２４', 'seireki'), '2026-09-24')
+  assert.equal(parseDisplayDate('令和8年9月24日', 'wareki'), '2026-09-24')
+  assert.equal(parseDisplayDate('2026年2月29日', 'seireki'), null)
+  assert.equal(parseDisplayDate('令和8年9月24日', 'seireki'), null)
 })

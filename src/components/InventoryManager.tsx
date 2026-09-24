@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { AlertTriangle, ArrowDown, ArrowDownToLine, ArrowRightLeft, ArrowUp, ArrowUpFromLine, Camera, FileUp, Filter, Pencil, Plus, Save, Search, Trash2, Warehouse, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { formatJapaneseCropYear, formatJapaneseDate, formatJapaneseDateForFilename } from '../lib/japaneseEra'
+import { formatJapaneseDateForFilename, formatDisplayCropYear, formatDisplayDate, type CalendarMode } from '../lib/japaneseEra'
+import { useCalendarMode } from '../lib/calendarMode'
 import { JapaneseCropYearInput, JapaneseDateInput } from './JapaneseDateInput'
 import type { InspectionOption } from '../types'
 
@@ -230,9 +231,9 @@ function movementBadgeClass(movement: InventoryMovement) {
   return modeForMovement(movement)
 }
 
-function movementValue(movement: InventoryMovement, key: InventoryColumn) {
-  if (key === 'movementDate') return formatJapaneseDate(movement.movement_date)
-  if (key === 'cropYear') return formatJapaneseCropYear(movement.crop_year)
+function movementValue(movement: InventoryMovement, key: InventoryColumn, calendarMode: CalendarMode) {
+  if (key === 'movementDate') return formatDisplayDate(movement.movement_date, calendarMode)
+  if (key === 'cropYear') return formatDisplayCropYear(movement.crop_year, calendarMode)
   if (key === 'movementType') return movementTypeLabel(movement)
   if (key === 'settlementNo') return movement.settlement_no
   if (key === 'workerName') return movement.worker_name
@@ -324,6 +325,7 @@ function FilterableColumnHeader<Key extends string>({
 }
 
 export function InventoryManager({ view, workerId, workerName, canOperate, isAdmin }: Props) {
+  const { mode: calendarMode, formatDate: formatJapaneseDate, formatCropYear: formatJapaneseCropYear } = useCalendarMode()
   const [movementMode, setMovementMode] = useState<MovementMode>('inbound')
   const [warehouses, setWarehouses] = useState<InspectionOption[]>([])
   const [productOptions, setProductOptions] = useState<InspectionOption[]>([])
@@ -337,6 +339,9 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
   const [columnFilters, setColumnFilters] = useState<Partial<Record<InventoryColumn, string[]>>>({})
   const [balanceSearch, setBalanceSearch] = useState('')
   const [balanceColumnFilters, setBalanceColumnFilters] = useState<Record<string, string[]>>({})
+  useEffect(() => {
+    setColumnFilters((current) => ({ ...current, movementDate: undefined, cropYear: undefined }))
+  }, [calendarMode])
   const [notice, setNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [busy, setBusy] = useState(false)
   const [version, setVersion] = useState(0)
@@ -462,10 +467,10 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
   const displayedBalanceRows = useMemo(() => {
     const term = balanceSearch.trim().toLowerCase()
     return balanceRows.filter((row) => {
-      if (term && !formatJapaneseCropYear(row.cropYear).toLowerCase().includes(term) && !String(row.cropYear ?? '').includes(term) && !balanceColumns.some((column) => balanceValue(row, column.key).toLowerCase().includes(term))) return false
+      if (term && !formatDisplayCropYear(row.cropYear, calendarMode).toLowerCase().includes(term) && !String(row.cropYear ?? '').includes(term) && !balanceColumns.some((column) => balanceValue(row, column.key).toLowerCase().includes(term))) return false
       return balanceColumns.every((column) => balanceColumnFilters[column.key] === undefined || balanceColumnFilters[column.key].includes(balanceValue(row, column.key)))
     })
-  }, [balanceRows, balanceColumnFilters, balanceColumns, balanceSearch])
+  }, [balanceRows, balanceColumnFilters, balanceColumns, balanceSearch, calendarMode])
   const balanceYearGroups = useMemo(() => {
     const groups = new Map<number | null, { rows: InventoryBalanceRow[]; totals: Record<string, Record<string, number>> }>()
     displayedBalanceRows.forEach((row) => {
@@ -888,21 +893,21 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
 
   const listMovements = useMemo(() => view === 'statement-list' ? movements.filter((movement) => movement.source_type === 'settlement') : movements, [movements, view])
   const visibleInventoryColumns = useMemo(() => view === 'statement-list' ? INVENTORY_COLUMNS.filter((column) => column.key !== 'note') : INVENTORY_COLUMNS.filter((column) => column.key !== 'producerName'), [view])
-  const filterValues = useMemo(() => Object.fromEntries(visibleInventoryColumns.map((column) => [column.key, [...new Set(listMovements.map((movement) => movementValue(movement, column.key)))].sort((a, b) => a.localeCompare(b, 'ja', { numeric: true }))])) as Record<InventoryColumn, string[]>, [listMovements, visibleInventoryColumns])
+  const filterValues = useMemo(() => Object.fromEntries(visibleInventoryColumns.map((column) => [column.key, [...new Set(listMovements.map((movement) => movementValue(movement, column.key, calendarMode)))].sort((a, b) => a.localeCompare(b, 'ja', { numeric: true }))])) as Record<InventoryColumn, string[]>, [listMovements, visibleInventoryColumns, calendarMode])
   const displayedMovements = useMemo(() => {
     const term = search.trim().toLowerCase()
     const rows = listMovements.filter((movement) => {
-      if (term && !visibleInventoryColumns.some((column) => movementValue(movement, column.key).toLowerCase().includes(term))) return false
-      return visibleInventoryColumns.every((column) => columnFilters[column.key] === undefined || columnFilters[column.key]!.includes(movementValue(movement, column.key)))
+      if (term && !visibleInventoryColumns.some((column) => movementValue(movement, column.key, calendarMode).toLowerCase().includes(term))) return false
+      return visibleInventoryColumns.every((column) => columnFilters[column.key] === undefined || columnFilters[column.key]!.includes(movementValue(movement, column.key, calendarMode)))
     })
     if (!sort) return rows
     return [...rows].sort((left, right) => {
-      const leftValue = sort.key === 'quantity' ? Number(left.quantity) : sort.key === 'movementDate' ? new Date(left.movement_date).getTime() : movementValue(left, sort.key)
-      const rightValue = sort.key === 'quantity' ? Number(right.quantity) : sort.key === 'movementDate' ? new Date(right.movement_date).getTime() : movementValue(right, sort.key)
+      const leftValue = sort.key === 'quantity' ? Number(left.quantity) : sort.key === 'movementDate' ? new Date(left.movement_date).getTime() : movementValue(left, sort.key, calendarMode)
+      const rightValue = sort.key === 'quantity' ? Number(right.quantity) : sort.key === 'movementDate' ? new Date(right.movement_date).getTime() : movementValue(right, sort.key, calendarMode)
       const comparison = typeof leftValue === 'number' && typeof rightValue === 'number' ? leftValue - rightValue : String(leftValue).localeCompare(String(rightValue), 'ja', { numeric: true })
       return sort.direction === 'asc' ? comparison : -comparison
     })
-  }, [columnFilters, listMovements, search, sort, visibleInventoryColumns])
+  }, [columnFilters, listMovements, search, sort, visibleInventoryColumns, calendarMode])
 
   const deletableMovements = listMovements.filter((movement) => movement.source_type === 'manual' || movement.source_type === 'settlement')
   const selectedMovements = deletableMovements.filter((movement) => selectedMovementKeys.has(movementSelectionKey(movement)))
@@ -1011,7 +1016,7 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
             openMovementEditor(movement)
           } : undefined}>
             {isAdmin && <td className="inventory-selection-cell">{editable && <input type="checkbox" checked={selected} onChange={() => toggleMovement(movement)} aria-label={`${movement.movement_date} ${movement.product_name}を選択`} />}</td>}
-            <td>{movementValue(movement, 'movementDate')}</td><td className="numeric-cell">{movementValue(movement, 'cropYear')}</td><td><span className={`inventory-movement-badge ${movementBadgeClass(movement)}`}>{mode === 'inbound' ? <ArrowDownToLine size={14} /> : mode === 'outbound' ? <ArrowUpFromLine size={14} /> : <ArrowRightLeft size={14} />}{movementTypeLabel(movement)}</span></td><td>{movement.settlement_no}</td><td>{movement.worker_name}</td>{view === 'statement-list' && <td>{movement.producer_name}</td>}<td>{movement.origin}</td><td>{movement.product_name}</td><td>{movementValue(movement, 'grade')}</td><td className="numeric-cell">{formatQuantity(movement.quantity)}</td><td>{movement.unit}</td><td className="numeric-cell">{movementValue(movement, 'purchasePrice')}</td><td>{movement.movement_from}</td><td className={routeError ? 'inventory-route-error' : ''}>{routeError ? <span><AlertTriangle size={16} />移動先未指定</span> : movement.movement_to}</td>{view === 'history' && <td className="inventory-note-cell" title={movement.note ?? undefined}><span>{movement.note ?? ''}</span></td>}{canOperate && <td className="inventory-actions-cell">{editable && <div className="inventory-row-actions"><button className="icon-button" type="button" title={manual ? '入出庫記録を編集' : '仕切り書をまとめて編集'} aria-label={manual ? '入出庫記録を編集' : '仕切り書をまとめて編集'} disabled={busy} onClick={() => openMovementEditor(movement)}><Pencil size={17} /></button><button className="icon-button delete-icon" type="button" title={manual ? '入出庫記録を削除' : '仕切り書明細を削除'} aria-label={manual ? '入出庫記録を削除' : '仕切り書明細を削除'} disabled={busy} onClick={() => manual ? void deleteMovement(movement) : void deleteStatementLine(movement)}><Trash2 size={17} /></button></div>}</td>}
+            <td>{movementValue(movement, 'movementDate', calendarMode)}</td><td className="numeric-cell">{movementValue(movement, 'cropYear', calendarMode)}</td><td><span className={`inventory-movement-badge ${movementBadgeClass(movement)}`}>{mode === 'inbound' ? <ArrowDownToLine size={14} /> : mode === 'outbound' ? <ArrowUpFromLine size={14} /> : <ArrowRightLeft size={14} />}{movementTypeLabel(movement)}</span></td><td>{movement.settlement_no}</td><td>{movement.worker_name}</td>{view === 'statement-list' && <td>{movement.producer_name}</td>}<td>{movement.origin}</td><td>{movement.product_name}</td><td>{movementValue(movement, 'grade', calendarMode)}</td><td className="numeric-cell">{formatQuantity(movement.quantity)}</td><td>{movement.unit}</td><td className="numeric-cell">{movementValue(movement, 'purchasePrice', calendarMode)}</td><td>{movement.movement_from}</td><td className={routeError ? 'inventory-route-error' : ''}>{routeError ? <span><AlertTriangle size={16} />移動先未指定</span> : movement.movement_to}</td>{view === 'history' && <td className="inventory-note-cell" title={movement.note ?? undefined}><span>{movement.note ?? ''}</span></td>}{canOperate && <td className="inventory-actions-cell">{editable && <div className="inventory-row-actions"><button className="icon-button" type="button" title={manual ? '入出庫記録を編集' : '仕切り書をまとめて編集'} aria-label={manual ? '入出庫記録を編集' : '仕切り書をまとめて編集'} disabled={busy} onClick={() => openMovementEditor(movement)}><Pencil size={17} /></button><button className="icon-button delete-icon" type="button" title={manual ? '入出庫記録を削除' : '仕切り書明細を削除'} aria-label={manual ? '入出庫記録を削除' : '仕切り書明細を削除'} disabled={busy} onClick={() => manual ? void deleteMovement(movement) : void deleteStatementLine(movement)}><Trash2 size={17} /></button></div>}</td>}
           </tr>
         })}{displayedMovements.length === 0 && <tr><td className="empty-state" colSpan={visibleInventoryColumns.length + (canOperate ? 1 : 0) + (isAdmin ? 1 : 0)}>{view === 'statement-list' ? '登録された仕切書はありません' : '該当する入出庫記録はありません'}</td></tr>}</tbody>
       </table></div>

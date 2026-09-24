@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft, Camera, ChevronDown, ChevronUp, FileImage, Keyboard, Pencil, Plus, RefreshCw, Save, Search, Trash2, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { formatJapaneseCropYear, formatJapaneseDate } from '../lib/japaneseEra'
+import { useCalendarMode } from '../lib/calendarMode'
 import { JapaneseCropYearInput, JapaneseDateInput } from './JapaneseDateInput'
 
 type Mode = 'reader' | 'list' | 'master'
@@ -257,6 +257,7 @@ async function resizePhoto(file: File) {
 }
 
 export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin }: Props) {
+  const { formatDate: formatJapaneseDate, formatCropYear: formatJapaneseCropYear } = useCalendarMode()
   const cameraRef = useRef<HTMLInputElement>(null)
   const [statements, setStatements] = useState<StoredStatement[]>([])
   const [masters, setMasters] = useState<MasterValue[]>([])

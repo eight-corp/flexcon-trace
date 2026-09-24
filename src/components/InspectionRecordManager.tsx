@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowDown, ArrowLeft, ArrowUp, BarChart3, ChevronDown, CircleAlert, ClipboardList, ExternalLink, FileText, Filter, List, Plus, Printer, Save, Search, TableRowsSplit, Trash2, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { formatJapaneseCropYear, formatJapaneseDate, formatJapaneseDateForFilename } from '../lib/japaneseEra'
-import { JapaneseDateInput } from './JapaneseDateInput'
+import { formatDisplayDate, formatJapaneseDateForFilename } from '../lib/japaneseEra'
+import { useCalendarMode } from '../lib/calendarMode'
+import { JapaneseDateInput, JapaneseFiscalYearInput } from './JapaneseDateInput'
 import { formatPrefectureName } from '../lib/prefecture'
 import { selectedInspectionGrade } from '../lib/inspectionGrade'
 import type { AuthorizationRecord, FlexconInspection, InspectionOption, InspectionRegistration, InspectionWeight, PaperBagInspection } from '../types'
@@ -239,7 +240,6 @@ function inspectionLedgerFailureFor(items: Array<FlexconInspection | PaperBagIns
     reasons: failure.reasons,
   }
 }
-function displayDate(value: string | null | undefined) { return formatJapaneseDate(value) }
 function joinDistinct(values: Array<string | null | undefined>, formatter: (value: string) => string = (value) => value) {
   return [...new Set(values.map((value) => value?.trim()).filter((value): value is string => Boolean(value)).map(formatter))].join('、')
 }
@@ -309,7 +309,6 @@ function InspectionSummaryColumnHeader({
     </div>
   </th>
 }
-function displayCropYear(value: number) { return formatJapaneseCropYear(value) }
 function brandTypeForPrefecture(prefecture: string | null): 'brand_aomori' | 'brand_iwate' | null {
   const normalized = (prefecture ?? '').trim().replace(/県$/, '')
   if (normalized === '青森') return 'brand_aomori'
@@ -317,6 +316,7 @@ function brandTypeForPrefecture(prefecture: string | null): 'brand_aomori' | 'br
   return null
 }
 export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedAuthorizationId, selectedRegistrationId, selectedRecordTarget, onSelectedAuthorizationChange, onSelectedRegistrationChange, onSelectedRecordTargetChange, onBack }: Props) {
+  const { mode: calendarMode, formatDate: displayDate, formatCropYear: displayCropYear } = useCalendarMode()
   const [authorizations, setAuthorizations] = useState<AuthorizationRecord[]>([])
   const [registrations, setRegistrations] = useState<InspectionRegistration[]>([])
   const [flexcons, setFlexcons] = useState<FlexconInspection[]>([])
@@ -336,6 +336,9 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
   const [search, setSearch] = useState('')
   const [summarySort, setSummarySort] = useState<{ key: SummaryColumn; direction: SummarySortDirection } | null>(null)
   const [summaryColumnFilters, setSummaryColumnFilters] = useState<Partial<Record<SummaryColumn, string[]>>>({})
+  useEffect(() => {
+    setSummaryColumnFilters((current) => ({ ...current, purchaseDates: undefined, inspectionDates: undefined }))
+  }, [calendarMode])
   const [notice, setNotice] = useState<Notice>(null)
   const [version, setVersion] = useState(0)
   const [busy, setBusy] = useState(false)
@@ -483,8 +486,8 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
           registrationNo: registration.registration_no,
           settlementNo: registration.settlement_no ?? '',
           authorizationId: authorization.id,
-          purchaseDates: joinDistinct(gradeRecords.map((item) => item.purchase_date), displayDate),
-          inspectionDates: joinDistinct(gradeRecords.map((item) => item.inspection_date), displayDate),
+          purchaseDates: joinDistinct(gradeRecords.map((item) => item.purchase_date), (value) => formatDisplayDate(value, calendarMode)),
+          inspectionDates: joinDistinct(gradeRecords.map((item) => item.inspection_date), (value) => formatDisplayDate(value, calendarMode)),
           fullName: authorization.full_name,
           origin: formatPrefectureName(authorization.prefecture),
           municipality: authorization.municipality ?? '',
@@ -507,7 +510,7 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
       return (leftRank < 0 ? SUMMARY_GRADE_ORDER.length : leftRank) - (rightRank < 0 ? SUMMARY_GRADE_ORDER.length : rightRank)
         || left.grade.localeCompare(right.grade, 'ja', { numeric: true })
     })
-  }, [authorizations, flexcons, paperBags, registrations, weights])
+  }, [authorizations, flexcons, paperBags, registrations, weights, calendarMode])
   const summaryFilterValues = useMemo(() => Object.fromEntries(SUMMARY_COLUMNS.map((column) => [
     column.key,
     Array.from(new Set(summaryRows.map((row) => summaryDisplayValue(row, column.key)))).sort((left, right) => left.localeCompare(right, 'ja', { numeric: true })),
@@ -881,7 +884,7 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
     const draft = detailDraft(item)
     const save = (values: Partial<InlineDetailDraft> = {}) => void saveInlineDetail(detailKind, item, values)
     return <>
-      <td className="inspection-inline-cell inspection-year-cell"><span className="japanese-fiscal-year-input">令和<input className={!draft.fiscal_year || Number(draft.fiscal_year) <= 0 ? 'inspection-missing' : ''} type="number" min="1" max="99" step="1" value={draft.fiscal_year} aria-label="年度" disabled={busy} onChange={(event) => changeDetailDraft(item, { fiscal_year: event.target.value })} onBlur={() => save()} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur() }} />年度</span></td>
+      <td className="inspection-inline-cell inspection-year-cell"><JapaneseFiscalYearInput className={!draft.fiscal_year || Number(draft.fiscal_year) <= 0 ? 'inspection-missing' : ''} value={draft.fiscal_year} disabled={busy} onChange={(fiscal_year) => changeDetailDraft(item, { fiscal_year })} onBlur={() => save()} /></td>
       <td className="inspection-inline-cell inspection-date-cell"><JapaneseDateInput className={!draft.purchase_date ? 'inspection-missing' : ''} value={draft.purchase_date} aria-label="仕入日" disabled={busy} onChange={(purchase_date) => { changeDetailDraft(item, { purchase_date }); save({ purchase_date }) }} /></td>
       <td className="inspection-inline-cell inspection-date-cell"><JapaneseDateInput className={!draft.inspection_date ? 'inspection-missing' : ''} value={draft.inspection_date} aria-label="検査日" disabled={busy} onChange={(inspection_date) => { changeDetailDraft(item, { inspection_date }); save({ inspection_date }) }} /></td>
       <td className="inspection-inline-cell inspection-inspector-cell"><select className={!draft.inspector_name ? 'inspection-missing' : ''} value={draft.inspector_name} aria-label="検査員" disabled={busy} onChange={(event) => { const inspector_name = event.target.value; changeDetailDraft(item, { inspector_name }); save({ inspector_name }) }}><option value="">未選択</option>{inspectorOptions.map((option) => <option key={option.id} value={option.name}>{option.name}</option>)}</select></td>
@@ -911,7 +914,7 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
     </>
   }
   const renderReadOnlyMetadataFields = (item: FlexconInspection | PaperBagInspection) => <>
-    <td>{formatJapaneseCropYear(item.fiscal_year).replace('年産', '年度')}</td>
+    <td>{displayCropYear(item.fiscal_year).replace('年産', '年度')}</td>
     <td>{displayDate(item.purchase_date)}</td>
     <td className={item.inspection_date ? undefined : 'inspection-missing'}>{displayDate(item.inspection_date)}</td>
     <td className={item.inspector_name ? undefined : 'inspection-missing'}>{item.inspector_name ?? ''}</td>
@@ -1311,7 +1314,7 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
             {producerCandidates.length === 0 && <span className="empty-state">該当する生産者がありません</span>}
           </div>}
         </div>
-        <label>年度<span className="japanese-fiscal-year-input">令和<input type="number" min="1" max="99" step="1" value={addGroupForm.fiscal_year} onChange={(event) => setAddGroupForm((current) => ({ ...current, fiscal_year: event.target.value }))} required />年度</span></label>
+        <label>年度<JapaneseFiscalYearInput value={addGroupForm.fiscal_year} onChange={(fiscal_year) => setAddGroupForm((current) => ({ ...current, fiscal_year }))} required /></label>
         <label>仕入日<JapaneseDateInput value={addGroupForm.purchase_date} onChange={(purchase_date) => setAddGroupForm((current) => ({ ...current, purchase_date }))} required /></label>
         <label>仕切書№<input value={addGroupForm.settlement_no} maxLength={80} onChange={(event) => setAddGroupForm((current) => ({ ...current, settlement_no: event.target.value }))} /></label>
         <label>検査日<JapaneseDateInput value={addGroupForm.inspection_date} onChange={(inspection_date) => setAddGroupForm((current) => ({ ...current, inspection_date }))} /></label>

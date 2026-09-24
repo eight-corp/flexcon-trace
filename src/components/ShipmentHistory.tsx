@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowDown, ArrowUp, Building2, Download, Filter, LayoutGrid, Pencil, Save, Search, Table2, Trash2, Truck, UserRound, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { formatJapaneseDateForFilename, formatJapaneseDateTime } from '../lib/japaneseEra'
+import { formatDisplayDateTime, formatJapaneseDateForFilename } from '../lib/japaneseEra'
+import { useCalendarMode } from '../lib/calendarMode'
 import { JapaneseDateTimeInput } from './JapaneseDateInput'
 import { formatPrefectureName } from '../lib/prefecture'
 import type { Destination, InspectionOption, Shipment, TransportProfile } from '../types'
@@ -86,10 +87,6 @@ function toLocalDateTime(value: string) {
   const date = new Date(value)
   date.setMinutes(date.getMinutes() - date.getTimezoneOffset())
   return date.toISOString().slice(0, 16)
-}
-
-function formatShipmentDateTime(value: string) {
-  return formatJapaneseDateTime(value)
 }
 
 function shipmentProductSummary(shipment: Shipment) {
@@ -240,6 +237,7 @@ function ShipmentColumnHeader({
 }
 
 export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
+  const { mode: calendarMode, formatDateTime: formatShipmentDateTime } = useCalendarMode()
   const [shipments, setShipments] = useState<Shipment[]>([])
   const [destinations, setDestinations] = useState<Destination[]>([])
   const [transportProfiles, setTransportProfiles] = useState<TransportProfile[]>([])
@@ -262,6 +260,9 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
   const [viewMode, setViewMode] = useState<ViewMode>('cards')
   const [sort, setSort] = useState<{ key: TableColumn; direction: SortDirection } | null>(null)
   const [columnFilters, setColumnFilters] = useState<Partial<Record<TableColumn, string[]>>>({})
+  useEffect(() => {
+    setColumnFilters((current) => ({ ...current, shippedAt: undefined }))
+  }, [calendarMode])
 
   useEffect(() => {
     void Promise.all([
@@ -329,7 +330,7 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
       id: `${shipment.id}-${groupIndex}-${group.name}`,
       shipment,
       originalOrder: shipmentIndex * 100 + groupIndex,
-      shippedAt: formatShipmentDateTime(shipment.shipped_at),
+      shippedAt: formatDisplayDateTime(shipment.shipped_at, calendarMode),
       shippedAtValue: new Date(shipment.shipped_at).getTime(),
       destination: shipment.flexcon_destinations?.name ?? '納品先不明',
       origin: group.origin,
@@ -352,7 +353,7 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
         const mixed = mixedShipmentByLot[item.lot_number]
         return `${item.lot_number} ${mixed ? `混在№${mixed.mixedNo} ${mixed.producerLabel}` : ''}`
       }).join(' ').toLowerCase(),
-    }))), [mixedShipmentByLot, shipments])
+    }))), [mixedShipmentByLot, shipments, calendarMode])
 
   const filterValues = useMemo(() => Object.fromEntries(TABLE_COLUMNS.map((column) => [
     column.key,

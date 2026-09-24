@@ -73,3 +73,38 @@ export function parseJapaneseDate(value: string) {
 }
 
 export const JAPANESE_ERAS = ERAS
+
+export type CalendarMode = 'wareki' | 'seireki'
+
+export function formatDisplayDate(value: string | null | undefined, mode: CalendarMode) {
+  if (mode === 'wareki') return formatJapaneseDate(value)
+  if (!value) return ''
+  const parts = dateParts(value)
+  return parts ? `${parts.year}年${parts.month}月${parts.day}日` : value
+}
+
+export function formatDisplayDateTime(value: string | null | undefined, mode: CalendarMode) {
+  if (mode === 'wareki') return formatJapaneseDateTime(value)
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  const iso = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+  return `${formatDisplayDate(iso, mode)} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+}
+
+export function formatDisplayCropYear(value: number | string | null | undefined, mode: CalendarMode) {
+  if (mode === 'wareki') return formatJapaneseCropYear(value)
+  if (value === null || value === undefined || value === '') return ''
+  const year = Number(value)
+  if (!Number.isInteger(year)) return String(value)
+  return `${year < 100 ? year + 2018 : year}年産`
+}
+
+export function parseDisplayDate(value: string, mode: CalendarMode) {
+  if (mode === 'wareki') return parseJapaneseDate(value)
+  const normalized = value.trim().normalize('NFKC')
+  const match = normalized.match(/^(\d{4})[年/.-](\d{1,2})[月/.-](\d{1,2})日?$/)
+  if (!match) return null
+  const iso = `${match[1]}-${match[2].padStart(2, '0')}-${match[3].padStart(2, '0')}`
+  return dateParts(iso) ? iso : null
+}

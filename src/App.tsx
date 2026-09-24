@@ -9,6 +9,7 @@ import { PurchaseStatementManager } from './components/PurchaseStatementManager'
 import { ShipmentHistory } from './components/ShipmentHistory'
 import { ShipmentScanner } from './components/ShipmentScanner'
 import { logoutBusinessSession, MANAGEMENT_MENU_URL, restoreBusinessSession } from './lib/businessAuth'
+import { useCalendarMode } from './lib/calendarMode'
 import type { Worker } from './types'
 import './App.css'
 
@@ -24,6 +25,7 @@ function initialTab(): Tab {
 }
 
 function App() {
+  const { mode: calendarMode, setMode: setCalendarMode } = useCalendarMode()
   const statementApplication = isStatementApplication()
   const [worker, setWorker] = useState<Worker | null>(null)
   const [loading, setLoading] = useState(true)
@@ -139,6 +141,11 @@ function App() {
           </div>
         </div>
         <div className="header-actions">
+          <div className="calendar-mode-control" aria-label="日付表示">
+            <span>和暦</span>
+            <button className="toggle-switch" type="button" role="switch" aria-label="西暦表示" aria-checked={calendarMode === 'seireki'} title={calendarMode === 'wareki' ? '西暦に切り替え' : '和暦に切り替え'} onClick={() => setCalendarMode(calendarMode === 'wareki' ? 'seireki' : 'wareki')}><span /></button>
+            <span>西暦</span>
+          </div>
           <button className="menu-button" type="button" title="業務管理メニューへ" aria-label="業務管理メニューへ" onClick={returnToMenu}>
             <House size={20} />
             <span>メニュー</span>

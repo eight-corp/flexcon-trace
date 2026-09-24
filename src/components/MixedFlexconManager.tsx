@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, FileText, Plus, Search, Trash2, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { formatJapaneseCropYear, formatJapaneseDate } from '../lib/japaneseEra'
+import { useCalendarMode } from '../lib/calendarMode'
 import { JapaneseDateInput } from './JapaneseDateInput'
 import { formatPrefectureName } from '../lib/prefecture'
 import type { AuthorizationRecord, FlexconInspection, InspectionOption, InspectionWeight, MixedFlexcon } from '../types'
@@ -69,6 +69,7 @@ function brandTypeForOrigin(origin: string): 'brand_aomori' | 'brand_iwate' | nu
 }
 
 export function MixedFlexconManager({ workerId, isAdmin }: Props) {
+  const { formatDate: formatJapaneseDate, formatCropYear: formatJapaneseCropYear } = useCalendarMode()
   const [items, setItems] = useState<MixedFlexcon[]>([])
   const [authorizations, setAuthorizations] = useState<AuthorizationRecord[]>([])
   const [options, setOptions] = useState<InspectionOption[]>([])

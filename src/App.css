@@ -15,6 +15,10 @@
 .icon-button { width: 38px; height: 38px; display: grid; place-items: center; border: 0; background: transparent; color: #4d5950; border-radius: 6px; }
 .icon-button:hover { background: var(--surface-soft); }
 .header-actions { display: flex; align-items: center; gap: 4px; }
+.calendar-mode-control { display: flex; align-items: center; gap: 5px; white-space: nowrap; font-size: 12px; font-weight: 700; color: #4d5950; }
+.calendar-mode-control .toggle-switch { width: 40px; height: 23px; border-radius: 12px; padding: 2px; }
+.calendar-mode-control .toggle-switch span { width: 19px; height: 19px; }
+.calendar-mode-control .toggle-switch[aria-checked="true"] span { transform: translateX(17px); }
 .menu-button { min-height: 38px; display: inline-flex; align-items: center; gap: 5px; padding: 0 10px; border: 0; border-radius: 6px; background: transparent; color: #4d5950; font-weight: 700; }
 .menu-button:hover { background: var(--surface-soft); }
 .page-heading { margin-bottom: 14px; }
@@ -151,6 +155,7 @@
 .japanese-crop-year-input, .japanese-fiscal-year-input { display: inline-flex; align-items: center; width: 100%; min-width: 0; gap: 3px; white-space: nowrap; }
 .japanese-crop-year-input > select { flex: 1 1 66px; min-width: 60px; padding-inline: 3px; }
 .japanese-crop-year-input > input, .japanese-fiscal-year-input > input { flex: 0 1 53px; width: 53px; min-width: 46px; padding-inline: 3px; }
+.japanese-crop-year-input[data-calendar-mode="seireki"] > input, .japanese-fiscal-year-input[data-calendar-mode="seireki"] > input { flex-basis: 76px; width: 76px; min-width: 72px; }
 .japanese-crop-year-input > span { flex: 0 0 auto; }
 .japanese-fiscal-year-input { font-size: 12px; }
 .shipment-required-missing { background: #fff1bf !important; border-color: #d39a28 !important; box-shadow: inset 0 0 0 1px rgba(211, 154, 40, .12); }
@@ -868,10 +873,7 @@ table thead th { text-align: center !important; }
 .mixed-notes-field { grid-column: span 3; }
 
 @media (min-width: 760px) {
-  .app-shell { padding-bottom: 0; padding-left: 188px; }
-  .app-header { margin-left: -188px; padding-left: 20px; }
-  .bottom-nav { top: 64px; bottom: 0; right: auto; width: 188px; height: auto; grid-template-columns: 1fr; grid-template-rows: repeat(var(--nav-count, 5), 58px) 1fr; border-top: 0; border-right: 1px solid var(--line); padding: 14px 10px; gap: 6px; }
-  .bottom-nav button { display: flex; justify-content: flex-start; align-items: center; place-content: initial; gap: 10px; padding: 0 14px; border-radius: 6px; font-size: 13px; }
+  .app-shell { padding-bottom: 74px; }
   .app-main { padding: 20px 22px 34px; }
   .app-main.app-main-wide { width: 100%; max-width: none; height: calc(100dvh - 64px); padding-bottom: 20px; overflow: hidden; }
   .app-main.app-main-wide.app-main-statements { height: auto; min-height: calc(100dvh - 64px); padding-bottom: 34px; overflow-x: auto; overflow-y: visible; }
@@ -881,6 +883,30 @@ table thead th { text-align: center !important; }
   .app-main-wide .inspection-table-wrap { flex: 1; min-height: 0; }
   .app-main-wide .shipment-list { width: min(100%, 920px); }
   .scanner-layout { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(280px, .8fr); gap: 16px; align-items: start; }
+}
+
+@media (min-width: 960px) {
+  .app-shell { padding-bottom: 0; }
+  .app-header { padding-left: 18px; padding-right: 14px; }
+  .brand-lockup { flex: 0 0 218px; }
+  .brand-lockup strong { font-size: 13px; }
+  .brand-mark { width: 31px; height: 31px; flex: 0 0 31px; }
+  .header-actions { flex: 0 0 184px; justify-content: flex-end; }
+  .menu-button { padding: 0 5px; font-size: 12px; }
+  .bottom-nav { top: 0; bottom: auto; left: 236px; right: 198px; width: auto; height: 63px; padding: 0; grid-template-rows: 1fr; border: 0; border-bottom: 1px solid var(--line); overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; }
+  .bottom-nav button { height: 63px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 0 2px; white-space: nowrap; font-size: 11px; }
+  .bottom-nav button svg { width: 18px; height: 18px; }
+  .bottom-nav button span { overflow-wrap: normal; }
+}
+
+@media (max-width: 440px) {
+  .brand-mark { display: none; }
+  .brand-lockup strong { font-size: 12px; }
+  .brand-lockup small { font-size: 10px; }
+  .app-header { gap: 4px; padding: 0 8px; }
+  .calendar-mode-control { gap: 3px; font-size: 10px; }
+  .menu-button { padding: 0 3px; }
+  .menu-button span { display: none; }
 }
 
 @media (max-width: 1500px) {
