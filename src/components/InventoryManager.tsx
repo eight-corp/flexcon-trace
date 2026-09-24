@@ -12,7 +12,7 @@ type InventoryColumn = 'movementDate' | 'movementType' | 'settlementNo' | 'worke
 type InventoryMovement = {
   id: string
   registration_order?: number
-  source_type: 'manual' | 'settlement'
+  source_type: 'manual' | 'settlement' | 'inspection_flexcon' | 'inspection_paper_bag' | 'shipment_flexcon' | 'shipment_manual'
   movement_type: InventoryMovementType
   movement_date: string
   worker_name: string
@@ -213,6 +213,8 @@ function modeForMovement(movement: InventoryMovement): MovementMode {
 
 function movementTypeLabel(movement: InventoryMovement) {
   if (movement.movement_type === 'settlement') return '仕切り書'
+  if (movement.source_type === 'inspection_flexcon' || movement.source_type === 'inspection_paper_bag') return '検査記録'
+  if (movement.source_type === 'shipment_flexcon' || movement.source_type === 'shipment_manual') return '出荷'
   const mode = modeForMovement(movement)
   return mode === 'inbound' ? '入庫' : mode === 'outbound' ? '出庫' : '倉庫間移動'
 }
@@ -232,7 +234,7 @@ function movementValue(movement: InventoryMovement, key: InventoryColumn) {
   if (key === 'quantity') return formatQuantity(movement.quantity)
   if (key === 'purchasePrice') return movement.purchase_price == null ? '' : `${Number(movement.purchase_price).toLocaleString('ja-JP')}円`
   if (key === 'movementFrom') return movement.movement_from
-  if (key === 'movementTo') return movement.source_type !== 'manual' && !movement.to_warehouse_id ? '移動先未指定' : movement.movement_to
+  if (key === 'movementTo') return movement.source_type === 'settlement' && !movement.to_warehouse_id ? '移動先未指定' : movement.movement_to
   if (key === 'grade') return movement.grade || '対象外'
   return movement[key]
 }
@@ -884,8 +886,9 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
     })
   }, [columnFilters, listMovements, search, sort])
 
-  const selectedMovements = listMovements.filter((movement) => selectedMovementKeys.has(movementSelectionKey(movement)))
-  const displayedMovementKeys = displayedMovements.map(movementSelectionKey)
+  const deletableMovements = listMovements.filter((movement) => movement.source_type === 'manual' || movement.source_type === 'settlement')
+  const selectedMovements = deletableMovements.filter((movement) => selectedMovementKeys.has(movementSelectionKey(movement)))
+  const displayedMovementKeys = displayedMovements.filter((movement) => movement.source_type === 'manual' || movement.source_type === 'settlement').map(movementSelectionKey)
   const allDisplayedMovementsSelected = displayedMovementKeys.length > 0 && displayedMovementKeys.every((key) => selectedMovementKeys.has(key))
   const toggleDisplayedMovements = () => setSelectedMovementKeys((current) => {
     const next = new Set(current)
@@ -978,11 +981,13 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
         <tbody>{displayedMovements.map((movement) => {
           const mode = modeForMovement(movement)
           const manual = movement.source_type === 'manual'
-          const routeError = !manual && !movement.to_warehouse_id
+          const statement = movement.source_type === 'settlement'
+          const editable = manual || statement
+          const routeError = statement && !movement.to_warehouse_id
           const selected = selectedMovementKeys.has(movementSelectionKey(movement))
           return <tr className={`inventory-movement-${mode} ${routeError ? 'inventory-movement-error' : ''} ${selected ? 'inventory-movement-selected' : ''}`} title={routeError ? 'エラー：移動先が未指定です' : undefined} key={movement.id}>
-            {isAdmin && <td className="inventory-selection-cell"><input type="checkbox" checked={selected} onChange={() => toggleMovement(movement)} aria-label={`${movement.movement_date} ${movement.product_name}を選択`} /></td>}
-            <td>{movementValue(movement, 'movementDate')}</td><td><span className={`inventory-movement-badge ${movementBadgeClass(movement)}`}>{mode === 'inbound' ? <ArrowDownToLine size={14} /> : mode === 'outbound' ? <ArrowUpFromLine size={14} /> : <ArrowRightLeft size={14} />}{movementTypeLabel(movement)}</span></td><td>{movement.settlement_no}</td><td>{movement.worker_name}</td><td>{movement.producer_name}</td><td>{movement.origin}</td><td>{movement.product_name}</td><td>{movementValue(movement, 'grade')}</td><td className="numeric-cell">{formatQuantity(movement.quantity)}</td><td>{movement.unit}</td><td className="numeric-cell">{movementValue(movement, 'purchasePrice')}</td><td>{movement.movement_from}</td><td className={routeError ? 'inventory-route-error' : ''}>{routeError ? <span><AlertTriangle size={16} />移動先未指定</span> : movement.movement_to}</td>{canOperate && <td className="inventory-actions-cell"><div className="inventory-row-actions"><button className="icon-button" type="button" title={manual ? '入出庫記録を編集' : '仕切り書をまとめて編集'} aria-label={manual ? '入出庫記録を編集' : '仕切り書をまとめて編集'} disabled={busy} onClick={() => { if (manual) beginEdit(movement); else void beginStatementEdit(movement) }}><Pencil size={17} /></button><button className="icon-button delete-icon" type="button" title={manual ? '入出庫記録を削除' : '仕切り書明細を削除'} aria-label={manual ? '入出庫記録を削除' : '仕切り書明細を削除'} disabled={busy} onClick={() => manual ? void deleteMovement(movement) : void deleteStatementLine(movement)}><Trash2 size={17} /></button></div></td>}
+            {isAdmin && <td className="inventory-selection-cell">{editable && <input type="checkbox" checked={selected} onChange={() => toggleMovement(movement)} aria-label={`${movement.movement_date} ${movement.product_name}を選択`} />}</td>}
+            <td>{movementValue(movement, 'movementDate')}</td><td><span className={`inventory-movement-badge ${movementBadgeClass(movement)}`}>{mode === 'inbound' ? <ArrowDownToLine size={14} /> : mode === 'outbound' ? <ArrowUpFromLine size={14} /> : <ArrowRightLeft size={14} />}{movementTypeLabel(movement)}</span></td><td>{movement.settlement_no}</td><td>{movement.worker_name}</td><td>{movement.producer_name}</td><td>{movement.origin}</td><td>{movement.product_name}</td><td>{movementValue(movement, 'grade')}</td><td className="numeric-cell">{formatQuantity(movement.quantity)}</td><td>{movement.unit}</td><td className="numeric-cell">{movementValue(movement, 'purchasePrice')}</td><td>{movement.movement_from}</td><td className={routeError ? 'inventory-route-error' : ''}>{routeError ? <span><AlertTriangle size={16} />移動先未指定</span> : movement.movement_to}</td>{canOperate && <td className="inventory-actions-cell">{editable && <div className="inventory-row-actions"><button className="icon-button" type="button" title={manual ? '入出庫記録を編集' : '仕切り書をまとめて編集'} aria-label={manual ? '入出庫記録を編集' : '仕切り書をまとめて編集'} disabled={busy} onClick={() => { if (manual) beginEdit(movement); else void beginStatementEdit(movement) }}><Pencil size={17} /></button><button className="icon-button delete-icon" type="button" title={manual ? '入出庫記録を削除' : '仕切り書明細を削除'} aria-label={manual ? '入出庫記録を削除' : '仕切り書明細を削除'} disabled={busy} onClick={() => manual ? void deleteMovement(movement) : void deleteStatementLine(movement)}><Trash2 size={17} /></button></div>}</td>}
           </tr>
         })}{displayedMovements.length === 0 && <tr><td className="empty-state" colSpan={INVENTORY_COLUMNS.length + (canOperate ? 1 : 0) + (isAdmin ? 1 : 0)}>{view === 'statement-list' ? '登録された仕切書はありません' : '該当する入出庫記録はありません'}</td></tr>}</tbody>
       </table></div>

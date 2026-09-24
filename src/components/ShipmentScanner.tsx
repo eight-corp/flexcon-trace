@@ -19,6 +19,7 @@ type ShipmentDraft = {
   plannedCount: number
   shippedAt: string
   destinationId: string
+  fromWarehouseId: string
   transportProfileId: string
   driverName: string
   vehicleNo: string
@@ -54,6 +55,7 @@ function loadShipmentDraft(storageKey: string): ShipmentDraft {
     plannedCount: 12,
     shippedAt: currentLocalDateTime(),
     destinationId: '',
+    fromWarehouseId: '',
     transportProfileId: '',
     driverName: '',
     vehicleNo: '',
@@ -84,6 +86,7 @@ function loadShipmentDraft(storageKey: string): ShipmentDraft {
       plannedCount,
       shippedAt: typeof draft.shippedAt === 'string' && draft.shippedAt ? draft.shippedAt : emptyDraft.shippedAt,
       destinationId: typeof draft.destinationId === 'string' ? draft.destinationId : '',
+      fromWarehouseId: typeof draft.fromWarehouseId === 'string' ? draft.fromWarehouseId : '',
       transportProfileId: typeof draft.transportProfileId === 'string' ? draft.transportProfileId : '',
       driverName: typeof draft.driverName === 'string' ? draft.driverName : '',
       vehicleNo: typeof draft.vehicleNo === 'string' ? draft.vehicleNo : '',
@@ -113,6 +116,7 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
   const storageKey = `${STORAGE_KEY_PREFIX}-${workerId}`
   const [initialDraft] = useState(() => loadShipmentDraft(storageKey))
   const [destinations, setDestinations] = useState<Destination[]>([])
+  const [warehouses, setWarehouses] = useState<InspectionOption[]>([])
   const [transportProfiles, setTransportProfiles] = useState<TransportProfile[]>([])
   const [shipmentProducts, setShipmentProducts] = useState<InspectionOption[]>([])
   const [authorizationNames, setAuthorizationNames] = useState<Record<string, string>>({})
@@ -120,6 +124,7 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
   const [inspectionLotDetails, setInspectionLotDetails] = useState<Record<string, InspectionLotDetails>>({})
   const [shippedAt, setShippedAt] = useState(initialDraft.shippedAt)
   const [destinationId, setDestinationId] = useState(initialDraft.destinationId)
+  const [fromWarehouseId, setFromWarehouseId] = useState(initialDraft.fromWarehouseId)
   const [transportProfileId, setTransportProfileId] = useState(initialDraft.transportProfileId)
   const [driverName, setDriverName] = useState(initialDraft.driverName)
   const [vehicleNo, setVehicleNo] = useState(initialDraft.vehicleNo)
@@ -148,14 +153,17 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
   useEffect(() => {
     void Promise.all([
       supabase.from('flexcon_destinations').select('*').eq('active', true).order('name'),
+      supabase.from('flexcon_inspection_options').select('*').eq('option_type', 'warehouse').order('sort_order').order('name'),
       supabase.from('flexcon_transport_profiles').select('*').eq('active', true).order('company_name'),
       supabase.from('flexcon_authorizations').select('id, authorization_no, full_name, prefecture'),
       supabase.from('flexcon_inspection_flexcons').select('*'),
       supabase.from('flexcon_mixed_flexcons').select('mixed_no, lot_number, origin_prefecture, brand, grade, flexcon_mixed_flexcon_members(sort_order, flexcon_authorizations(full_name))'),
       supabase.from('flexcon_inspection_options').select('*').in('option_type', ['shipment_product', 'brand_aomori', 'brand_iwate', 'grade', 'grade_reason']).eq('active', true).order('sort_order').order('name'),
-    ]).then(([destinationResult, transportResult, authorizationResult, flexconResult, mixedResult, productResult]) => {
+    ]).then(([destinationResult, warehouseResult, transportResult, authorizationResult, flexconResult, mixedResult, productResult]) => {
       if (destinationResult.error) setNotice({ type: 'error', text: '納品先を取得できません。SupabaseのSQL設定を確認してください。' })
       else setDestinations((destinationResult.data ?? []) as Destination[])
+      if (warehouseResult.error) setNotice({ type: 'error', text: '倉庫を取得できません。在庫管理用SQLを確認してください。' })
+      else setWarehouses((warehouseResult.data ?? []) as InspectionOption[])
       if (transportResult.error) setNotice({ type: 'error', text: '運送会社を取得できません。追加SQLを実行してください。' })
       else setTransportProfiles((transportResult.data ?? []) as TransportProfile[])
       if (authorizationResult.error) {
@@ -221,6 +229,7 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
       plannedCount,
       shippedAt,
       destinationId,
+      fromWarehouseId,
       transportProfileId,
       driverName,
       vehicleNo,
@@ -228,7 +237,7 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
       purchasePrice,
     }
     localStorage.setItem(storageKey, JSON.stringify(draft))
-  }, [destinationId, driverName, lots, note, plannedCount, purchasePrice, shippedAt, storageKey, transportProfileId, vehicleNo])
+  }, [destinationId, driverName, fromWarehouseId, lots, note, plannedCount, purchasePrice, shippedAt, storageKey, transportProfileId, vehicleNo])
 
   const startScanner = useCallback(() => setScannerActive(true), [])
   const stopScanner = useCallback(() => setScannerActive(false), [])
@@ -356,6 +365,7 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
     event.preventDefault()
     if (!shippedAt) return setNotice({ type: 'error', text: '出荷日時を入力してください。' })
     if (!destinationId) return setNotice({ type: 'error', text: '納品先を選択してください。' })
+    if (!fromWarehouseId) return setNotice({ type: 'error', text: '出庫元倉庫を選択してください。' })
     if (!transportProfileId) return setNotice({ type: 'error', text: '運送会社を選択してください。' })
     if (!driverName.trim()) return setNotice({ type: 'error', text: 'ドライバー名を入力してください。' })
     if (!vehicleNo.trim()) return setNotice({ type: 'error', text: '車両番号を入力してください。' })
@@ -397,10 +407,11 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
       p_driver_name: driverName.trim(),
       p_vehicle_no: vehicleNo.trim(),
       p_purchase_price_per_bale: price,
+      p_from_warehouse_id: fromWarehouseId,
       p_note: note.trim() || null,
     }
     const { error } = manualShipmentKind
-      ? await supabase.rpc('flexcon_register_manual_shipment', {
+      ? await supabase.rpc('flexcon_register_inventory_manual_shipment', {
         ...commonValues,
         p_shipment_kind: manualShipmentKind,
         p_items: manualItems.map((item) => ({
@@ -412,7 +423,7 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
           reason: manualShipmentKind === 'paper_bag' ? item.reason || null : null,
         })),
       })
-      : await supabase.rpc('flexcon_register_shipment', {
+      : await supabase.rpc('flexcon_register_inventory_shipment', {
         ...commonValues,
         p_lot_numbers: lots,
       })
@@ -600,6 +611,12 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
                 <select className={!destinationId ? 'shipment-required-missing' : ''} aria-invalid={!destinationId} value={destinationId} onChange={(e) => setDestinationId(e.target.value)} required>
                   <option value="">選択してください</option>
                   {destinations.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                </select>
+              </label>
+              <label className="shipment-form-row"><span>出庫元倉庫</span>
+                <select className={!fromWarehouseId ? 'shipment-required-missing' : ''} aria-invalid={!fromWarehouseId} value={fromWarehouseId} onChange={(e) => setFromWarehouseId(e.target.value)} required>
+                  <option value="">選択してください</option>
+                  {warehouses.map((item) => <option key={item.id} value={item.id}>{item.name}{item.active || item.name === '倉庫未設定' ? '' : '（無効）'}</option>)}
                 </select>
               </label>
               <label className="shipment-form-row"><span>運送会社</span>

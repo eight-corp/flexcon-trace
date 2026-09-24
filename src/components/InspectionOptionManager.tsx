@@ -309,7 +309,7 @@ export function InspectionOptionManager({ workerId, scope = 'all' }: Props) {
           workerId={workerId}
           optionType="warehouse"
           title="倉庫"
-          items={items.filter((item) => item.option_type === 'warehouse')}
+          items={items.filter((item) => item.option_type === 'warehouse' && item.name !== '倉庫未設定')}
           onChanged={changed}
           onError={failed}
         />
