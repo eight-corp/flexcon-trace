@@ -670,7 +670,7 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
 
   return (
     <div>
-      <div className="page-heading"><h1>出荷履歴</h1><p>納品先、担当者、運送会社、ドライバー、車両番号、ロット番号、混在№、生産者名で検索できます。</p></div>
+      <div className="page-heading"><p>納品先、担当者、運送会社、ドライバー、車両番号、ロット番号、混在№、生産者名で検索できます。</p></div>
       {notice && <div className={`notice ${notice.type}`}>{notice.text}</div>}
       <div className="search-row">
         <div style={{ position: 'relative', flex: 1 }}><Search size={18} style={{ position: 'absolute', left: 12, top: 13, color: '#6b756d' }} /><input style={{ paddingLeft: 38 }} value={search} onChange={(e) => setSearch(e.target.value)} placeholder="検索" /></div>

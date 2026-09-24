@@ -423,7 +423,7 @@ export function ShipmentScanner({ workerId, workerName, onRegistered }: Props) {
 
   return (
     <div>
-      <div className="page-heading"><h1>出荷作業(QR)</h1><p>予定本数を読み取ったら「出荷情報を入力」をタップします。</p></div>
+      <div className="page-heading"><p>予定本数を読み取ったら「出荷情報を入力」をタップします。</p></div>
 
       {notice && <div className={`notice ${notice.type}`}>{notice.text}</div>}
 

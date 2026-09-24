@@ -289,7 +289,7 @@ export function InspectionOptionManager({ workerId, scope = 'all' }: Props) {
 
   return (
     <div>
-      <div className="page-heading"><h1>マスタ</h1><p>各項目を選択して登録内容を管理します。</p></div>
+      <div className="page-heading"><p>各項目を選択して登録内容を管理します。</p></div>
       <div className="inspection-master-grid">
         {scope === 'all' && <details className="master-accordion">
           <summary className="master-accordion-summary">

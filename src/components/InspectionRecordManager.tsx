@@ -1299,7 +1299,7 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
 
   if (!selectedAuthorization) {
     return <div className="inspection-page">
-      <div className="page-heading inspection-heading"><div><h1>検査記録</h1><p>生産者詳細で追加した順番に検査記録を表示します。</p></div></div>
+      <div className="page-heading"><p>生産者詳細で追加した順番に検査記録を表示します。</p></div>
       <div className="inspection-record-tabs inspection-summary-tabs" role="tablist" aria-label="検査記録の表示">
         <button type="button" role="tab" aria-selected={summaryView === 'list'} className={summaryView === 'list' ? 'active' : ''} onClick={() => setSummaryView('list')}><List size={18} />一覧</button>
         <button type="button" role="tab" aria-selected={summaryView === 'aggregate'} className={summaryView === 'aggregate' ? 'active' : ''} onClick={() => { setProducerPickerOpen(false); setAddGroupFormOpen(false); setSummaryView('aggregate') }}><BarChart3 size={18} />集計</button>

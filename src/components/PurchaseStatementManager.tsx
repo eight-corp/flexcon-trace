@@ -756,7 +756,7 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin }
   </section>
 
   return <div className="purchase-statement-page">
-    <div className="page-heading"><h1>{mode === 'reader' ? '仕切書読込' : mode === 'list' ? '仕切書一覧' : 'マスタ'}</h1><p>{mode === 'reader' ? '仕切書を撮影して読み取るか、すべての項目を手入力します。' : mode === 'list' ? '登録済みの仕切書と明細を確認します。' : '仕切書の入力候補と在庫管理に使用する項目を管理します。'}</p></div>
+    <div className="page-heading"><p>{mode === 'reader' ? '仕切書を撮影して読み取るか、すべての項目を手入力します。' : mode === 'list' ? '登録済みの仕切書と明細を確認します。' : '仕切書の入力候補と在庫管理に使用する項目を管理します。'}</p></div>
     {notice && <div className={`notice ${notice.type}`} role={notice.type === 'error' ? 'alert' : 'status'}>{notice.text}</div>}
     {mode === 'reader' && canOperate && <>
       <input ref={cameraRef} className="visually-hidden" type="file" accept="image/*" capture="environment" onChange={(event) => { const file = event.target.files?.[0]; if (file) void preparePhoto(file) }} />

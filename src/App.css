@@ -22,8 +22,7 @@
 .menu-button { min-height: 38px; display: inline-flex; align-items: center; gap: 5px; padding: 0 10px; border: 0; border-radius: 6px; background: transparent; color: #4d5950; font-weight: 700; }
 .menu-button:hover { background: var(--surface-soft); }
 .page-heading { margin-bottom: 14px; }
-.shipment-record-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.shipment-record-heading h1 { margin: 0; }
+.shipment-record-heading { display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
 .qr-scan-back { margin-bottom: 12px; }
 .page-heading p { color: var(--muted); font-size: 14px; margin-bottom: 0; }
 .section-band { background: var(--surface); border: 1px solid var(--line); border-radius: 7px; padding: 13px; margin-bottom: 12px; }
@@ -518,7 +517,9 @@
 .shipment-filter-values { max-height: 230px; overflow-y: auto; border-top: 1px solid var(--line); padding-top: 5px; }
 .authorization-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
 .authorization-heading > div { min-width: 0; }
-.authorization-heading-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-shrink: 0; }
+.search-row.authorization-search-row { align-items: center; flex-wrap: nowrap; }
+.search-row.authorization-search-row > .authorization-search-input { flex: 1 1 0 !important; min-width: 0; }
+.authorization-search-row > button { flex: 0 0 auto; white-space: nowrap; }
 .visually-hidden { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; margin: -1px !important; overflow: hidden !important; clip: rect(0, 0, 0, 0) !important; white-space: nowrap !important; border: 0 !important; }
 .authorization-table-wrap { max-width: 100%; overflow: auto; border: 1px solid var(--line); border-radius: 7px; background: #fff; }
 .authorization-table { width: 1320px; table-layout: fixed; border-collapse: separate; border-spacing: 0; font-size: 13px; }
@@ -1079,8 +1080,6 @@ table thead th { text-align: center !important; }
   .record-item-row > :nth-child(5) { grid-column: 1 / 2; }
   .record-item-row > :nth-child(6) { grid-column: 3 / 4; grid-row: 3; }
   .authorization-heading { align-items: stretch; flex-direction: column; }
-  .authorization-heading-actions { justify-content: stretch; }
-  .authorization-heading-actions > button { flex: 1; }
   .authorization-flags { grid-template-columns: 1fr; }
   .inspection-heading { align-items: stretch; flex-direction: column; }
   .inspection-heading > button { width: 100%; }

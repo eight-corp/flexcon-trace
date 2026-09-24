@@ -108,7 +108,7 @@ export function ShipmentRecord({ workerId, workerName, onRegistered, onOpenQrSca
   }
 
   return <div className="other-rice-page">
-    <div className="page-heading shipment-record-heading"><h1>出荷記録</h1>{onOpenQrScanner && <button className="secondary-button" type="button" onClick={onOpenQrScanner}><ScanLine size={18} />QRで出荷</button>}</div>
+    {onOpenQrScanner && <div className="page-heading shipment-record-heading"><button className="secondary-button" type="button" onClick={onOpenQrScanner}><ScanLine size={18} />QRで出荷</button></div>}
     {notice && <div className={`notice ${notice.type}`} role={notice.type === 'error' ? 'alert' : 'status'}>{notice.text}</div>}
     <h2 className="other-rice-heading">出荷内容</h2>
     <div className="shipment-registration-summary" aria-label="出荷内容">

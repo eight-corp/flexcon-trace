@@ -579,26 +579,22 @@ export function AuthorizationManager({ workerId, onOpenInspections }: Props) {
 
   return (
     <div className="authorization-page">
-      <div className="page-heading authorization-heading">
-        <div><h1>委任状一覧</h1><p>登録済みの委任状情報を確認・更新します。</p></div>
-        <div className="authorization-heading-actions">
-          <input
-            ref={fileInputRef}
-            className="visually-hidden"
-            type="file"
-            accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel.sheet.macroEnabled.12"
-            onChange={(event) => {
-              const file = event.target.files?.[0]
-              if (file) void prepareImport(file)
-            }}
-          />
-          <button className="secondary-button" type="button" onClick={chooseImportFile} disabled={busy}><FileUp size={18} />Excel取込</button>
-          <button className="primary-button" type="button" onClick={beginAdd} disabled={busy}><Plus size={18} />追加</button>
-        </div>
-      </div>
+      <div className="page-heading"><p>登録済みの委任状情報を確認・更新します。</p></div>
 
-      <div className="search-row">
-        <div style={{ position: 'relative', flex: 1 }}><Search size={18} style={{ position: 'absolute', left: 12, top: 13, color: '#6b756d' }} /><input style={{ paddingLeft: 38 }} value={search} onChange={(event) => setSearch(event.target.value)} placeholder="№・氏名・住所などで検索" /></div>
+      <div className="search-row authorization-search-row">
+        <div className="search-input-wrap authorization-search-input"><Search size={18} aria-hidden="true" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="№・氏名・住所などで検索" aria-label="委任状を検索" /></div>
+        <input
+          ref={fileInputRef}
+          className="visually-hidden"
+          type="file"
+          accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel.sheet.macroEnabled.12"
+          onChange={(event) => {
+            const file = event.target.files?.[0]
+            if (file) void prepareImport(file)
+          }}
+        />
+        <button className="secondary-button" type="button" onClick={chooseImportFile} disabled={busy}><FileUp size={18} />Excel取込</button>
+        <button className="primary-button" type="button" onClick={beginAdd} disabled={busy}><Plus size={18} />追加</button>
       </div>
 
       <div className="authorization-table-wrap">
