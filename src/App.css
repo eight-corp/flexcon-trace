@@ -301,6 +301,15 @@
 .inventory-history-table.with-selection th:nth-child(8), .inventory-history-table.with-selection td:nth-child(8) { width: auto; }
 .inventory-history-table.with-selection th:nth-child(9), .inventory-history-table.with-selection td:nth-child(9) { width: 92px; text-align: left; }
 .inventory-history-table.with-selection th:nth-child(10), .inventory-history-table.with-selection td:nth-child(10) { width: 70px; text-align: right; }
+.inventory-history-table.without-producer { min-width: 1060px; }
+.inventory-history-table.without-producer:not(.with-selection) th:nth-child(4), .inventory-history-table.without-producer:not(.with-selection) td:nth-child(4),
+.inventory-history-table.without-producer.with-selection th:nth-child(5), .inventory-history-table.without-producer.with-selection td:nth-child(5) { width: 92px; }
+.inventory-history-table.without-producer:not(.with-selection) th:nth-child(7), .inventory-history-table.without-producer:not(.with-selection) td:nth-child(7),
+.inventory-history-table.without-producer.with-selection th:nth-child(8), .inventory-history-table.without-producer.with-selection td:nth-child(8) { width: 92px; text-align: right; }
+.inventory-history-table.without-producer:not(.with-selection) th:nth-child(8), .inventory-history-table.without-producer:not(.with-selection) td:nth-child(8),
+.inventory-history-table.without-producer.with-selection th:nth-child(9), .inventory-history-table.without-producer.with-selection td:nth-child(9) { width: 70px; text-align: left; }
+.inventory-history-table.without-producer:not(.with-selection) th:nth-child(9), .inventory-history-table.without-producer:not(.with-selection) td:nth-child(9),
+.inventory-history-table.without-producer.with-selection th:nth-child(10), .inventory-history-table.without-producer.with-selection td:nth-child(10) { width: 90px; text-align: right; }
 .inventory-history-table .inventory-movement-inbound { background: #edf8f0; }
 .inventory-history-table .inventory-movement-outbound { background: #fff1ed; }
 .inventory-history-table .inventory-movement-transfer { background: #edf4fb; }
