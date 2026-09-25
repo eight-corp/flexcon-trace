@@ -140,6 +140,7 @@ const SUMMARY_COLUMNS: Array<{ key: SummaryColumn; label: string }> = [
 
 const DEFAULT_BRANDED_RICE_WEIGHT = 1020
 const DEFAULT_FEED_RICE_WEIGHT = 1000
+const INLINE_DETAIL_SAVE_DELAY_MS = 2_000
 const AUTHORIZATION_NO_COLLATOR = new Intl.Collator('ja', { numeric: true, sensitivity: 'base' })
 const SUMMARY_GRADE_ORDER = ['1等', '2等', '3等', '合格', '未入力']
 
@@ -328,8 +329,22 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
   const [gradingNoticeFailure, setGradingNoticeFailure] = useState<GradingNoticeFailure | null>(null)
   const [inspectionLedgerBusy, setInspectionLedgerBusy] = useState(false)
   const [inspectionLedgerFailure, setInspectionLedgerFailure] = useState<GradingNoticeFailure | null>(null)
+  const detailDraftsRef = useRef<Record<string, InlineDetailDraft>>({})
+  const detailSaveTimers = useRef(new Map<string, number>())
   const detailSaveChains = useRef(new Map<string, Promise<void>>())
   const scrolledRecordTargetRef = useRef<string | null>(null)
+
+  const cancelScheduledInlineDetailSave = (itemId: string) => {
+    const timer = detailSaveTimers.current.get(itemId)
+    if (timer === undefined) return
+    window.clearTimeout(timer)
+    detailSaveTimers.current.delete(itemId)
+  }
+
+  useEffect(() => () => {
+    detailSaveTimers.current.forEach((timer) => window.clearTimeout(timer))
+    detailSaveTimers.current.clear()
+  }, [])
 
   useEffect(() => {
     const load = async () => {
@@ -761,6 +776,9 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
     setBatchMetadataBusy(false)
     if (error) return setNotice({ type: 'error', text: error.message })
 
+    detailSaveTimers.current.forEach((timer) => window.clearTimeout(timer))
+    detailSaveTimers.current.clear()
+    detailDraftsRef.current = {}
     setDetailDrafts({})
     setBatchMetadataDraft({ registration_id: selectedRegistration.id, inspection_date: '', inspector_name: '', inspection_location: '', grade: '' })
     setNotice({ type: 'success', text: `登録No. ${selectedRegistration.registration_no}の${selectedFields.join('・')}を一括設定しました。` })
@@ -779,11 +797,12 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
     reason: item.reason ?? '',
     moisture: item.moisture === null ? '' : String(item.moisture),
   }
+  const currentDetailDraft = (item: FlexconInspection | PaperBagInspection) => detailDraftsRef.current[item.id] ?? detailDraft(item)
   const changeDetailDraft = (item: FlexconInspection | PaperBagInspection, values: Partial<InlineDetailDraft>) => {
-    setDetailDrafts((current) => {
-      const previous = current[item.id] ?? detailDraft(item)
-      return { ...current, [item.id]: { ...previous, ...values } }
-    })
+    const nextDraft = { ...currentDetailDraft(item), ...values }
+    detailDraftsRef.current = { ...detailDraftsRef.current, [item.id]: nextDraft }
+    setDetailDrafts((current) => ({ ...current, [item.id]: nextDraft }))
+    return nextDraft
   }
   const saveInlineDetail = async (
     detailKind: 'flexcon' | 'paper',
@@ -791,7 +810,8 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
     values: Partial<InlineDetailDraft> = {},
   ) => {
     if (!selectedAuthorization || busy) return
-    const draft = { ...detailDraft(item), ...values }
+    cancelScheduledInlineDetailSave(item.id)
+    const draft = { ...currentDetailDraft(item), ...values }
     if (!isGradeAllowedForBrand(draft.brand, draft.grade)) {
       draft.grade = ''
       draft.reason = ''
@@ -846,6 +866,12 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
       } else {
         setPaperBags((current) => current.map((record) => record.id === item.id ? { ...record, ...savedValues, bag_count: quantity } : record))
       }
+      const latestDraft = detailDraftsRef.current[item.id]
+      if (!latestDraft || JSON.stringify(latestDraft) === JSON.stringify(draft)) {
+        const nextDrafts = { ...detailDraftsRef.current }
+        delete nextDrafts[item.id]
+        detailDraftsRef.current = nextDrafts
+      }
       setDetailDrafts((current) => {
         if (current[item.id] && JSON.stringify(current[item.id]) !== JSON.stringify(draft)) return current
         const next = { ...current }
@@ -861,11 +887,25 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
     if (detailSaveChains.current.get(item.id) === saveTask) detailSaveChains.current.delete(item.id)
   }
 
+  const scheduleInlineDetailSave = (
+    detailKind: 'flexcon' | 'paper',
+    item: FlexconInspection | PaperBagInspection,
+    values: Partial<InlineDetailDraft>,
+  ) => {
+    changeDetailDraft(item, values)
+    cancelScheduledInlineDetailSave(item.id)
+    const timer = window.setTimeout(() => {
+      detailSaveTimers.current.delete(item.id)
+      void saveInlineDetail(detailKind, item)
+    }, INLINE_DETAIL_SAVE_DELAY_MS)
+    detailSaveTimers.current.set(item.id, timer)
+  }
+
   const renderInlineMetadataFields = (detailKind: 'flexcon' | 'paper', item: FlexconInspection | PaperBagInspection) => {
     const draft = detailDraft(item)
     const save = (values: Partial<InlineDetailDraft> = {}) => void saveInlineDetail(detailKind, item, values)
     return <>
-      <td className="inspection-inline-cell inspection-year-cell"><JapaneseFiscalYearInput className={!draft.fiscal_year || Number(draft.fiscal_year) <= 0 ? 'inspection-missing' : ''} value={draft.fiscal_year} disabled={busy} onChange={(fiscal_year) => changeDetailDraft(item, { fiscal_year })} onBlur={() => save()} /></td>
+      <td className="inspection-inline-cell inspection-year-cell"><JapaneseFiscalYearInput className={!draft.fiscal_year || Number(draft.fiscal_year) <= 0 ? 'inspection-missing' : ''} value={draft.fiscal_year} disabled={busy} onChange={(fiscal_year) => scheduleInlineDetailSave(detailKind, item, { fiscal_year })} onBlur={() => save()} /></td>
       <td className="inspection-inline-cell inspection-date-cell"><JapaneseDateInput className={!draft.purchase_date ? 'inspection-missing' : ''} value={draft.purchase_date} aria-label="仕入日" disabled={busy} onChange={(purchase_date) => { changeDetailDraft(item, { purchase_date }); save({ purchase_date }) }} /></td>
       <td className="inspection-inline-cell inspection-date-cell"><JapaneseDateInput className={!draft.inspection_date ? 'inspection-missing' : ''} value={draft.inspection_date} aria-label="検査日" disabled={busy} onChange={(inspection_date) => { changeDetailDraft(item, { inspection_date }); save({ inspection_date }) }} /></td>
       <td className="inspection-inline-cell inspection-inspector-cell"><select className={!draft.inspector_name ? 'inspection-missing' : ''} value={draft.inspector_name} aria-label="検査員" disabled={busy} onChange={(event) => { const inspector_name = event.target.value; changeDetailDraft(item, { inspector_name }); save({ inspector_name }) }}><option value="">未選択</option>{inspectorOptions.map((option) => <option key={option.id} value={option.name}>{option.name}</option>)}</select></td>
@@ -881,7 +921,7 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
     ))
     const save = (values: Partial<InlineDetailDraft> = {}) => void saveInlineDetail(detailKind, item, values)
     return <>
-      <td className="inspection-inline-cell"><input className={[draft.moisture === '' ? 'inspection-missing' : '', isHighMoisture(draft.moisture) ? 'moisture-high' : ''].filter(Boolean).join(' ')} type="number" min="0" max="100" step="1" value={draft.moisture} aria-label="水分" disabled={busy} onChange={(event) => changeDetailDraft(item, { moisture: event.target.value })} onBlur={() => save()} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur() }} /></td>
+      <td className="inspection-inline-cell"><input className={[draft.moisture === '' ? 'inspection-missing' : '', isHighMoisture(draft.moisture) ? 'moisture-high' : ''].filter(Boolean).join(' ')} type="number" min="0" max="100" step="1" value={draft.moisture} aria-label="水分" disabled={busy} onChange={(event) => scheduleInlineDetailSave(detailKind, item, { moisture: event.target.value })} onBlur={() => save()} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur() }} /></td>
       <td className="inspection-inline-cell"><select className={!draft.grade ? 'inspection-missing' : ''} value={draft.grade} aria-label="等級" disabled={busy} onChange={(event) => { const grade = event.target.value; const reason = grade === '1等' || grade === '合格' ? '' : draft.reason; changeDetailDraft(item, { grade, reason }); save({ grade, reason }) }}><option value="">未選択</option>{availableGradeOptions.map((option) => <option key={option.id} value={option.name}>{option.name}</option>)}</select></td>
       <td className="inspection-inline-cell inspection-inline-reason-cell"><select className={!reasonForbidden && Boolean(draft.grade) && !draft.reason ? 'inspection-missing' : ''} value={reasonForbidden ? '' : draft.reason} aria-label="理由" disabled={busy || reasonForbidden} title={reasonForbidden ? '1等と合格には理由を入力できません' : undefined} onChange={(event) => { const reason = event.target.value; changeDetailDraft(item, { reason }); save({ reason }) }}><option value="">未選択</option>{reasonOptions.map((option) => <option key={option.id} value={option.name}>{option.name}</option>)}</select></td>
     </>
@@ -891,7 +931,7 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
     const save = (values: Partial<InlineDetailDraft> = {}) => void saveInlineDetail(detailKind, item, values)
     return <>
       <td className="inspection-inline-cell inspection-brand-cell"><select className={!draft.brand ? 'inspection-missing' : ''} value={draft.brand} aria-label="銘柄" disabled={busy} onChange={(event) => { const brand = event.target.value; const grade = isGradeAllowedForBrand(brand, draft.grade) ? draft.grade : ''; const reason = grade ? draft.reason : ''; changeDetailDraft(item, { brand, grade, reason }); save({ brand, grade, reason }) }}><option value="">未選択</option>{brandOptions.map((option) => <option key={option.id} value={option.name}>{option.name}</option>)}</select></td>
-      <td className="inspection-inline-cell inspection-quantity-cell"><input className={!draft.quantity || Number(draft.quantity) <= 0 ? 'inspection-missing' : ''} type="number" min="1" step="1" value={draft.quantity} aria-label={detailKind === 'flexcon' ? '数量（kg）' : '数量（袋）'} disabled={busy} onChange={(event) => changeDetailDraft(item, { quantity: event.target.value })} onBlur={() => save()} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur() }} /></td>
+      <td className="inspection-inline-cell inspection-quantity-cell"><input className={!draft.quantity || Number(draft.quantity) <= 0 ? 'inspection-missing' : ''} type="number" min="1" step="1" value={draft.quantity} aria-label={detailKind === 'flexcon' ? '数量（kg）' : '数量（袋）'} disabled={busy} onChange={(event) => scheduleInlineDetailSave(detailKind, item, { quantity: event.target.value })} onBlur={() => save()} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur() }} /></td>
     </>
   }
   const renderReadOnlyMetadataFields = (item: FlexconInspection | PaperBagInspection) => <>
