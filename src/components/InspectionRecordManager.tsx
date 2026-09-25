@@ -91,6 +91,7 @@ type InspectionDetailRow = {
   fullName: string
   purchaseDate: string
   inspectionDate: string | null
+  warehouseName: string
   moisture: number | null
   grade: string | null
   missingFields: string[]
@@ -107,6 +108,7 @@ type InspectionRegistrationSummaryRow = {
   origin: string
   municipality: string
   inspectionLocations: string
+  warehouseName: string
   authorizationNo: string
   brands: string
   grade: string
@@ -117,7 +119,7 @@ type InspectionRegistrationSummaryRow = {
   uninspectedQuantity: number
 }
 type SummarySortDirection = 'asc' | 'desc'
-type SummaryColumn = 'registrationNo' | 'settlementNo' | 'purchaseDates' | 'inspectionDates' | 'fullName' | 'origin' | 'municipality' | 'inspectionLocations' | 'authorizationNo' | 'brands' | 'grade' | 'flexconCount' | 'paperBagCount' | 'bulkQuantity' | 'inspectedQuantity' | 'uninspectedQuantity'
+type SummaryColumn = 'registrationNo' | 'settlementNo' | 'purchaseDates' | 'inspectionDates' | 'fullName' | 'origin' | 'municipality' | 'inspectionLocations' | 'warehouseName' | 'authorizationNo' | 'brands' | 'grade' | 'flexconCount' | 'paperBagCount' | 'bulkQuantity' | 'inspectedQuantity' | 'uninspectedQuantity'
 
 const SUMMARY_COLUMNS: Array<{ key: SummaryColumn; label: string }> = [
   { key: 'registrationNo', label: '登録No.' },
@@ -128,6 +130,7 @@ const SUMMARY_COLUMNS: Array<{ key: SummaryColumn; label: string }> = [
   { key: 'origin', label: '産地' },
   { key: 'municipality', label: '市町村名' },
   { key: 'inspectionLocations', label: '検査場所' },
+  { key: 'warehouseName', label: '搬入先' },
   { key: 'authorizationNo', label: '委任状No.' },
   { key: 'brands', label: '銘柄' },
   { key: 'grade', label: '等級' },
@@ -158,7 +161,7 @@ function emptyAddGroupForm(): AddGroupForm {
     fiscal_year: String(currentFiscalYear()),
     purchase_date: today(),
     settlement_no: '',
-    inspection_date: '',
+    inspection_date: today(),
     warehouse_id: '',
     brand: '',
     flexcon_count: '',
@@ -353,7 +356,7 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
         supabase.from('flexcon_inspection_registrations').select('*').order('registration_no'),
         supabase.from('flexcon_inspection_flexcons').select('*').order('purchase_date', { ascending: false }).order('flexcon_no'),
         supabase.from('flexcon_inspection_paper_bags').select('*').order('purchase_date', { ascending: false }).order('created_at'),
-        supabase.from('flexcon_inspection_options').select('*').eq('active', true).order('sort_order').order('name'),
+        supabase.from('flexcon_inspection_options').select('*').order('sort_order').order('name'),
         supabase.from('flexcon_inspection_weights').select('*'),
       ])
       if (registrationResult.error || flexconResult.error || paperResult.error) {
@@ -423,6 +426,12 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
   ))
   const selectedPaperBags = paperBags.filter((item) => item.authorization_id === selectedAuthorizationId && (readOnly || !selectedRegistrationId || item.registration_id === selectedRegistrationId))
   const selectedRegistration = registrations.find((item) => item.id === selectedRegistrationId) ?? null
+  const warehouseNameById = useMemo(() => new Map(
+    inspectionOptions.filter((item) => item.option_type === 'warehouse').map((item) => [item.id, item.name]),
+  ), [inspectionOptions])
+  const warehouseNameByRegistrationId = useMemo(() => new Map(
+    registrations.map((registration) => [registration.id, warehouseNameById.get(registration.warehouse_id ?? '') ?? '']),
+  ), [registrations, warehouseNameById])
   const certificateFlexconsFor = (kind: CertificateKind) => kind === 'bulk' ? selectedBulkFlexcons : standardCertificateFlexcons
   const selectedRegistrationRecords: Array<FlexconInspection | PaperBagInspection> = [...selectedFlexcons, ...selectedPaperBags]
   const batchMetadata = batchMetadataDraft.registration_id === selectedRegistrationId ? batchMetadataDraft : {
@@ -483,6 +492,7 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
           origin: formatPrefectureName(authorization.prefecture),
           municipality: authorization.municipality ?? '',
           inspectionLocations: joinDistinct(gradeRecords.map((item) => item.inspection_location)),
+          warehouseName: warehouseNameByRegistrationId.get(registration.id) ?? '',
           authorizationNo: authorization.authorization_no,
           brands: joinDistinct(gradeRecords.map((item) => item.brand)),
           grade,
@@ -501,7 +511,7 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
       return (leftRank < 0 ? SUMMARY_GRADE_ORDER.length : leftRank) - (rightRank < 0 ? SUMMARY_GRADE_ORDER.length : rightRank)
         || left.grade.localeCompare(right.grade, 'ja', { numeric: true })
     })
-  }, [authorizations, flexcons, paperBags, registrations, weights, calendarMode])
+  }, [authorizations, flexcons, paperBags, registrations, weights, calendarMode, warehouseNameByRegistrationId])
   const summaryFilterValues = useMemo(() => Object.fromEntries(SUMMARY_COLUMNS.map((column) => [
     column.key,
     Array.from(new Set(summaryRows.map((row) => summaryDisplayValue(row, column.key)))).sort((left, right) => left.localeCompare(right, 'ja', { numeric: true })),
@@ -597,7 +607,7 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
   }, [authorizations, flexcons, paperBags])
   const inspectionAggregateGrades = useMemo(() => {
     const masterGrades = inspectionOptions
-      .filter((item) => item.option_type === 'grade')
+      .filter((item) => item.active && item.option_type === 'grade')
       .map((item) => item.name.trim())
       .filter((grade) => Boolean(selectedInspectionGrade(grade)))
     const usedGrades = [...flexcons, ...paperBags]
@@ -625,6 +635,7 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
         fullName: authorization?.full_name ?? '氏名未登録',
         purchaseDate: item.purchase_date,
         inspectionDate: item.inspection_date,
+        warehouseName: warehouseNameByRegistrationId.get(item.registration_id) ?? '',
         moisture: item.moisture,
         grade: selectedInspectionGrade(item.grade) || null,
         missingFields: incompleteInspectionFields(item),
@@ -656,20 +667,20 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
       || (left.recordNo ?? 0) - (right.recordNo ?? 0)
       || left.purchaseDate.localeCompare(right.purchaseDate)
     ))
-  }, [authorizations, flexcons, paperBags])
+  }, [authorizations, flexcons, paperBags, warehouseNameByRegistrationId])
   const inspectedDetailRows = inspectionDetailRows.filter((row) => row.complete)
   const uninspectedDetailRows = inspectionDetailRows.filter((row) => !row.complete)
 
-  const locationOptions = inspectionOptions.filter((item) => item.option_type === 'location')
-  const inspectorOptions = inspectionOptions.filter((item) => item.option_type === 'inspector')
-  const gradeOptions = inspectionOptions.filter((item) => item.option_type === 'grade' && Boolean(selectedInspectionGrade(item.name)))
+  const locationOptions = inspectionOptions.filter((item) => item.active && item.option_type === 'location')
+  const inspectorOptions = inspectionOptions.filter((item) => item.active && item.option_type === 'inspector')
+  const gradeOptions = inspectionOptions.filter((item) => item.active && item.option_type === 'grade' && Boolean(selectedInspectionGrade(item.name)))
   const batchGradeOptions = gradeOptions.filter((option) => selectedRegistrationRecords.every((item) => isGradeAllowedForBrand(item.brand ?? '', option.name)))
-  const reasonOptions = inspectionOptions.filter((item) => item.option_type === 'grade_reason')
-  const warehouseOptions = inspectionOptions.filter((item) => item.option_type === 'warehouse')
+  const reasonOptions = inspectionOptions.filter((item) => item.active && item.option_type === 'grade_reason')
+  const warehouseOptions = inspectionOptions.filter((item) => item.active && item.option_type === 'warehouse')
   const selectedBrandType = brandTypeForPrefecture(selectedAuthorization?.prefecture ?? null)
-  const brandOptions = inspectionOptions.filter((item) => item.option_type === selectedBrandType || item.option_type === 'brand')
+  const brandOptions = inspectionOptions.filter((item) => item.active && (item.option_type === selectedBrandType || item.option_type === 'brand'))
   const addBrandType = brandTypeForPrefecture(addAuthorization?.prefecture ?? null)
-  const addBrandOptions = inspectionOptions.filter((item) => item.option_type === addBrandType || item.option_type === 'brand')
+  const addBrandOptions = inspectionOptions.filter((item) => item.active && (item.option_type === addBrandType || item.option_type === 'brand'))
 
   const addInspectionGroup = async (event: React.FormEvent) => {
     event.preventDefault()
@@ -903,6 +914,7 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
 
   const renderInlineMetadataFields = (detailKind: 'flexcon' | 'paper', item: FlexconInspection | PaperBagInspection) => {
     const draft = detailDraft(item)
+    const warehouseName = warehouseNameByRegistrationId.get(item.registration_id) ?? ''
     const save = (values: Partial<InlineDetailDraft> = {}) => void saveInlineDetail(detailKind, item, values)
     return <>
       <td className="inspection-inline-cell inspection-year-cell"><JapaneseFiscalYearInput className={!draft.fiscal_year || Number(draft.fiscal_year) <= 0 ? 'inspection-missing' : ''} value={draft.fiscal_year} disabled={busy} onChange={(fiscal_year) => scheduleInlineDetailSave(detailKind, item, { fiscal_year })} onBlur={() => save()} /></td>
@@ -910,6 +922,7 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
       <td className="inspection-inline-cell inspection-date-cell"><JapaneseDateInput className={!draft.inspection_date ? 'inspection-missing' : ''} value={draft.inspection_date} aria-label="検査日" disabled={busy} onChange={(inspection_date) => { changeDetailDraft(item, { inspection_date }); save({ inspection_date }) }} /></td>
       <td className="inspection-inline-cell inspection-inspector-cell"><select className={!draft.inspector_name ? 'inspection-missing' : ''} value={draft.inspector_name} aria-label="検査員" disabled={busy} onChange={(event) => { const inspector_name = event.target.value; changeDetailDraft(item, { inspector_name }); save({ inspector_name }) }}><option value="">未選択</option>{inspectorOptions.map((option) => <option key={option.id} value={option.name}>{option.name}</option>)}</select></td>
       <td className="inspection-inline-cell inspection-location-cell"><select className={!draft.inspection_location ? 'inspection-missing' : ''} value={draft.inspection_location} aria-label="検査場所" disabled={busy} onChange={(event) => { const inspection_location = event.target.value; changeDetailDraft(item, { inspection_location }); save({ inspection_location }) }}><option value="">未選択</option>{locationOptions.map((option) => <option key={option.id} value={option.name}>{option.name}</option>)}</select></td>
+      <td className={warehouseName ? undefined : 'inspection-missing'}>{warehouseName}</td>
       <td className={`inspection-prefecture-cell ${selectedAuthorization?.prefecture ? '' : 'inspection-missing'}`}>{selectedAuthorization?.prefecture ?? ''}</td>
     </>
   }
@@ -940,6 +953,7 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
     <td className={item.inspection_date ? undefined : 'inspection-missing'}>{displayDate(item.inspection_date)}</td>
     <td className={item.inspector_name ? undefined : 'inspection-missing'}>{item.inspector_name ?? ''}</td>
     <td className={item.inspection_location ? undefined : 'inspection-missing'}>{item.inspection_location ?? ''}</td>
+    <td className={warehouseNameByRegistrationId.get(item.registration_id) ? undefined : 'inspection-missing'}>{warehouseNameByRegistrationId.get(item.registration_id) ?? ''}</td>
     <td className={selectedAuthorization?.prefecture ? undefined : 'inspection-missing'}>{formatPrefectureName(selectedAuthorization?.prefecture) || ''}</td>
   </>
   const renderReadOnlyProductFields = (item: FlexconInspection | PaperBagInspection) => <>
@@ -1301,18 +1315,18 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
     return <details className={`inspection-record-detail-list ${tone}`}>
       <summary><span>{title}</span><span>{rows.length.toLocaleString()}件　{totalQuantity.toLocaleString()}kg <ChevronDown size={17} aria-hidden="true" /></span></summary>
       <div className="inspection-record-detail-table-wrap"><table className="inspection-record-detail-table">
-        <thead><tr><th>産年</th><th>産地</th><th>銘柄</th><th>種別</th><th>№</th><th>数量</th><th>委任状№</th><th>氏名</th><th>仕入日</th><th>検査日</th><th>水分</th><th>等級</th><th>未記入</th></tr></thead>
+        <thead><tr><th>産年</th><th>産地</th><th>銘柄</th><th>種別</th><th>№</th><th>数量</th><th>委任状№</th><th>氏名</th><th>仕入日</th><th>検査日</th><th>搬入先</th><th>水分</th><th>等級</th><th>未記入</th></tr></thead>
         <tbody>{rows.map((row) => <tr key={`${row.kind}-${row.id}`} tabIndex={0} onClick={() => openInspectionDetail(row)} onKeyDown={(event) => { if (event.key === 'Enter') openInspectionDetail(row) }}>
-          <td>{displayCropYear(row.fiscalYear)}</td><td>{row.origin}</td><td>{row.brand}</td><td>{row.kind === 'flexcon' ? 'フレコン' : '紙袋'}</td><td>{row.recordNo ?? '-'}</td><td>{row.quantityLabel}</td><td>{row.authorizationNo}</td><td><strong>{row.fullName}</strong></td><td>{displayDate(row.purchaseDate)}</td><td>{displayDate(row.inspectionDate)}</td><td>{row.moisture === null ? '' : `${row.moisture.toFixed(1)}%`}</td><td>{row.grade ?? ''}</td><td>{row.missingFields.join('、')}</td>
+          <td>{displayCropYear(row.fiscalYear)}</td><td>{row.origin}</td><td>{row.brand}</td><td>{row.kind === 'flexcon' ? 'フレコン' : '紙袋'}</td><td>{row.recordNo ?? '-'}</td><td>{row.quantityLabel}</td><td>{row.authorizationNo}</td><td><strong>{row.fullName}</strong></td><td>{displayDate(row.purchaseDate)}</td><td>{displayDate(row.inspectionDate)}</td><td>{row.warehouseName}</td><td>{row.moisture === null ? '' : `${row.moisture.toFixed(1)}%`}</td><td>{row.grade ?? ''}</td><td>{row.missingFields.join('、')}</td>
         </tr>)}
-        {rows.length === 0 && <tr><td colSpan={13} className="empty-state">該当する検査記録はありません</td></tr>}</tbody>
+        {rows.length === 0 && <tr><td colSpan={14} className="empty-state">該当する検査記録はありません</td></tr>}</tbody>
       </table></div>
     </details>
   }
   const renderFlexconSection = (title: string, items: FlexconInspection[], certificateSectionKind: CertificateKind) => items.length === 0 ? null : <section className="section-band inspection-detail-section">
     <div className="section-title"><div><h2>{title}</h2><span>{items.length}本</span></div>{!readOnly && <div className="button-row"><span className="certificate-status-key"><span aria-hidden="true" />印刷済み</span><button className="secondary-button certificate-create-button" type="button" disabled={certificateFlexconsFor(certificateSectionKind).length === 0} onClick={() => openCertificateDialog(certificateSectionKind)}><FileText size={18} />検査証明書作成</button></div>}</div>
     <div className="inspection-detail-table-wrap"><table className="inspection-detail-table">
-      <thead><tr><th>№</th><th>年度</th><th>仕入日</th><th>検査日</th><th>検査員</th><th>検査場所</th><th>産地</th><th>銘柄</th><th>数量（kg）</th><th>水分</th><th>等級</th><th>理由</th>{!readOnly && <th></th>}</tr></thead>
+      <thead><tr><th>№</th><th>年度</th><th>仕入日</th><th>検査日</th><th>検査員</th><th>検査場所</th><th>搬入先</th><th>産地</th><th>銘柄</th><th>数量（kg）</th><th>水分</th><th>等級</th><th>理由</th>{!readOnly && <th></th>}</tr></thead>
       <tbody>{items.map((item) => <tr id={`inspection-record-${item.id}`} className={[(item.certificate_print_count ?? 0) > 0 ? 'certificate-printed-row' : '', isInspectionResultComplete(item) ? 'inspection-complete-row' : '', selectedRecordTarget?.kind === 'flexcon' && selectedRecordTarget.id === item.id ? 'inspection-target-row' : ''].filter(Boolean).join(' ') || undefined} title={(item.certificate_print_count ?? 0) > 0 ? `印刷済み（${item.certificate_print_count}回）` : '未印刷'} key={item.id}><td>{item.flexcon_no}</td>{readOnly ? renderReadOnlyMetadataFields(item) : renderInlineMetadataFields('flexcon', item)}{readOnly ? renderReadOnlyProductFields(item) : renderInlineProductFields('flexcon', item)}{readOnly ? renderReadOnlyResultFields(item) : renderInlineResultFields('flexcon', item)}{!readOnly && <td className="inspection-row-actions"><button className="icon-button delete-icon" type="button" title="削除" aria-label={`№${item.flexcon_no}を削除`} onClick={() => void deleteFlexcon(item)}><Trash2 size={17} /></button></td>}</tr>)}
       </tbody>
     </table></div>
@@ -1368,10 +1382,10 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
       {summaryView === 'list' && <div className="inspection-summary-wrap"><table className="inspection-summary-table">
         <thead><tr>{SUMMARY_COLUMNS.map((column) => <InspectionSummaryColumnHeader key={column.key} column={column} sort={summarySort} values={summaryFilterValues[column.key]} selectedValues={summaryColumnFilters[column.key]} textValue={summaryTextFilters[column.key] ?? ''} onSort={changeSummarySort} onFilterChange={changeSummaryColumnFilter} onTextChange={changeSummaryTextFilter} />)}{!readOnly && <th className="inspection-summary-actions-heading">操作</th>}</tr></thead>
         <tbody>{displayedSummary.map((row, index) => <tr className={index > 0 && displayedSummary[index - 1].registrationId !== row.registrationId ? 'inspection-summary-registration-start' : undefined} key={`${row.registrationId}-${row.grade}`} tabIndex={0} onClick={() => { onSelectedRecordTargetChange(null); onSelectedRegistrationChange(row.registrationId); onSelectedAuthorizationChange(row.authorizationId) }} onKeyDown={(event) => { if (event.key === 'Enter' && event.target === event.currentTarget) { onSelectedRecordTargetChange(null); onSelectedRegistrationChange(row.registrationId); onSelectedAuthorizationChange(row.authorizationId) } }}>
-          <td className="numeric-cell">{row.registrationNo}</td><td>{row.settlementNo}</td><td>{row.purchaseDates}</td><td>{row.inspectionDates}</td><td><strong>{row.fullName}</strong></td><td>{row.origin}</td><td>{row.municipality}</td><td>{row.inspectionLocations}</td><td className="numeric-cell">{row.authorizationNo}</td><td>{row.brands}</td><td>{row.grade}</td><td className="numeric-cell">{row.flexconCount}本</td><td className="numeric-cell">{row.paperBagCount}袋</td><td className="numeric-cell">{row.bulkQuantity.toLocaleString()}kg</td><td className="inspection-progress-inspected numeric-cell">{row.inspectedQuantity.toLocaleString()}kg</td><td className="inspection-progress-uninspected numeric-cell">{row.uninspectedQuantity.toLocaleString()}kg</td>
+          <td className="numeric-cell">{row.registrationNo}</td><td>{row.settlementNo}</td><td>{row.purchaseDates}</td><td>{row.inspectionDates}</td><td><strong>{row.fullName}</strong></td><td>{row.origin}</td><td>{row.municipality}</td><td>{row.inspectionLocations}</td><td>{row.warehouseName}</td><td className="numeric-cell">{row.authorizationNo}</td><td>{row.brands}</td><td>{row.grade}</td><td className="numeric-cell">{row.flexconCount}本</td><td className="numeric-cell">{row.paperBagCount}袋</td><td className="numeric-cell">{row.bulkQuantity.toLocaleString()}kg</td><td className="inspection-progress-inspected numeric-cell">{row.inspectedQuantity.toLocaleString()}kg</td><td className="inspection-progress-uninspected numeric-cell">{row.uninspectedQuantity.toLocaleString()}kg</td>
           {!readOnly && <td className="inspection-summary-actions"><button className="icon-button delete-icon" type="button" title="この登録行を削除" aria-label={`登録No. ${row.registrationNo}を削除`} disabled={busy} onClick={(event) => { event.stopPropagation(); void deleteInspectionRegistration(row) }}><Trash2 size={17} /></button></td>}
         </tr>)}
-        {displayedSummary.length === 0 && <tr><td colSpan={readOnly ? 16 : 17} className="empty-state">該当する検査記録はありません</td></tr>}</tbody>
+        {displayedSummary.length === 0 && <tr><td colSpan={readOnly ? 17 : 18} className="empty-state">該当する検査記録はありません</td></tr>}</tbody>
       </table></div>}
       {notice && <div className={`notice operation-log ${notice.type}`}>{notice.text}</div>}
     </div>
@@ -1407,7 +1421,7 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
     {selectedPaperBags.length > 0 && <section className="section-band inspection-detail-section">
       <div className="section-title"><div><h2>紙袋</h2><span>{selectedPaperBags.length}件</span></div></div>
       <div className="inspection-detail-table-wrap"><table className="inspection-detail-table paper-detail-table">
-        <thead><tr><th>年度</th><th>仕入日</th><th>検査日</th><th>検査員</th><th>検査場所</th><th>産地</th><th>銘柄</th><th>数量（袋）</th><th>総重量</th><th>水分</th><th>等級</th><th>理由</th>{!readOnly && <th></th>}</tr></thead>
+        <thead><tr><th>年度</th><th>仕入日</th><th>検査日</th><th>検査員</th><th>検査場所</th><th>搬入先</th><th>産地</th><th>銘柄</th><th>数量（袋）</th><th>総重量</th><th>水分</th><th>等級</th><th>理由</th>{!readOnly && <th></th>}</tr></thead>
         <tbody>{selectedPaperBags.map((item) => <tr id={`inspection-record-${item.id}`} className={[isInspectionResultComplete(item) ? 'inspection-complete-row' : '', selectedRecordTarget?.kind === 'paper' && selectedRecordTarget.id === item.id ? 'inspection-target-row' : ''].filter(Boolean).join(' ') || undefined} key={item.id}>{readOnly ? renderReadOnlyMetadataFields(item) : renderInlineMetadataFields('paper', item)}{readOnly ? renderReadOnlyProductFields(item) : renderInlineProductFields('paper', item)}<td>{(item.bag_count * 30).toLocaleString()}kg</td>{readOnly ? renderReadOnlyResultFields(item) : renderInlineResultFields('paper', item)}{!readOnly && <td className="inspection-row-actions inspection-row-actions-wide"><button className="icon-button" type="button" title="2行に分割" aria-label={`${item.brand ?? ''}の紙袋を2行に分割`} disabled={busy || item.bag_count < 2} onClick={() => beginSplitPaperBags(item)}><TableRowsSplit size={17} /></button><button className="icon-button delete-icon" type="button" title="削除" aria-label={`${item.brand ?? ''}の紙袋を削除`} onClick={() => void deletePaperBags(item)}><Trash2 size={17} /></button></td>}</tr>)}
         </tbody>
       </table></div>
