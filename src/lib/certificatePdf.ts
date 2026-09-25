@@ -164,7 +164,6 @@ async function drawCertificateOverlay(
     : flexcon.reason
   drawCenteredTextInBox(context, remarks, 460, tableDataTop, 52, tableDataHeight, 9, 6)
   drawCenteredText(context, japaneseDate(flexcon.inspectionDate), 266, 310, 103, 9.5)
-  drawFittedText(context, flexcon.inspectorName, 350, 344, 105, 9.5, 'left', 7)
 
   if (includeManagementQr) {
     const qrCanvas = document.createElement('canvas')
