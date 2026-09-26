@@ -81,19 +81,25 @@ end;
 $$;
 revoke all on function public.flexcon_set_purchase_statement_scope(text, text) from public, anon, authenticated;
 
-alter function public.flexcon_list_purchase_statements(text) rename to flexcon_list_purchase_statements_internal;
-alter function public.flexcon_save_purchase_statement(text, uuid, text, jsonb, jsonb) rename to flexcon_save_purchase_statement_internal;
-alter function public.flexcon_find_purchase_statement_by_number(text, text, uuid) rename to flexcon_find_purchase_statement_by_number_internal;
-alter function public.flexcon_delete_purchase_statement(text, uuid) rename to flexcon_delete_purchase_statement_internal;
-alter function public.flexcon_list_purchase_statement_master(text) rename to flexcon_list_purchase_statement_master_internal;
-alter function public.flexcon_save_purchase_statement_master(text, uuid, text, text, uuid, boolean) rename to flexcon_save_purchase_statement_master_internal;
-alter function public.flexcon_reorder_purchase_statement_master(text, text, uuid[]) rename to flexcon_reorder_purchase_statement_master_internal;
-alter function public.flexcon_save_purchase_statement_master_group(text, text, jsonb) rename to flexcon_save_purchase_statement_master_group_internal;
-alter function public.flexcon_delete_purchase_statement_master(text, uuid) rename to flexcon_delete_purchase_statement_master_internal;
-alter function public.flexcon_list_purchase_inventory_master(text) rename to flexcon_list_purchase_inventory_master_internal;
-alter function public.flexcon_save_purchase_inventory_master(text, uuid, text, uuid, uuid, text[]) rename to flexcon_save_purchase_inventory_master_internal;
-alter function public.flexcon_save_purchase_inventory_master_group(text, jsonb) rename to flexcon_save_purchase_inventory_master_group_internal;
-alter function public.flexcon_delete_purchase_inventory_master(text, uuid) rename to flexcon_delete_purchase_inventory_master_internal;
+do $migration$
+begin
+  if to_regprocedure('public.flexcon_list_purchase_statements_internal(text)') is null then
+    alter function public.flexcon_list_purchase_statements(text) rename to flexcon_list_purchase_statements_internal;
+    alter function public.flexcon_save_purchase_statement(text, uuid, text, jsonb, jsonb) rename to flexcon_save_purchase_statement_internal;
+    alter function public.flexcon_find_purchase_statement_by_number(text, text, uuid) rename to flexcon_find_purchase_statement_by_number_internal;
+    alter function public.flexcon_delete_purchase_statement(text, uuid) rename to flexcon_delete_purchase_statement_internal;
+    alter function public.flexcon_list_purchase_statement_master(text) rename to flexcon_list_purchase_statement_master_internal;
+    alter function public.flexcon_save_purchase_statement_master(text, uuid, text, text, uuid, boolean) rename to flexcon_save_purchase_statement_master_internal;
+    alter function public.flexcon_reorder_purchase_statement_master(text, text, uuid[]) rename to flexcon_reorder_purchase_statement_master_internal;
+    alter function public.flexcon_save_purchase_statement_master_group(text, text, jsonb) rename to flexcon_save_purchase_statement_master_group_internal;
+    alter function public.flexcon_delete_purchase_statement_master(text, uuid) rename to flexcon_delete_purchase_statement_master_internal;
+    alter function public.flexcon_list_purchase_inventory_master(text) rename to flexcon_list_purchase_inventory_master_internal;
+    alter function public.flexcon_save_purchase_inventory_master(text, uuid, text, uuid, uuid, text[]) rename to flexcon_save_purchase_inventory_master_internal;
+    alter function public.flexcon_save_purchase_inventory_master_group(text, jsonb) rename to flexcon_save_purchase_inventory_master_group_internal;
+    alter function public.flexcon_delete_purchase_inventory_master(text, uuid) rename to flexcon_delete_purchase_inventory_master_internal;
+  end if;
+end;
+$migration$;
 
 revoke all on function public.flexcon_list_purchase_statements_internal(text) from public, anon, authenticated;
 revoke all on function public.flexcon_save_purchase_statement_internal(text, uuid, text, jsonb, jsonb) from public, anon, authenticated;
@@ -109,14 +115,14 @@ revoke all on function public.flexcon_save_purchase_inventory_master_internal(te
 revoke all on function public.flexcon_save_purchase_inventory_master_group_internal(text, jsonb) from public, anon, authenticated;
 revoke all on function public.flexcon_delete_purchase_inventory_master_internal(text, uuid) from public, anon, authenticated;
 
-create function public.flexcon_list_purchase_statements(p_worker_id text)
+create or replace function public.flexcon_list_purchase_statements(p_worker_id text)
 returns jsonb language plpgsql security definer set search_path = pg_catalog, public as $$
 begin
   perform public.flexcon_set_purchase_statement_scope(p_worker_id, 'viewer');
   return public.flexcon_list_purchase_statements_internal(p_worker_id);
 end; $$;
 
-create function public.flexcon_save_purchase_statement(
+create or replace function public.flexcon_save_purchase_statement(
   p_worker_id text, p_statement_id uuid, p_source_type text, p_header jsonb, p_items jsonb
 )
 returns uuid language plpgsql security definer set search_path = pg_catalog, public as $$
@@ -125,7 +131,7 @@ begin
   return public.flexcon_save_purchase_statement_internal(p_worker_id, p_statement_id, p_source_type, p_header, p_items);
 end; $$;
 
-create function public.flexcon_find_purchase_statement_by_number(
+create or replace function public.flexcon_find_purchase_statement_by_number(
   p_worker_id text, p_document_number text, p_exclude_statement_id uuid default null
 )
 returns jsonb language plpgsql security definer set search_path = pg_catalog, public as $$
@@ -134,21 +140,21 @@ begin
   return public.flexcon_find_purchase_statement_by_number_internal(p_worker_id, p_document_number, p_exclude_statement_id);
 end; $$;
 
-create function public.flexcon_delete_purchase_statement(p_worker_id text, p_statement_id uuid)
+create or replace function public.flexcon_delete_purchase_statement(p_worker_id text, p_statement_id uuid)
 returns void language plpgsql security definer set search_path = pg_catalog, public as $$
 begin
   perform public.flexcon_set_purchase_statement_scope(p_worker_id, 'admin');
   perform public.flexcon_delete_purchase_statement_internal(p_worker_id, p_statement_id);
 end; $$;
 
-create function public.flexcon_list_purchase_statement_master(p_worker_id text)
+create or replace function public.flexcon_list_purchase_statement_master(p_worker_id text)
 returns jsonb language plpgsql security definer set search_path = pg_catalog, public as $$
 begin
   perform public.flexcon_set_purchase_statement_scope(p_worker_id, 'viewer');
   return public.flexcon_list_purchase_statement_master_internal(p_worker_id);
 end; $$;
 
-create function public.flexcon_save_purchase_statement_master(
+create or replace function public.flexcon_save_purchase_statement_master(
   p_worker_id text, p_value_id uuid, p_value_type text, p_name text,
   p_product_category_id uuid default null, p_is_variety_rice boolean default false
 )
@@ -160,7 +166,7 @@ begin
   );
 end; $$;
 
-create function public.flexcon_reorder_purchase_statement_master(
+create or replace function public.flexcon_reorder_purchase_statement_master(
   p_worker_id text, p_value_type text, p_value_ids uuid[]
 )
 returns void language plpgsql security definer set search_path = pg_catalog, public as $$
@@ -169,7 +175,7 @@ begin
   perform public.flexcon_reorder_purchase_statement_master_internal(p_worker_id, p_value_type, p_value_ids);
 end; $$;
 
-create function public.flexcon_save_purchase_statement_master_group(
+create or replace function public.flexcon_save_purchase_statement_master_group(
   p_worker_id text, p_value_type text, p_items jsonb
 )
 returns void language plpgsql security definer set search_path = pg_catalog, public as $$
@@ -178,21 +184,21 @@ begin
   perform public.flexcon_save_purchase_statement_master_group_internal(p_worker_id, p_value_type, p_items);
 end; $$;
 
-create function public.flexcon_delete_purchase_statement_master(p_worker_id text, p_value_id uuid)
+create or replace function public.flexcon_delete_purchase_statement_master(p_worker_id text, p_value_id uuid)
 returns void language plpgsql security definer set search_path = pg_catalog, public as $$
 begin
   perform public.flexcon_set_purchase_statement_scope(p_worker_id, 'admin');
   perform public.flexcon_delete_purchase_statement_master_internal(p_worker_id, p_value_id);
 end; $$;
 
-create function public.flexcon_list_purchase_inventory_master(p_worker_id text)
+create or replace function public.flexcon_list_purchase_inventory_master(p_worker_id text)
 returns jsonb language plpgsql security definer set search_path = pg_catalog, public as $$
 begin
   perform public.flexcon_set_purchase_statement_scope(p_worker_id, 'viewer');
   return public.flexcon_list_purchase_inventory_master_internal(p_worker_id);
 end; $$;
 
-create function public.flexcon_save_purchase_inventory_master(
+create or replace function public.flexcon_save_purchase_inventory_master(
   p_worker_id text, p_item_id uuid, p_name text, p_inventory_product_id uuid,
   p_scrap_type_product_id uuid, p_statement_keywords text[]
 )
@@ -204,14 +210,14 @@ begin
   );
 end; $$;
 
-create function public.flexcon_save_purchase_inventory_master_group(p_worker_id text, p_items jsonb)
+create or replace function public.flexcon_save_purchase_inventory_master_group(p_worker_id text, p_items jsonb)
 returns void language plpgsql security definer set search_path = pg_catalog, public as $$
 begin
   perform public.flexcon_set_purchase_statement_scope(p_worker_id, 'admin');
   perform public.flexcon_save_purchase_inventory_master_group_internal(p_worker_id, p_items);
 end; $$;
 
-create function public.flexcon_delete_purchase_inventory_master(p_worker_id text, p_item_id uuid)
+create or replace function public.flexcon_delete_purchase_inventory_master(p_worker_id text, p_item_id uuid)
 returns void language plpgsql security definer set search_path = pg_catalog, public as $$
 begin
   perform public.flexcon_set_purchase_statement_scope(p_worker_id, 'admin');
