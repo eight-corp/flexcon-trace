@@ -60,6 +60,7 @@ async function generateStatement(
   apiKey: string,
   mimeType: string,
   imageBase64: string,
+  headerRegionBase64: string,
   taxRegionBase64: string,
   paymentRegionBase64: string,
   detailRegionBase64: string,
@@ -85,6 +86,10 @@ async function generateStatement(
             { text: `${prompt}${productMasterPrompt}${originMasterPrompt}` },
           { text: '仕切書全体の画像:' },
           { inlineData: { mimeType, data: imageBase64 } },
+          ...(headerRegionBase64 ? [
+            { text: '同じ画像の右上の見出し部分を拡大した補助画像。№と登録番号の間にある「仕入先」欄の記載をissuerとして読み取り、伝票番号と登録番号もこの画像を優先して確認する:' },
+            { inlineData: { mimeType, data: headerRegionBase64 } },
+          ] : []),
           ...(taxRegionBase64 ? [
             { text: '同じ画像の右上側を拡大した補助画像。金額列見出しの「税抜・税込」の囲みは、この画像を優先して判定する:' },
             { inlineData: { mimeType, data: taxRegionBase64 } },
@@ -295,7 +300,7 @@ const prompt = `
 - statement_date: 日付を YYYY-MM-DD 形式で返す。見えなければ空文字。
 - document_number: 伝票番号。見えなければ空文字。
 - recipient: 宛先欄の「担当者」と「様」の間に記載された名称だけを返す。敬称は含めない。見えなければ空文字。
-- issuer: 発行元の会社名または氏名。見えなければ空文字。
+- issuer: 右上の「№」欄と「登録番号」欄の間にある「仕入先」欄の会社名または氏名だけを返す。発行元の社名・印影や宛先欄の名称を混同しない。見えなければ空文字。
 - payment_method: 仕切書の左下に印刷された「（現金払い・振込払い）」だけを確認する。税抜・税込の丸は支払方法と無関係である。左下の拡大画像で、手書きの丸または下線を伴う囲みが現金払いに付いていればcash、振込払いに付いていればtransferを返す。丸が文字全体を閉じていなくても、片方だけを明確に囲む筆跡なら選択済みとする。両方・印なし・判別不能なら空文字にしてwarningsへ確認事項を追加する。
 - tax_treatment: 明細表の最上段右端にある金額列の見出し「金額（税抜・税込）」だけを拡大して確認する。「税抜」「税込」の文字そのものを囲む手書きの楕円を探す。税込を囲んでいればinclusive（内税）、税抜を囲んでいればexclusive（外税）を返す。下部の「税込合計金額」という印刷文字は判定に使わない。括弧や印刷文字を丸印と誤認せず、金額計算から推測しない。両方・丸なし・判別不能なら空文字にしてwarningsへ確認事項を追加する。
 - tax_rate: 税率をパーセントの数値で返す（10%なら10）。見えなければ0。
@@ -330,8 +335,9 @@ Deno.serve(async (request) => {
     const geminiApiKey = Deno.env.get('GEMINI_API_KEY')
     if (!geminiApiKey) return jsonResponse(request, { error: 'Gemini画像読取りのAPIキーが設定されていません。' }, 503)
 
-    const body = await request.json() as { imageBase64?: string; taxRegionBase64?: string; paymentRegionBase64?: string; detailRegionBase64?: string; productMasterNames?: unknown; originMasterNames?: unknown; mimeType?: string }
+    const body = await request.json() as { imageBase64?: string; headerRegionBase64?: string; taxRegionBase64?: string; paymentRegionBase64?: string; detailRegionBase64?: string; productMasterNames?: unknown; originMasterNames?: unknown; mimeType?: string }
     const imageBase64 = body.imageBase64 ?? ''
+    const headerRegionBase64 = body.headerRegionBase64 ?? ''
     const taxRegionBase64 = body.taxRegionBase64 ?? ''
     const paymentRegionBase64 = body.paymentRegionBase64 ?? ''
     const detailRegionBase64 = body.detailRegionBase64 ?? ''
@@ -344,6 +350,7 @@ Deno.serve(async (request) => {
     const mimeType = body.mimeType ?? ''
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(mimeType)) return jsonResponse(request, { error: '対応していない画像形式です。' }, 400)
     if (!imageBase64 || imageBase64.length > 12_000_000) return jsonResponse(request, { error: '画像が大きすぎます。撮影し直してください。' }, 413)
+    if (headerRegionBase64.length > 4_000_000) return jsonResponse(request, { error: '見出しの拡大画像が大きすぎます。撮影し直してください。' }, 413)
     if (taxRegionBase64.length > 4_000_000) return jsonResponse(request, { error: '税区分の拡大画像が大きすぎます。撮影し直してください。' }, 413)
     if (paymentRegionBase64.length > 4_000_000) return jsonResponse(request, { error: '支払方法の拡大画像が大きすぎます。撮影し直してください。' }, 413)
     if (detailRegionBase64.length > 6_000_000) return jsonResponse(request, { error: '明細の拡大画像が大きすぎます。撮影し直してください。' }, 413)
@@ -354,7 +361,7 @@ Deno.serve(async (request) => {
     let statementResult: PromiseSettledResult<unknown>
     let taxResult: PromiseSettledResult<string> = { status: 'fulfilled', value: '' }
     ;[statementResult, taxResult] = await Promise.allSettled([
-      generateStatement(models, geminiApiKey, mimeType, imageBase64, taxRegionBase64, paymentRegionBase64, detailRegionBase64, productMasterNames, originMasterNames),
+      generateStatement(models, geminiApiKey, mimeType, imageBase64, headerRegionBase64, taxRegionBase64, paymentRegionBase64, detailRegionBase64, productMasterNames, originMasterNames),
       classifyTaxTreatment(models.at(-1) ?? models[0], geminiApiKey, mimeType, taxRegionBase64),
     ])
     if (statementResult.status === 'rejected') throw statementResult.reason

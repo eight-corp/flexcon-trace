@@ -245,12 +245,13 @@ async function resizePhoto(file: File) {
       return canvasJpegBase64(regionCanvas, 0.94)
     }
 
-    const [taxRegionBase64, paymentRegionBase64, detailRegionBase64] = await Promise.all([
+    const [headerRegionBase64, taxRegionBase64, paymentRegionBase64, detailRegionBase64] = await Promise.all([
+      cropRegion(0.45, 0.02, 0.53, 0.27, 1400),
       cropRegion(0.6, 0.27, 0.38, 0.16, 1200, 'grayscale(1) contrast(1.5)'),
       cropRegion(0.02, 0.7, 0.58, 0.22, 1000),
       cropRegion(0.05, 0.3, 0.9, 0.43, 1500),
     ])
-    return { imageBase64, taxRegionBase64, paymentRegionBase64, detailRegionBase64, mimeType: 'image/jpeg', previewUrl: `data:image/jpeg;base64,${imageBase64}` }
+    return { imageBase64, headerRegionBase64, taxRegionBase64, paymentRegionBase64, detailRegionBase64, mimeType: 'image/jpeg', previewUrl: `data:image/jpeg;base64,${imageBase64}` }
   } finally {
     URL.revokeObjectURL(objectUrl)
   }
@@ -343,6 +344,7 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin }
       const originMasterNames = masters.filter((item) => item.value_type === 'origin' && item.active).map((item) => item.name)
       const { data, error } = await supabase.functions.invoke('analyze-purchase-statement', { body: {
         imageBase64: image.imageBase64,
+        headerRegionBase64: image.headerRegionBase64,
         taxRegionBase64: image.taxRegionBase64,
         paymentRegionBase64: image.paymentRegionBase64,
         detailRegionBase64: image.detailRegionBase64,
@@ -720,7 +722,7 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin }
       <label>日付<JapaneseDateInput value={editor.header.statementDate} onChange={(value) => updateHeader('statementDate', value)} required /></label>
       <label>仕切書№<input value={editor.header.documentNumber} onChange={(event) => updateHeader('documentNumber', event.target.value)} required /></label>
       <label>担当者<input list="statement-recipient-list" value={editor.header.recipient} onChange={(event) => updateHeader('recipient', event.target.value)} /></label>
-      <label>仕入元<input value={editor.header.issuer} onChange={(event) => updateHeader('issuer', event.target.value)} /></label>
+      <label>仕入先<input value={editor.header.issuer} onChange={(event) => updateHeader('issuer', event.target.value)} /></label>
       <label>支払方法<select value={editor.header.paymentMethod} onChange={(event) => updateHeader('paymentMethod', event.target.value)}><option value=""></option><option value="cash">現金</option><option value="transfer">振込</option></select></label>
       <label>消費税区分<select value={editor.header.taxTreatment} onChange={(event) => updateHeader('taxTreatment', event.target.value)} required><option value=""></option><option value="exclusive">外税（税抜に丸）</option><option value="inclusive">内税（税込に丸）</option></select></label>
       <label>税率（%）<input type="number" min="0" step="0.001" inputMode="decimal" value={editor.header.taxRate} onChange={(event) => updateHeader('taxRate', event.target.value)} /></label>
