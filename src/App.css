@@ -785,6 +785,10 @@
 .inspection-producer-candidates .empty-state { display: block; padding: 12px; }
 .inspection-detail-section .section-title > div:first-child h2 { margin: 0; }
 .inspection-detail-section .section-title > div:first-child span { color: var(--muted); font-size: 12px; }
+.inspection-detail-add-form { display: flex; align-items: end; gap: 8px; flex-wrap: wrap; margin: 0 0 10px; }
+.inspection-detail-add-form label { width: 150px; }
+.inspection-detail-add-form input { width: 100%; min-width: 0; }
+.inspection-detail-add-form .icon-button { width: 38px; height: 38px; }
 .inspection-detail-table-wrap { max-width: 100%; overflow-x: auto; border: 1px solid var(--line); border-radius: 6px; }
 .inspection-detail-table { width: 100%; min-width: 1450px; border-collapse: collapse; font-size: 13px; }
 .inspection-detail-table th, .inspection-detail-table td { height: 36px; padding: 5px 8px; border-right: 1px solid #e4e8e5; border-bottom: 1px solid var(--line); text-align: left; }
