@@ -38,7 +38,7 @@ type InventoryMovement = {
 }
 type InventoryBalance = { warehouse_id: string | null; warehouse_name: string; crop_year: number | null; origin: string; product_name: string; grade: string; quantity: number; unit: string }
 type InventoryBalanceRow = { warehouseId: string | null; warehouseName: string; cropYear: number | null; origin: string; productName: string; unit: string; quantities: Record<string, number> }
-type MovementForm = { movementDate: string; cropYear: string; settlementNo: string; origin: string; productName: string; grade: string; quantity: string; unit: string; fromWarehouseId: string; toWarehouseId: string; note: string }
+type MovementForm = { movementDate: string; cropYear: string; settlementNo: string; producerName: string; origin: string; productName: string; grade: string; quantity: string; unit: string; fromWarehouseId: string; toWarehouseId: string; note: string }
 type PurchaseImportRecord = {
   settlement_no: string
   detail_no: number
@@ -108,7 +108,7 @@ function today() {
 }
 
 function emptyForm(): MovementForm {
-  return { movementDate: today(), cropYear: String(new Date().getFullYear()), settlementNo: '', origin: '', productName: '', grade: '', quantity: '', unit: 'kg', fromWarehouseId: '', toWarehouseId: '', note: '' }
+  return { movementDate: today(), cropYear: String(new Date().getFullYear()), settlementNo: '', producerName: '', origin: '', productName: '', grade: '', quantity: '', unit: 'kg', fromWarehouseId: '', toWarehouseId: '', note: '' }
 }
 
 function formatQuantity(value: number) {
@@ -708,6 +708,7 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
     if (!target.movementDate) return '日付を入力してください。'
     if (target.cropYear && (!/^\d{4}$/.test(target.cropYear) || Number(target.cropYear) < 1900 || Number(target.cropYear) > 2100)) return '産年を元号と年数で入力してください。'
     if (target.settlementNo.trim().length > 80) return '仕切書№は80文字以内で入力してください。'
+    if (mode === 'inbound' && target.producerName.trim().length > 120) return '氏名は120文字以内で入力してください。'
     if (!originOptions.some((item) => item.name === target.origin)) return '産地をマスタから選択してください。'
     if (!productNames.includes(target.productName)) return '名称をマスタから選択してください。'
     if (!otherProductNames.has(target.productName) && !grades.some((item) => item.name === target.grade)) return '等級をマスタから選択してください。'
@@ -722,7 +723,7 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
 
   const changeMode = (mode: MovementMode) => {
     setMovementMode(mode)
-    setForm((current) => ({ ...current, fromWarehouseId: mode === 'inbound' ? '' : current.fromWarehouseId, toWarehouseId: mode === 'outbound' ? '' : current.toWarehouseId }))
+    setForm((current) => ({ ...current, producerName: mode === 'inbound' ? current.producerName : '', fromWarehouseId: mode === 'inbound' ? '' : current.fromWarehouseId, toWarehouseId: mode === 'outbound' ? '' : current.toWarehouseId }))
     setNotice(null)
   }
 
@@ -733,7 +734,7 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
     if (errorText) return setNotice({ type: 'error', text: errorText })
     setBusy(true); setNotice(null)
     const { error } = await supabase.rpc('flexcon_add_inventory_movement', {
-      p_worker_id: workerId, p_movement_date: form.movementDate, p_crop_year: form.cropYear ? Number(form.cropYear) : null, p_settlement_no: form.settlementNo.trim(), p_producer_name: '', p_origin: form.origin, p_product_name: form.productName,
+      p_worker_id: workerId, p_movement_date: form.movementDate, p_crop_year: form.cropYear ? Number(form.cropYear) : null, p_settlement_no: form.settlementNo.trim(), p_producer_name: movementMode === 'inbound' ? form.producerName.trim() : '', p_origin: form.origin, p_product_name: form.productName,
       p_grade: otherProductNames.has(form.productName) ? '' : form.grade, p_quantity: Number(form.quantity), p_unit: form.unit,
       p_from_warehouse_id: movementMode === 'inbound' ? null : form.fromWarehouseId,
       p_to_warehouse_id: movementMode === 'outbound' ? null : form.toWarehouseId,
@@ -742,13 +743,13 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
     setBusy(false)
     if (error) return setNotice({ type: 'error', text: error.message })
     setNotice({ type: 'success', text: `${movementMode === 'inbound' ? '入庫' : movementMode === 'outbound' ? '出庫' : '倉庫間移動'}を記録しました。` })
-    setForm((current) => ({ ...emptyForm(), movementDate: current.movementDate, cropYear: current.cropYear, settlementNo: current.settlementNo, origin: current.origin, productName: current.productName, grade: current.grade, unit: current.unit }))
+    setForm((current) => ({ ...emptyForm(), movementDate: current.movementDate, cropYear: current.cropYear, settlementNo: current.settlementNo, producerName: current.producerName, origin: current.origin, productName: current.productName, grade: current.grade, unit: current.unit }))
     setVersion((value) => value + 1)
   }
 
   const beginEdit = (movement: InventoryMovement) => {
     setEditing(movement)
-    setEditForm({ movementDate: movement.movement_date, cropYear: movement.crop_year == null ? '' : String(movement.crop_year), settlementNo: movement.settlement_no, origin: movement.origin, productName: movement.product_name, grade: movement.grade, quantity: String(movement.quantity), unit: movement.unit, fromWarehouseId: movement.from_warehouse_id ?? '', toWarehouseId: movement.to_warehouse_id ?? '', note: movement.note ?? '' })
+    setEditForm({ movementDate: movement.movement_date, cropYear: movement.crop_year == null ? '' : String(movement.crop_year), settlementNo: movement.settlement_no, producerName: movement.producer_name ?? '', origin: movement.origin, productName: movement.product_name, grade: movement.grade, quantity: String(movement.quantity), unit: movement.unit, fromWarehouseId: movement.from_warehouse_id ?? '', toWarehouseId: movement.to_warehouse_id ?? '', note: movement.note ?? '' })
     setNotice(null)
   }
 
@@ -761,7 +762,7 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
     setBusy(true); setNotice(null)
     const { error } = await supabase.rpc('flexcon_update_inventory_movement', {
       p_worker_id: workerId, p_movement_id: editing.id, p_movement_date: editForm.movementDate, p_crop_year: editForm.cropYear ? Number(editForm.cropYear) : null, p_settlement_no: editForm.settlementNo.trim(), p_origin: editForm.origin,
-      p_producer_name: editMode === 'inbound' ? editing.producer_name : '',
+      p_producer_name: editMode === 'inbound' ? editForm.producerName.trim() : '',
       p_product_name: editForm.productName, p_grade: otherProductNames.has(editForm.productName) ? '' : editForm.grade,
       p_quantity: Number(editForm.quantity), p_unit: editForm.unit,
       p_from_warehouse_id: editMode === 'inbound' ? null : editForm.fromWarehouseId,
@@ -964,6 +965,7 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
       <label className="inventory-field-unit">単位<select value={target.unit} onChange={(e) => setTarget((current) => ({ ...current, unit: e.target.value }))} required><option value="本">本</option><option value="袋">袋</option><option value="kg">kg</option></select></label>
       <label className="inventory-field-from">移動元{mode === 'inbound' ? <input value="外部" readOnly /> : <select value={target.fromWarehouseId} onChange={(e) => setTarget((current) => ({ ...current, fromWarehouseId: e.target.value }))} required><option value="">未選択</option>{warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}{warehouse.active ? '' : '（無効）'}</option>)}</select>}</label>
       <label className="inventory-field-to">移動先{mode === 'outbound' ? <input value="外部" readOnly /> : <select value={target.toWarehouseId} onChange={(e) => setTarget((current) => ({ ...current, toWarehouseId: e.target.value }))} required><option value="">未選択</option>{selectableToWarehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}{warehouse.active ? '' : '（無効）'}</option>)}</select>}</label>
+      {mode === 'inbound' && <label className="inventory-field-producer">氏名<input value={target.producerName} maxLength={120} onChange={(e) => setTarget((current) => ({ ...current, producerName: e.target.value }))} /></label>}
       <label className="inventory-field-note">備考<textarea rows={1} maxLength={500} value={target.note} onChange={(e) => setTarget((current) => ({ ...current, note: e.target.value }))} /></label>
     </>
   }
