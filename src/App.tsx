@@ -42,7 +42,7 @@ function App() {
   }, [statementApplication])
 
   useEffect(() => {
-    void restoreBusinessSession()
+    void restoreBusinessSession(statementApplication ? 'purchase_statements' : 'rice_shipping')
       .then((sessionWorker) => {
         if (!sessionWorker) {
           window.location.replace(MANAGEMENT_MENU_URL)

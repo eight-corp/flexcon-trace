@@ -31,7 +31,7 @@ type BusinessSession = {
   error?: string
 }
 
-async function requireRiceShippingUser(request: Request, allowedRoles: string[]) {
+async function requirePurchaseStatementUser(request: Request, allowedRoles: string[]) {
   const supabaseUrl = Deno.env.get('SUPABASE_URL')
   const apiKey = request.headers.get('apikey')
   const authorization = request.headers.get('authorization')
@@ -44,7 +44,7 @@ async function requireRiceShippingUser(request: Request, allowedRoles: string[])
     body: '{}',
   })
   const session = await response.json() as BusinessSession
-  const role = session.permissions?.rice_shipping ?? ''
+  const role = session.permissions?.purchase_statements ?? ''
   if (!response.ok || session.ok === false || !session.workerId || !allowedRoles.includes(role)) {
     throw new Error(session.error ?? '仕切書画像を利用する権限がありません。')
   }
@@ -79,7 +79,7 @@ Deno.serve(async (request) => {
     if (!supabaseUrl) throw new Error('Supabaseの設定がありません。')
 
     if (action === 'upload') {
-      await requireRiceShippingUser(request, ['admin', 'operator'])
+      await requirePurchaseStatementUser(request, ['admin', 'operator'])
       const statementId = body.statementId ?? ''
       const imageBase64 = body.imageBase64 ?? ''
       if (!uuidPattern.test(statementId)) throw new Error('仕切書IDが不正です。')
@@ -106,7 +106,7 @@ Deno.serve(async (request) => {
     }
 
     if (action === 'signed-url') {
-      await requireRiceShippingUser(request, ['admin', 'operator', 'viewer'])
+      await requirePurchaseStatementUser(request, ['admin', 'operator', 'viewer'])
       const statementId = body.statementId ?? ''
       if (!uuidPattern.test(statementId)) throw new Error('仕切書IDが不正です。')
       const imagePath = await statementImagePath(statementId)
@@ -124,7 +124,7 @@ Deno.serve(async (request) => {
     }
 
     if (action === 'delete') {
-      await requireRiceShippingUser(request, ['admin'])
+      await requirePurchaseStatementUser(request, ['admin'])
       const imagePath = body.imagePath ?? ''
       if (!/^[0-9a-f-]{36}\/original\.jpg$/i.test(imagePath)) throw new Error('画像パスが不正です。')
       const removal = await fetch(`${supabaseUrl}/storage/v1/object/${bucketName}/${imagePath}`, {

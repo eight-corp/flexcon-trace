@@ -169,7 +169,7 @@ async function requireRiceShippingOperator(request: Request) {
     body: '{}',
   })
   const session = await response.json() as BusinessSession
-  const role = session.permissions?.rice_shipping
+  const role = session.permissions?.purchase_statements
   if (!response.ok || session.ok === false || !session.workerId || !['admin', 'operator'].includes(role ?? '')) {
     throw new Error(session.error ?? '仕切書を読み取る権限がありません。')
   }

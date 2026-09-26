@@ -1,6 +1,5 @@
 import type { Worker } from '../types'
 
-const APP_ID = 'rice_shipping'
 const STORAGE_KEY = 'business.session.v1'
 const nativeFetch = window.fetch.bind(window)
 
@@ -54,11 +53,11 @@ export const businessAuthorizedFetch: typeof fetch = async (input, init = {}) =>
   return nativeFetch(input, { ...init, headers })
 }
 
-export async function restoreBusinessSession(): Promise<Worker | null> {
+export async function restoreBusinessSession(appId: 'rice_shipping' | 'purchase_statements' = 'rice_shipping'): Promise<Worker | null> {
   if (!getToken()) return null
   try {
     const session = await rpc<BusinessSession>('business_session')
-    const role = session.permissions?.[APP_ID]
+    const role = session.permissions?.[appId]
     if (!role) return null
     return {
       worker_id: session.workerId,
