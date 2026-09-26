@@ -176,7 +176,7 @@ function paymentMethodLabel(value: StoredStatement['payment_method']) {
 }
 
 function taxTreatmentLabel(value: TaxTreatment) {
-  return value === 'exclusive' ? '外税（税抜）' : value === 'inclusive' ? '内税（税込）' : '―'
+  return value === 'exclusive' ? '税抜' : value === 'inclusive' ? '税込' : '―'
 }
 
 function calculatedTotal(items: ItemForm[], taxAmount: string, taxTreatment: TaxTreatment) {
@@ -724,7 +724,7 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin }
       <label>担当者<input list="statement-recipient-list" value={editor.header.recipient} onChange={(event) => updateHeader('recipient', event.target.value)} /></label>
       <label>仕入先<input value={editor.header.issuer} onChange={(event) => updateHeader('issuer', event.target.value)} /></label>
       <label>支払方法<select value={editor.header.paymentMethod} onChange={(event) => updateHeader('paymentMethod', event.target.value)}><option value=""></option><option value="cash">現金</option><option value="transfer">振込</option></select></label>
-      <label>消費税区分<select value={editor.header.taxTreatment} onChange={(event) => updateHeader('taxTreatment', event.target.value)} required><option value=""></option><option value="exclusive">外税（税抜に丸）</option><option value="inclusive">内税（税込に丸）</option></select></label>
+      <label>消費税区分<select value={editor.header.taxTreatment} onChange={(event) => updateHeader('taxTreatment', event.target.value)} required><option value=""></option><option value="exclusive">税抜</option><option value="inclusive">税込</option></select></label>
       <label>税率（%）<input type="number" min="0" step="0.001" inputMode="decimal" value={editor.header.taxRate} onChange={(event) => updateHeader('taxRate', event.target.value)} /></label>
       <label>消費税額<MoneyInput value={editor.header.taxAmount} onChange={(value) => updateHeader('taxAmount', value)} /></label>
       <label className={importedTotalMismatch(editor) ? 'calculation-mismatch' : ''}>税込合計金額<MoneyInput value={editor.sourceType === 'manual' ? calculatedTotal(editor.items, editor.header.taxAmount, editor.header.taxTreatment) : editor.header.totalAmount} onChange={(value) => updateHeader('totalAmount', value)} readOnly={editor.sourceType === 'manual'} />{editor.sourceType === 'manual' && <small>{editor.header.taxTreatment === 'inclusive' ? '税込明細金額を合計' : '税抜明細金額＋消費税額を自動計算'}</small>}{importedTotalMismatch(editor) && <small>税区分に基づく明細金額の合計と一致しません</small>}</label>
