@@ -13,6 +13,8 @@ type BusinessSession = {
   permissions: Record<string, Worker['role']>
 }
 
+class InvalidBusinessSessionError extends Error {}
+
 function getToken(): string {
   try { return localStorage.getItem(STORAGE_KEY) ?? '' } catch { return '' }
 }
@@ -38,6 +40,9 @@ async function rpc<T>(name: string): Promise<T> {
   if (token) headers.set('x-business-session', token)
   const response = await nativeFetch(`${supabaseUrl}/rest/v1/rpc/${name}`, { method: 'POST', headers, body: '{}' })
   const data = await response.json() as T & { ok?: boolean, error?: string, message?: string }
+  if (response.ok && data.ok === false && name === 'business_session') {
+    throw new InvalidBusinessSessionError(data.error ?? 'ログインしてください。')
+  }
   if (!response.ok || data.ok === false) throw new Error(data.error ?? data.message ?? '認証を確認できません。')
   return data
 }
@@ -67,9 +72,32 @@ export async function restoreBusinessSession(appId: 'rice_shipping' | 'purchase_
       active: true,
       note: '',
     }
-  } catch {
-    setToken('')
-    return null
+  } catch (error) {
+    if (error instanceof InvalidBusinessSessionError) {
+      setToken('')
+      return null
+    }
+    throw error
+  }
+}
+
+export function maintainBusinessSession(): () => void {
+  let pending = false
+  const renew = async () => {
+    if (pending || document.visibilityState !== 'visible' || !getToken()) return
+    pending = true
+    try { await rpc<BusinessSession>('business_session') } catch {
+      // Keep the current form mounted, including during a network interruption.
+    } finally { pending = false }
+  }
+  const timer = window.setInterval(() => void renew(), 5 * 60 * 1000)
+  const onResume = () => { void renew() }
+  document.addEventListener('visibilitychange', onResume)
+  window.addEventListener('online', onResume)
+  return () => {
+    window.clearInterval(timer)
+    document.removeEventListener('visibilitychange', onResume)
+    window.removeEventListener('online', onResume)
   }
 }
 

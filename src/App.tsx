@@ -9,7 +9,7 @@ import { ShipmentRecord } from './components/ShipmentRecord'
 import { PurchaseStatementManager } from './components/PurchaseStatementManager'
 import { ShipmentHistory } from './components/ShipmentHistory'
 import { ShipmentScanner } from './components/ShipmentScanner'
-import { logoutBusinessSession, MANAGEMENT_MENU_URL, restoreBusinessSession } from './lib/businessAuth'
+import { logoutBusinessSession, maintainBusinessSession, MANAGEMENT_MENU_URL, restoreBusinessSession } from './lib/businessAuth'
 import { useCalendarMode } from './lib/calendarMode'
 import type { Worker } from './types'
 import './App.css'
@@ -30,6 +30,7 @@ function App() {
   const statementApplication = isStatementApplication()
   const [worker, setWorker] = useState<Worker | null>(null)
   const [loading, setLoading] = useState(true)
+  const [loginError, setLoginError] = useState('')
   const [tab, setTab] = useState<Tab>(initialTab)
   const [historyVersion, setHistoryVersion] = useState(0)
   const [inspectionAuthorizationId, setInspectionAuthorizationId] = useState<string | null>(null)
@@ -51,8 +52,13 @@ function App() {
         setWorker(sessionWorker)
         if (statementApplication && sessionWorker.role === 'viewer') setTab('statement-list')
       })
+      .catch(() => setLoginError('通信できないためログインを確認できません。接続を確認して再試行してください。'))
       .finally(() => setLoading(false))
   }, [statementApplication])
+
+  useEffect(() => {
+    if (worker) return maintainBusinessSession()
+  }, [worker])
 
   useEffect(() => {
     const root = document.documentElement
@@ -116,7 +122,8 @@ function App() {
     return (
       <main className="loading-screen">
         <Wheat size={34} aria-hidden="true" />
-        <span>業務管理メニューへ移動します...</span>
+        <span>{loginError || '業務管理メニューへ移動します...'}</span>
+        {loginError && <button type="button" onClick={() => window.location.reload()}>再試行</button>}
       </main>
     )
   }
