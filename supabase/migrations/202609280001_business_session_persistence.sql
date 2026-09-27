@@ -33,7 +33,7 @@ begin
   join public.workers w using (worker_id)
   where s.token_hash = v_hash and s.expires_at > now()
     and s.bootstrap = p_bootstrap and u.enabled;
-  if v_actor is not null and not p_bootstrap then
+  if v_actor is not null and not p_bootstrap and current_setting('transaction_read_only') = 'off' then
     -- Throttle writes; authorization and user status are checked on every request.
     update business_private.sessions
     set expires_at = now() + interval '30 days'
