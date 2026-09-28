@@ -1347,8 +1347,8 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
     setDetailAddition({ registrationId: selectedRegistration.id, kind, form: {
       ...emptyAddGroupForm(), authorization_id: selectedAuthorization.id, producer_name: selectedAuthorization.full_name,
       fiscal_year: base ? String(base.fiscal_year) : String(currentFiscalYear()),
-      purchase_date: base?.purchase_date ?? today(), settlement_no: selectedRegistration.settlement_no ?? '',
-      inspection_date: base?.inspection_date ?? '', inspection_location: base?.inspection_location ?? '', brand: base?.brand ?? '',
+      settlement_no: selectedRegistration.settlement_no ?? '',
+      inspection_location: base?.inspection_location ?? '', brand: base?.brand ?? '',
       flexcon_count: kind === 'standard' ? '1' : '',
     } })
   }
