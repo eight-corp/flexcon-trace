@@ -3,7 +3,7 @@ import { ArrowDown, ArrowUp, FileUp, Plus, Save, X } from 'lucide-react'
 import type { CellValue } from 'read-excel-file/browser'
 import { supabase } from '../lib/supabase'
 import { authorizationAddError, normalizeName } from '../lib/authorizationValidation'
-import { AUTHORIZATION_COLUMNS, AUTHORIZATION_NO_COLLATOR, authorizationColumnValue, selectAuthorizations, type AuthorizationColumn, type AuthorizationFilters, type AuthorizationSort } from '../lib/authorizationTable'
+import { AUTHORIZATION_COLUMNS, AUTHORIZATION_NO_COLLATOR, authorizationColumnValue, selectAuthorizations, withAuthorizationAddRow, type AuthorizationColumn, type AuthorizationFilters, type AuthorizationSort } from '../lib/authorizationTable'
 import type { AuthorizationRecord } from '../types'
 import { ToggleSwitch } from './ToggleSwitch'
 import { TableColumnFilter } from './TableColumnFilter'
@@ -214,6 +214,7 @@ export function AuthorizationManager({ workerId, isAdmin, onOpenInspections }: P
     [...new Set(items.map((item) => authorizationColumnValue(item, key)))].sort(AUTHORIZATION_NO_COLLATOR.compare),
   ])) as Record<AuthorizationColumn, string[]>, [items])
   const filtered = useMemo(() => selectAuthorizations(items, columnFilters, sort, columnTextFilters), [items, columnFilters, sort, columnTextFilters])
+  const displayRows = useMemo(() => withAuthorizationAddRow(filtered, rowForm.authorization_no, sort), [filtered, rowForm.authorization_no, sort])
   const changeSort = (key: AuthorizationColumn) => setSort((current) => {
     if (!current || current.key !== key) return { key, direction: 'asc' }
     if (current.direction === 'asc') return { key, direction: 'desc' }
@@ -636,7 +637,7 @@ export function AuthorizationManager({ workerId, isAdmin, onOpenInspections }: P
             </tr>
           </thead>
           <tbody>
-            {filtered.map((record) => (
+            {displayRows.map((record) => record ? (
               <tr className={`authorization-data-row ${inspectionTargetAuthorizationIds.has(record.id) ? 'authorization-inspection-target' : ''}`} title={inspectionTargetAuthorizationIds.has(record.id) ? '検査対象の米穀あり' : undefined} key={record.id} onClick={(event) => scheduleOpenInspections(record, event)}>
                 {editableCell(record, 'authorization_no', 'authorization-no')}
                 {editableCell(record, 'full_name', 'authorization-name')}
@@ -663,8 +664,8 @@ export function AuthorizationManager({ workerId, isAdmin, onOpenInspections }: P
                 {editableCell(record, 'notes')}
                 <td className="authorization-register-cell" />
               </tr>
-            ))}
-            <tr className="authorization-new-row">
+            ) : (
+            <tr className="authorization-new-row" key="new-authorization">
               <td className="authorization-no">{rowInput('authorization_no')}</td>
               <td className="authorization-name">{rowInput('full_name')}</td>
               <td className="flag-cell">
@@ -701,6 +702,7 @@ export function AuthorizationManager({ workerId, isAdmin, onOpenInspections }: P
                 </button>
               </td>
             </tr>
+            ))}
           </tbody>
         </table>
         {filtered.length === 0 && <div className="empty-state">委任状情報がありません</div>}

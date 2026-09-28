@@ -40,3 +40,14 @@ export function selectAuthorizations(items: AuthorizationRecord[], filters: Auth
     return sort.direction === 'asc' ? comparison : -comparison
   })
 }
+
+export function withAuthorizationAddRow<T extends { authorization_no: string }>(rows: T[], nextNo: string, sort: AuthorizationSort): (T | null)[] {
+  const result: (T | null)[] = [...rows, null]
+  if (sort?.key === 'authorization_no') {
+    result.sort((left, right) => {
+      const comparison = AUTHORIZATION_NO_COLLATOR.compare(left?.authorization_no ?? nextNo, right?.authorization_no ?? nextNo)
+      return sort.direction === 'asc' ? comparison : -comparison
+    })
+  }
+  return result
+}
