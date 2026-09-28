@@ -51,7 +51,7 @@ type InlineDetailDraft = {
   moisture: string
 }
 type DetailAdditionKind = 'standard' | 'paper' | 'bulk'
-type DetailAdditionDraft = { registrationId: string; kind: DetailAdditionKind; amount: string }
+type DetailAdditionDraft = { registrationId: string; kind: DetailAdditionKind; form: AddGroupForm }
 type BatchInspectionMetadata = {
   registration_id: string | null
   inspection_date: string
@@ -673,9 +673,6 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
   const reasonOptions = inspectionOptions.filter((item) => item.active && item.option_type === 'grade_reason')
   const selectedBrandType = brandTypeForPrefecture(selectedAuthorization?.prefecture ?? null)
   const brandOptions = inspectionOptions.filter((item) => item.active && (item.option_type === selectedBrandType || item.option_type === 'brand'))
-  const addBrandType = brandTypeForPrefecture(addAuthorization?.prefecture ?? null)
-  const addBrandOptions = inspectionOptions.filter((item) => item.active && (item.option_type === addBrandType || item.option_type === 'brand'))
-
   const addInspectionGroup = async (event: React.FormEvent) => {
     event.preventDefault()
     if (!addAuthorization || busy) return setNotice({ type: 'error', text: '委任状一覧に登録されている生産者名を選択してください。' })
@@ -1007,24 +1004,29 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
   const addInspectionDetail = async (event: React.FormEvent) => {
     event.preventDefault()
     if (!selectedRegistration || !detailAddition || detailAddition.registrationId !== selectedRegistration.id || busy) return
-    const amount = Number(detailAddition.amount)
-    if (!Number.isInteger(amount) || amount < 1 || (detailAddition.kind === 'standard' && amount > 999)) {
-      return setNotice({ type: 'error', text: '追加する本数・袋数・数量は1以上の整数で入力してください。' })
-    }
+    const form = detailAddition.form
+    const counts = [form.flexcon_count, form.paper_bag_count, form.bulk_quantity_kg].map((value) => Number(value || 0))
+    if (counts.some((value) => !Number.isInteger(value) || value < 0) || counts.every((value) => value === 0)) return setNotice({ type: 'error', text: '推フレ数・紙袋数・バラは0以上の整数で、いずれかを1以上入力してください。' })
+    if (!form.purchase_date) return setNotice({ type: 'error', text: '仕入日を入力してください。' })
+    if (!form.brand) return setNotice({ type: 'error', text: '銘柄を選択してください。' })
+    if (!locationOptions.some((item) => item.name === form.inspection_location)) return setNotice({ type: 'error', text: '検査場所を選択してください。' })
     setBusy(true); setNotice(null)
-    const { error } = await supabase.rpc('flexcon_add_inspection_registration_detail', {
-      p_worker_id: workerId,
-      p_registration_id: selectedRegistration.id,
-      p_detail_kind: detailAddition.kind,
-      p_amount: amount,
-    })
-    setBusy(false)
-    if (error) return setNotice({ type: 'error', text: error.message })
-    const unit = detailAddition.kind === 'paper' ? '袋' : detailAddition.kind === 'bulk' ? 'kg' : '本'
-    const name = detailAddition.kind === 'standard' ? '推フレ' : detailAddition.kind === 'paper' ? '紙袋' : 'バラ'
-    setDetailAddition(null)
-    setNotice({ type: 'success', text: `${name}を${amount}${unit}追加しました。` })
-    setVersion((value) => value + 1)
+    try {
+      const { error } = await supabase.rpc('flexcon_append_inspection_registration', {
+        p_worker_id: workerId, p_registration_id: selectedRegistration.id,
+        p_fiscal_year: Number(form.fiscal_year), p_purchase_date: form.purchase_date,
+        p_settlement_no: form.settlement_no.trim(), p_inspection_date: form.inspection_date || null,
+        p_inspection_location: form.inspection_location, p_brand: form.brand,
+        p_flexcon_count: counts[0], p_paper_bag_count: counts[1], p_bulk_quantity_kg: counts[2],
+      })
+      if (error) throw error
+      setDetailAddition(null)
+      onSelectedRecordTargetChange(null)
+      setNotice({ type: 'success', text: '検査対象を追加しました。' })
+      setVersion((value) => value + 1)
+    } catch (error) {
+      setNotice({ type: 'error', text: error && typeof error === 'object' && 'message' in error ? String(error.message) : '追加できませんでした。通信状態を確認してください。' })
+    } finally { setBusy(false) }
   }
   const openCertificateDialog = (kind: CertificateKind) => {
     const candidates = certificateFlexconsFor(kind)
@@ -1338,17 +1340,49 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
       </table></div>
     </details>
   }
+  const openDetailAddition = (kind: DetailAdditionKind) => {
+    if (!selectedRegistration || !selectedAuthorization) return
+    const base = [...selectedStandardFlexcons, ...selectedBulkFlexcons, ...selectedPaperBags][0]
+    setNotice(null)
+    setDetailAddition({ registrationId: selectedRegistration.id, kind, form: {
+      ...emptyAddGroupForm(), authorization_id: selectedAuthorization.id, producer_name: selectedAuthorization.full_name,
+      fiscal_year: base ? String(base.fiscal_year) : String(currentFiscalYear()),
+      purchase_date: base?.purchase_date ?? today(), settlement_no: selectedRegistration.settlement_no ?? '',
+      inspection_date: base?.inspection_date ?? '', inspection_location: base?.inspection_location ?? '', brand: base?.brand ?? '',
+      flexcon_count: kind === 'standard' ? '1' : '',
+    } })
+  }
+  const renderAdditionFields = (form: AddGroupForm, change: (values: Partial<AddGroupForm>) => void, authorization: AuthorizationRecord | null) => {
+    const brandType = brandTypeForPrefecture(authorization?.prefecture ?? null)
+    const brands = inspectionOptions.filter((item) => item.active && (item.option_type === brandType || item.option_type === 'brand'))
+    return <>
+      <label>年度<JapaneseFiscalYearInput value={form.fiscal_year} onChange={(fiscal_year) => change({ fiscal_year })} required /></label>
+      <label>仕入日<JapaneseDateInput value={form.purchase_date} onChange={(purchase_date) => change({ purchase_date })} required /></label>
+      <label>仕切書№<input value={form.settlement_no} maxLength={80} onChange={(event) => change({ settlement_no: event.target.value })} /></label>
+      <label>検査日<JapaneseDateInput value={form.inspection_date} onChange={(inspection_date) => change({ inspection_date })} /></label>
+      <label>検査場所<select value={form.inspection_location} onChange={(event) => change({ inspection_location: event.target.value })} required><option value="">選択してください</option>{locationOptions.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}</select></label>
+      <label>産地<input value={formatPrefectureName(authorization?.prefecture) || ''} readOnly aria-label="産地" /></label>
+      <label>銘柄<select value={form.brand} onChange={(event) => change({ brand: event.target.value })} required disabled={!authorization}><option value="">選択してください</option>{brands.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}</select></label>
+      <label>推フレ数<input type="number" min="0" max="999" step="1" value={form.flexcon_count} onChange={(event) => change({ flexcon_count: event.target.value })} placeholder="0" /></label>
+      <label>紙袋数<input type="number" min="0" step="1" value={form.paper_bag_count} onChange={(event) => change({ paper_bag_count: event.target.value })} placeholder="0" /></label>
+      <label>バラ（kg）<input type="number" min="0" step="1" value={form.bulk_quantity_kg} onChange={(event) => change({ bulk_quantity_kg: event.target.value })} placeholder="0" /></label>
+    </>
+  }
   const renderDetailAddition = (kind: DetailAdditionKind) => {
     if (!selectedRegistration || detailAddition?.registrationId !== selectedRegistration.id || detailAddition.kind !== kind) return null
-    const label = kind === 'standard' ? '追加本数' : kind === 'paper' ? '追加袋数' : '追加数量（kg）'
-    return <form className="inspection-detail-add-form" onSubmit={(event) => void addInspectionDetail(event)}>
-      <label>{label}<input type="number" min="1" max={kind === 'standard' ? 999 : undefined} step="1" value={detailAddition.amount} onChange={(event) => setDetailAddition({ ...detailAddition, amount: event.target.value })} required autoFocus /></label>
+    return <div>
+      {notice?.type === 'error' && <div className="notice error" role="alert">{notice.text}</div>}
+      <form className="inspection-group-add inspection-summary-add" noValidate onSubmit={(event) => void addInspectionDetail(event)}>
+      <label>生産者名<input value={selectedAuthorization?.full_name ?? ''} readOnly /></label>
+      {renderAdditionFields(detailAddition.form, (values) => setDetailAddition((current) => current ? { ...current, form: { ...current.form, ...values } } : null), selectedAuthorization)}
+      <div className="button-row">
       <button className="primary-button" type="submit" disabled={busy}><Plus size={17} />追加</button>
       <button className="icon-button" type="button" title="追加を取り消す" aria-label="追加を取り消す" onClick={() => setDetailAddition(null)} disabled={busy}><X size={18} /></button>
-    </form>
+      </div>
+    </form></div>
   }
   const renderFlexconSection = (title: string, items: FlexconInspection[], certificateSectionKind: CertificateKind) => items.length === 0 && (readOnly || !selectedRegistration) ? null : <section className="section-band inspection-detail-section">
-    <div className="section-title"><div><h2>{title}</h2><span>{items.length}本</span></div>{!readOnly && <div className="button-row">{items.length > 0 && <span className="certificate-status-key"><span aria-hidden="true" />印刷済み</span>}{selectedRegistration && (certificateSectionKind === 'standard' || items.length === 0) && <button className="secondary-button" type="button" aria-expanded={detailAddition?.registrationId === selectedRegistration.id && detailAddition.kind === certificateSectionKind} disabled={busy} onClick={() => setDetailAddition({ registrationId: selectedRegistration.id, kind: certificateSectionKind, amount: certificateSectionKind === 'standard' ? '1' : '' })}><Plus size={17} />追加</button>}<button className="secondary-button certificate-create-button" type="button" disabled={certificateFlexconsFor(certificateSectionKind).length === 0} onClick={() => openCertificateDialog(certificateSectionKind)}><FileText size={18} />検査証明書作成</button></div>}</div>
+    <div className="section-title"><div><h2>{title}</h2><span>{items.length}本</span></div>{!readOnly && <div className="button-row">{items.length > 0 && <span className="certificate-status-key"><span aria-hidden="true" />印刷済み</span>}{selectedRegistration && <button className="secondary-button" type="button" aria-expanded={detailAddition?.registrationId === selectedRegistration.id && detailAddition.kind === certificateSectionKind} disabled={busy} onClick={() => openDetailAddition(certificateSectionKind)}><Plus size={17} />追加</button>}<button className="secondary-button certificate-create-button" type="button" disabled={certificateFlexconsFor(certificateSectionKind).length === 0} onClick={() => openCertificateDialog(certificateSectionKind)}><FileText size={18} />検査証明書作成</button></div>}</div>
     {renderDetailAddition(certificateSectionKind)}
     <div className="inspection-detail-table-wrap"><table className="inspection-detail-table">
       <thead><tr><th>№</th><th>年度</th><th>仕入日</th><th>検査日</th><th>検査員</th><th>検査場所</th><th>産地</th><th>銘柄</th><th>数量（kg）</th><th>水分</th><th>等級</th><th>理由</th>{!readOnly && <th></th>}</tr></thead>
@@ -1375,16 +1409,7 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
             {producerCandidates.length === 0 && <span className="empty-state">該当する生産者がありません</span>}
           </div>}
         </div>
-        <label>年度<JapaneseFiscalYearInput value={addGroupForm.fiscal_year} onChange={(fiscal_year) => setAddGroupForm((current) => ({ ...current, fiscal_year }))} required /></label>
-        <label>仕入日<JapaneseDateInput value={addGroupForm.purchase_date} onChange={(purchase_date) => setAddGroupForm((current) => ({ ...current, purchase_date }))} required /></label>
-        <label>仕切書№<input value={addGroupForm.settlement_no} maxLength={80} onChange={(event) => setAddGroupForm((current) => ({ ...current, settlement_no: event.target.value }))} /></label>
-        <label>検査日<JapaneseDateInput value={addGroupForm.inspection_date} onChange={(inspection_date) => setAddGroupForm((current) => ({ ...current, inspection_date }))} /></label>
-        <label>検査場所<select value={addGroupForm.inspection_location} onChange={(event) => setAddGroupForm((current) => ({ ...current, inspection_location: event.target.value }))} required><option value="">選択してください</option>{locationOptions.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}</select></label>
-        <label>産地<input value={formatPrefectureName(addAuthorization?.prefecture) || ''} readOnly aria-label="産地" /></label>
-        <label>銘柄<select value={addGroupForm.brand} onChange={(event) => setAddGroupForm((current) => ({ ...current, brand: event.target.value }))} required disabled={!addAuthorization}><option value="">選択してください</option>{addBrandOptions.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}</select></label>
-        <label>推フレ数<input type="number" min="0" max="999" step="1" value={addGroupForm.flexcon_count} onChange={(event) => setAddGroupForm((current) => ({ ...current, flexcon_count: event.target.value }))} placeholder="0" /></label>
-        <label>紙袋数<input type="number" min="0" step="1" value={addGroupForm.paper_bag_count} onChange={(event) => setAddGroupForm((current) => ({ ...current, paper_bag_count: event.target.value }))} placeholder="0" /></label>
-        <label>バラ（kg）<input type="number" min="0" step="1" value={addGroupForm.bulk_quantity_kg} onChange={(event) => setAddGroupForm((current) => ({ ...current, bulk_quantity_kg: event.target.value }))} placeholder="0" /></label>
+        {renderAdditionFields(addGroupForm, (values) => setAddGroupForm((current) => ({ ...current, ...values })), addAuthorization)}
         <button className="primary-button" type="submit" disabled={busy}><Plus size={18} />{busy ? '追加中...' : '追加'}</button>
       </form>}
       </>}
@@ -1445,7 +1470,7 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
     {renderFlexconSection('推フレ', selectedStandardFlexcons, 'standard')}
     {renderFlexconSection('バラ', selectedBulkFlexcons, 'bulk')}
     {(selectedPaperBags.length > 0 || (!readOnly && selectedRegistration)) && <section className="section-band inspection-detail-section">
-      <div className="section-title"><div><h2>紙袋</h2><span>{selectedPaperBags.reduce((total, item) => total + item.bag_count, 0)}袋 / {selectedPaperBags.length}件</span></div>{!readOnly && selectedRegistration && <button className="secondary-button" type="button" aria-expanded={detailAddition?.registrationId === selectedRegistration.id && detailAddition.kind === 'paper'} disabled={busy} onClick={() => setDetailAddition({ registrationId: selectedRegistration.id, kind: 'paper', amount: '' })}><Plus size={17} />追加</button>}</div>
+      <div className="section-title"><div><h2>紙袋</h2><span>{selectedPaperBags.reduce((total, item) => total + item.bag_count, 0)}袋 / {selectedPaperBags.length}件</span></div>{!readOnly && selectedRegistration && <button className="secondary-button" type="button" aria-expanded={detailAddition?.registrationId === selectedRegistration.id && detailAddition.kind === 'paper'} disabled={busy} onClick={() => openDetailAddition('paper')}><Plus size={17} />追加</button>}</div>
       {renderDetailAddition('paper')}
       <div className="inspection-detail-table-wrap"><table className="inspection-detail-table paper-detail-table">
         <thead><tr><th>年度</th><th>仕入日</th><th>検査日</th><th>検査員</th><th>検査場所</th><th>産地</th><th>銘柄</th><th>数量（袋）</th><th>総重量</th><th>水分</th><th>等級</th><th>理由</th>{!readOnly && <th></th>}</tr></thead>
