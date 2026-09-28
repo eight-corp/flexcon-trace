@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowDown, ArrowUp, FileUp, Plus, Save, X } from 'lucide-react'
 import type { CellValue } from 'read-excel-file/browser'
 import { supabase } from '../lib/supabase'
+import { authorizationAddError, normalizeName } from '../lib/authorizationValidation'
 import { AUTHORIZATION_COLUMNS, AUTHORIZATION_NO_COLLATOR, authorizationColumnValue, selectAuthorizations, type AuthorizationColumn, type AuthorizationFilters, type AuthorizationSort } from '../lib/authorizationTable'
 import type { AuthorizationRecord } from '../types'
 import { ToggleSwitch } from './ToggleSwitch'
@@ -107,10 +108,6 @@ function optionalFlag(value: CellValue | null | undefined): boolean | null {
   const normalized = cellText(value).toLowerCase()
   if (['0', 'false', 'なし', '無', '×', '未'].includes(normalized)) return false
   return true
-}
-
-function normalizeName(value: string): string {
-  return value.trim().replace(/[\s　]+/g, '').toLocaleLowerCase('ja')
 }
 
 function extractAddressParts(address: string): { prefecture: string | null; municipality: string | null } {
@@ -370,9 +367,11 @@ export function AuthorizationManager({ workerId, isAdmin, onOpenInspections }: P
 
   const save = async (event: React.FormEvent) => {
     event.preventDefault()
+    if (busy) return
     const fullName = form.full_name.trim()
-    if (items.some((item) => normalizeName(item.full_name) === normalizeName(fullName))) {
-      setNotice({ type: 'error', text: `氏名「${fullName}」はすでに登録されています。` })
+    const validationError = authorizationAddError(form, items)
+    if (validationError) {
+      setNotice({ type: 'error', text: validationError })
       return
     }
 
@@ -393,16 +392,17 @@ export function AuthorizationManager({ workerId, isAdmin, onOpenInspections }: P
       p_feed_rice_variety: form.feed_rice_variety.trim() || null,
       p_notes: form.notes.trim() || null,
     }
-    const { error } = await supabase.rpc('flexcon_add_authorization', args)
-
-    if (error) {
-      setNotice({ type: 'error', text: error.message })
-    } else {
+    try {
+      const { error } = await supabase.rpc('flexcon_add_authorization', args)
+      if (error) throw error
       setModalOpen(false)
       setNotice({ type: 'success', text: '委任状情報を追加しました。' })
       setVersion((value) => value + 1)
+    } catch (error) {
+      setNotice({ type: 'error', text: error && typeof error === 'object' && 'message' in error ? String(error.message) : '保存できませんでした。通信状態を確認して再試行してください。' })
+    } finally {
+      setBusy(false)
     }
-    setBusy(false)
   }
 
   const saveRow = async (event: React.SyntheticEvent) => {
@@ -410,40 +410,39 @@ export function AuthorizationManager({ workerId, isAdmin, onOpenInspections }: P
     if (busy) return
 
     const fullName = rowForm.full_name.trim()
-    if (!fullName) {
-      setNotice({ type: 'error', text: '氏名を入力してください。' })
-      return
-    }
-    if (items.some((item) => normalizeName(item.full_name) === normalizeName(fullName))) {
-      setNotice({ type: 'error', text: `氏名「${fullName}」はすでに登録されています。` })
+    const validationError = authorizationAddError(rowForm, items)
+    if (validationError) {
+      setNotice({ type: 'error', text: validationError })
       return
     }
 
     const addressParts = extractAddressParts(rowForm.address)
     setBusy(true)
     setNotice(null)
-    const { error } = await supabase.rpc('flexcon_add_authorization', {
-      p_worker_id: workerId,
-      p_authorization_no: rowForm.authorization_no.trim(),
-      p_full_name: fullName,
-      p_seed_purchase_slip: rowForm.seed_purchase_slip,
-      p_farming_plan: rowForm.farming_plan,
-      p_address: rowForm.address.trim() || null,
-      p_prefecture: addressParts.prefecture ?? (rowForm.prefecture.trim() || null),
-      p_municipality: addressParts.municipality ?? (rowForm.municipality.trim() || null),
-      p_phone: rowForm.phone.trim() || null,
-      p_crop_type: rowForm.crop_type.trim() || null,
-      p_feed_rice_variety: rowForm.feed_rice_variety.trim() || null,
-      p_notes: rowForm.notes.trim() || null,
-    })
+    try {
+      const { error } = await supabase.rpc('flexcon_add_authorization', {
+        p_worker_id: workerId,
+        p_authorization_no: rowForm.authorization_no.trim(),
+        p_full_name: fullName,
+        p_seed_purchase_slip: rowForm.seed_purchase_slip,
+        p_farming_plan: rowForm.farming_plan,
+        p_address: rowForm.address.trim() || null,
+        p_prefecture: addressParts.prefecture ?? (rowForm.prefecture.trim() || null),
+        p_municipality: addressParts.municipality ?? (rowForm.municipality.trim() || null),
+        p_phone: rowForm.phone.trim() || null,
+        p_crop_type: rowForm.crop_type.trim() || null,
+        p_feed_rice_variety: rowForm.feed_rice_variety.trim() || null,
+        p_notes: rowForm.notes.trim() || null,
+      })
 
-    if (error) {
-      setNotice({ type: 'error', text: error.message })
-    } else {
+      if (error) throw error
       setNotice({ type: 'success', text: '委任状情報を追加しました。' })
       setVersion((value) => value + 1)
+    } catch (error) {
+      setNotice({ type: 'error', text: error && typeof error === 'object' && 'message' in error ? String(error.message) : '保存できませんでした。通信状態を確認して再試行してください。' })
+    } finally {
+      setBusy(false)
     }
-    setBusy(false)
   }
 
   const rowInput = (field: EditableTextField, type: 'text' | 'tel' = 'text') => (
@@ -627,6 +626,7 @@ export function AuthorizationManager({ workerId, isAdmin, onOpenInspections }: P
         <button className="primary-button" type="button" onClick={beginAdd} disabled={busy}><Plus size={18} />追加</button>
       </div>
 
+      {!modalOpen && notice?.type === 'error' && <div className="notice error" role="alert">{notice.text}</div>}
       <div className="authorization-table-wrap">
         <table className="authorization-table">
           <thead>
@@ -714,7 +714,8 @@ export function AuthorizationManager({ workerId, isAdmin, onOpenInspections }: P
               <button className="icon-button" type="button" title="閉じる" aria-label="入力画面を閉じる" onClick={() => setModalOpen(false)} disabled={busy}><X size={21} /></button>
             </div>
 
-            <form className="form-grid" onSubmit={(event) => void save(event)}>
+            {notice?.type === 'error' && <div className="notice error" role="alert">{notice.text}</div>}
+            <form className="form-grid" noValidate onSubmit={(event) => void save(event)}>
               <div className="form-grid two">
                 <label>№<input value={form.authorization_no} onChange={(event) => setText('authorization_no', event.target.value)} required /></label>
                 <label>氏名<input value={form.full_name} onChange={(event) => setText('full_name', event.target.value)} required /></label>
@@ -776,8 +777,8 @@ export function AuthorizationManager({ workerId, isAdmin, onOpenInspections }: P
         </div>
       )}
 
-      {notice && (
-        <div className={`notice operation-log ${notice.type}`} role="status" aria-live="polite">
+      {notice?.type === 'success' && (
+        <div className="notice operation-log success" role="status" aria-live="polite">
           {notice.text}
         </div>
       )}
