@@ -695,7 +695,6 @@
 .inspection-summary-table th.inspection-summary-column-heading { height: auto; padding: 0; }
 .inspection-summary-table .shipment-column-heading { min-height: 36px; }
 .inspection-summary-table .shipment-column-heading { grid-template-columns: max-content 28px; }
-.inspection-summary-column-registrationNo .shipment-column-sort,
 .inspection-summary-column-authorizationNo .shipment-column-sort,
 .inspection-summary-column-flexconCount .shipment-column-sort,
 .inspection-summary-column-paperBagCount .shipment-column-sort,

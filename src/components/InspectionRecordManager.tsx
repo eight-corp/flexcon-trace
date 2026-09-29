@@ -121,10 +121,10 @@ type InspectionRegistrationSummaryRow = {
   uninspectedQuantity: number
 }
 type SummarySortDirection = 'asc' | 'desc'
-type SummaryColumn = 'registrationNo' | 'settlementNo' | 'purchaseDates' | 'inspectionDates' | 'fullName' | 'origin' | 'municipality' | 'inspectionLocations' | 'authorizationNo' | 'brands' | 'grade' | 'flexconCount' | 'paperBagCount' | 'bulkQuantity' | 'inspectedQuantity' | 'uninspectedQuantity'
+type SummaryColumn = 'settlementNo' | 'purchaseDates' | 'inspectionDates' | 'fullName' | 'origin' | 'municipality' | 'inspectionLocations' | 'authorizationNo' | 'brands' | 'grade' | 'flexconCount' | 'paperBagCount' | 'bulkQuantity' | 'inspectedQuantity' | 'uninspectedQuantity'
 
 const SUMMARY_COLUMNS: Array<{ key: SummaryColumn; label: string }> = [
-  { key: 'registrationNo', label: '登録No.' },
+  { key: 'authorizationNo', label: '委任状№' },
   { key: 'settlementNo', label: '仕切書№' },
   { key: 'purchaseDates', label: '仕入日' },
   { key: 'inspectionDates', label: '検査日' },
@@ -132,7 +132,6 @@ const SUMMARY_COLUMNS: Array<{ key: SummaryColumn; label: string }> = [
   { key: 'origin', label: '産地' },
   { key: 'municipality', label: '市町村名' },
   { key: 'inspectionLocations', label: '検査場所' },
-  { key: 'authorizationNo', label: '委任状No.' },
   { key: 'brands', label: '銘柄' },
   { key: 'grade', label: '等級' },
   { key: 'flexconCount', label: '推フレ数' },
@@ -257,7 +256,7 @@ function summaryDisplayValue(row: InspectionRegistrationSummaryRow, key: Summary
   return String(row[key] ?? '')
 }
 function summarySortValue(row: InspectionRegistrationSummaryRow, key: SummaryColumn) {
-  if (key === 'registrationNo' || key === 'flexconCount' || key === 'paperBagCount' || key === 'bulkQuantity' || key === 'inspectedQuantity' || key === 'uninspectedQuantity') return row[key]
+  if (key === 'flexconCount' || key === 'paperBagCount' || key === 'bulkQuantity' || key === 'inspectedQuantity' || key === 'uninspectedQuantity') return row[key]
   return String(row[key] ?? '')
 }
 function InspectionSummaryColumnHeader({
@@ -285,7 +284,7 @@ function InspectionSummaryColumnHeader({
         <span>{column.label}</span>
         {sort?.key === column.key && (sort.direction === 'asc' ? <ArrowUp size={14} /> : <ArrowDown size={14} />)}
       </button>
-      <TableColumnFilter label={column.label} values={values} selectedValues={selectedValues} onChange={(next) => onFilterChange(column.key, next)} textValue={textValue} onTextChange={(next) => onTextChange(column.key, next)} openRight={column.key === 'registrationNo'} />
+      <TableColumnFilter label={column.label} values={values} selectedValues={selectedValues} onChange={(next) => onFilterChange(column.key, next)} textValue={textValue} onTextChange={(next) => onTextChange(column.key, next)} openRight={column.key === 'authorizationNo'} />
     </div>
   </th>
 }
@@ -1433,10 +1432,10 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
       {summaryView === 'list' && <div className="inspection-summary-wrap"><table className="inspection-summary-table">
         <thead><tr>{SUMMARY_COLUMNS.map((column) => <InspectionSummaryColumnHeader key={column.key} column={column} sort={summarySort} values={summaryFilterValues[column.key]} selectedValues={summaryColumnFilters[column.key]} textValue={summaryTextFilters[column.key] ?? ''} onSort={changeSummarySort} onFilterChange={changeSummaryColumnFilter} onTextChange={changeSummaryTextFilter} />)}{!readOnly && <th className="inspection-summary-actions-heading">操作</th>}</tr></thead>
         <tbody>{displayedSummary.map((row, index) => <tr className={index > 0 && displayedSummary[index - 1].registrationId !== row.registrationId ? 'inspection-summary-registration-start' : undefined} key={`${row.registrationId}-${row.grade}`} tabIndex={0} onClick={() => { onSelectedRecordTargetChange(null); onSelectedRegistrationChange(row.registrationId); onSelectedAuthorizationChange(row.authorizationId) }} onKeyDown={(event) => { if (event.key === 'Enter' && event.target === event.currentTarget) { onSelectedRecordTargetChange(null); onSelectedRegistrationChange(row.registrationId); onSelectedAuthorizationChange(row.authorizationId) } }}>
-          <td className="numeric-cell">{row.registrationNo}</td><td>{row.settlementNo}</td><td>{row.purchaseDates}</td><td>{row.inspectionDates}</td><td><strong>{row.fullName}</strong></td><td>{row.origin}</td><td>{row.municipality}</td><td>{row.inspectionLocations}</td><td className="numeric-cell">{row.authorizationNo}</td><td>{row.brands}</td><td>{row.grade}</td><td className="numeric-cell">{row.flexconCount}本</td><td className="numeric-cell">{row.paperBagCount}袋</td><td className="numeric-cell">{row.bulkQuantity.toLocaleString()}kg</td><td className="inspection-progress-inspected numeric-cell">{row.inspectedQuantity.toLocaleString()}kg</td><td className="inspection-progress-uninspected numeric-cell">{row.uninspectedQuantity.toLocaleString()}kg</td>
+          <td className="numeric-cell">{row.authorizationNo}</td><td>{row.settlementNo}</td><td>{row.purchaseDates}</td><td>{row.inspectionDates}</td><td><strong>{row.fullName}</strong></td><td>{row.origin}</td><td>{row.municipality}</td><td>{row.inspectionLocations}</td><td>{row.brands}</td><td>{row.grade}</td><td className="numeric-cell">{row.flexconCount}本</td><td className="numeric-cell">{row.paperBagCount}袋</td><td className="numeric-cell">{row.bulkQuantity.toLocaleString()}kg</td><td className="inspection-progress-inspected numeric-cell">{row.inspectedQuantity.toLocaleString()}kg</td><td className="inspection-progress-uninspected numeric-cell">{row.uninspectedQuantity.toLocaleString()}kg</td>
           {!readOnly && <td className="inspection-summary-actions"><button className="icon-button delete-icon" type="button" title="この登録行を削除" aria-label={`登録No. ${row.registrationNo}を削除`} disabled={busy} onClick={(event) => { event.stopPropagation(); void deleteInspectionRegistration(row) }}><Trash2 size={17} /></button></td>}
         </tr>)}
-        {displayedSummary.length === 0 && <tr><td colSpan={readOnly ? 16 : 17} className="empty-state">該当する検査記録はありません</td></tr>}</tbody>
+        {displayedSummary.length === 0 && <tr><td colSpan={SUMMARY_COLUMNS.length + (readOnly ? 0 : 1)} className="empty-state">該当する検査記録はありません</td></tr>}</tbody>
       </table></div>}
       {notice && <div className={`notice operation-log ${notice.type}`}>{notice.text}</div>}
     </div>
