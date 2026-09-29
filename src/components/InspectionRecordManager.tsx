@@ -124,8 +124,8 @@ type SummarySortDirection = 'asc' | 'desc'
 type SummaryColumn = 'settlementNo' | 'purchaseDates' | 'inspectionDates' | 'fullName' | 'origin' | 'municipality' | 'inspectionLocations' | 'authorizationNo' | 'brands' | 'grade' | 'flexconCount' | 'paperBagCount' | 'bulkQuantity' | 'inspectedQuantity' | 'uninspectedQuantity'
 
 const SUMMARY_COLUMNS: Array<{ key: SummaryColumn; label: string }> = [
-  { key: 'authorizationNo', label: '委任状№' },
-  { key: 'settlementNo', label: '仕切書№' },
+  { key: 'authorizationNo', label: '委任状' },
+  { key: 'settlementNo', label: '仕切り書' },
   { key: 'purchaseDates', label: '仕入日' },
   { key: 'inspectionDates', label: '検査日' },
   { key: 'fullName', label: '氏名' },
