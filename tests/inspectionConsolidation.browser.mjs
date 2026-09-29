@@ -344,8 +344,77 @@ try {
         await statusCell.scrollIntoViewIfNeeded()
         await page.screenshot({ path: path.join(process.env.QA_ARTIFACTS, `inspection-completion-${width}.png`) })
       }
+
+      // Multiple producers make vertical and horizontal restoration observable.
+      await db.exec(`
+        insert into flexcon_authorizations(authorization_no,full_name,prefecture)
+        select (1000+n)::text,'Return Producer ' || lpad(n::text,2,'0'),'青森県' from generate_series(0,59) n;
+        insert into flexcon_inspection_registrations(authorization_id,warehouse_id,settlement_no,created_by_worker_id)
+        select id,'00000000-0000-0000-0000-000000000011','RETURN','tester' from flexcon_authorizations where authorization_no::integer>=1000;
+        insert into flexcon_inspection_flexcons(registration_id,authorization_id,fiscal_year,purchase_date,inspection_date,inspector_name,inspection_location,record_kind,flexcon_no,lot_number,brand,quantity_kg,grade,moisture,created_by_worker_id,updated_by_worker_id)
+        select r.id,a.id,8,'2026-09-29','2026-09-29','Tester',case when a.authorization_no::integer%2=0 then 'B' else 'A' end,'standard',1,'RETURN-' || a.authorization_no,'Rice',1020,'1等',15,'tester','tester'
+        from flexcon_authorizations a join flexcon_inspection_registrations r on r.authorization_id=a.id where a.authorization_no::integer>=1000;
+      `)
+      await reloadList()
+      const openFilter = async name => {
+        const trigger = page.getByRole('button', { name: `${name}を絞り込む`, exact: true })
+        await trigger.scrollIntoViewIfNeeded()
+        await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+        await trigger.click()
+      }
+      await openFilter('氏名')
+      await page.getByRole('searchbox', { name: '氏名を文字で絞り込む', exact: true }).fill('Return Producer')
+      await page.keyboard.press('Escape')
+      assert.equal(await table.locator('tbody tr').count(), 60)
+      await openFilter('検査場所')
+      await page.locator('.shipment-filter-menu').getByLabel('B', { exact: true }).uncheck()
+      await page.keyboard.press('Escape')
+      assert.equal(await table.locator('tbody tr').count(), 30)
+      await openFilter('検査日')
+      await page.getByRole('searchbox', { name: '検査日を文字で絞り込む', exact: true }).fill('令和8年9月29日')
+      await page.keyboard.press('Escape')
+      await page.getByRole('button', { name: '委任状', exact: true }).click()
+      await page.getByRole('button', { name: '委任状', exact: true }).click()
+      const summaryWrap = page.locator('.inspection-summary-wrap')
+      const getPosition = () => summaryWrap.evaluate(el => ({ top: el.scrollTop, left: el.scrollLeft, pageTop: window.scrollY, pageLeft: window.scrollX, mainTop: el.closest('main').scrollTop, mainLeft: el.closest('main').scrollLeft }))
+      const expectedRows = await table.locator('tbody tr').allTextContents()
+      const selectedRow = table.locator('tbody tr').nth(12)
+      const selectedName = await selectedRow.locator('td').nth(5).innerText()
+      const selectedCell = selectedRow.getByRole('cell', { name: selectedName, exact: true })
+      await selectedCell.scrollIntoViewIfNeeded()
+      await summaryWrap.evaluate(el => { el.scrollLeft = 400; el.scrollTop = 400 })
+      if (width === 390) await page.evaluate(() => window.scrollTo(0,400))
+      await selectedCell.scrollIntoViewIfNeeded()
+      const savedPosition = await getPosition()
+      assert.ok(savedPosition.left > 0)
+      assert.ok(savedPosition.top > 0 || savedPosition.pageTop > 0)
+      await selectedCell.click()
+      await page.locator('.producer-inspection-heading h1').getByText(selectedName, { exact: true }).waitFor()
+      await page.locator('.producer-inspection-page').evaluate(el => { el.scrollTop = el.scrollHeight })
+      await page.getByRole('button', { name: '検査記録へ戻る', exact: true }).click()
+      await table.getByRole('cell', { name: selectedName, exact: true }).waitFor()
+      assert.deepEqual(await table.locator('tbody tr').allTextContents(), expectedRows)
+      assert.deepEqual(await getPosition(), savedPosition)
+      for (const name of ['氏名', '検査日', '検査場所']) assert.equal(await page.getByRole('button', { name: `${name}を絞り込む`, exact: true }).evaluate(el => el.parentElement.classList.contains('active')), true)
+      if (process.env.QA_ARTIFACTS) await page.screenshot({ path: path.join(process.env.QA_ARTIFACTS, `inspection-list-restored-${width}.png`) })
+
+      // Keyboard navigation must preserve the same snapshot on the next round trip.
+      await selectedRow.focus()
+      const keyboardPosition = await getPosition()
+      await selectedRow.press('Enter')
+      await page.locator('.producer-inspection-heading h1').getByText(selectedName, { exact: true }).waitFor()
+      await page.getByRole('button', { name: '検査記録へ戻る', exact: true }).click()
+      await table.getByRole('cell', { name: selectedName, exact: true }).waitFor()
+      assert.deepEqual(await table.locator('tbody tr').allTextContents(), expectedRows)
+      assert.deepEqual(await getPosition(), keyboardPosition)
+      await openFilter('検査日')
+      assert.equal(await page.getByRole('searchbox', { name: '検査日を文字で絞り込む', exact: true }).inputValue(), '令和8年9月29日')
+      await page.keyboard.press('Escape')
+      await openFilter('検査場所')
+      assert.equal(await page.locator('.shipment-filter-menu').getByLabel('B', { exact: true }).isChecked(), false)
+      await page.keyboard.press('Escape')
       assert.deepEqual(errors, [])
-      console.log(`PASS ${width}px: additions, navigation, completion, sticky heading, batch ranges/overwrite and bulk exclusion with unsaved edits preserved`)
+      console.log(`PASS ${width}px: additions, navigation, completion, batch settings and list filters/sort/scroll preserved across detail round trips`)
     } finally { await context.close(); await db.close() }
   }
 } finally {

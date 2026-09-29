@@ -1,7 +1,7 @@
-import { useEffect, useState, type CSSProperties } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { ArrowLeft, Boxes, Camera, ClipboardList, FileSignature, History, House, List, LogOut, NotebookPen, Settings2, Truck, Wheat } from 'lucide-react'
 import { AuthorizationManager } from './components/AuthorizationManager'
-import { InspectionRecordManager, type InspectionRecordTarget } from './components/InspectionRecordManager'
+import { InspectionRecordManager, type InspectionRecordTarget, type InspectionSummaryState, type InspectionSummaryScroll } from './components/InspectionRecordManager'
 import { InspectionOptionManager } from './components/InspectionOptionManager'
 import { InventoryManager } from './components/InventoryManager'
 import { MemoManager } from './components/MemoManager'
@@ -37,6 +37,8 @@ function App() {
   const [inspectionRegistrationId, setInspectionRegistrationId] = useState<string | null>(null)
   const [inspectionRecordTarget, setInspectionRecordTarget] = useState<InspectionRecordTarget | null>(null)
   const [inspectionReadOnly, setInspectionReadOnly] = useState(false)
+  const [inspectionSummaryState, setInspectionSummaryState] = useState<InspectionSummaryState>({ view: 'list', sort: null, columnFilters: {}, textFilters: {}, calendarMode })
+  const inspectionSummaryScroll = useRef<InspectionSummaryScroll>({ top: 0, left: 0, pageTop: 0, pageLeft: 0, mainTop: 0, mainLeft: 0 })
 
   useEffect(() => {
     document.title = statementApplication ? '(株)エイト 仕切書読込み' : '(株)エイト 米穀出荷管理'
@@ -215,6 +217,9 @@ function App() {
                 selectedAuthorizationId={inspectionAuthorizationId}
                 selectedRegistrationId={inspectionRegistrationId}
                 selectedRecordTarget={inspectionRecordTarget}
+                summaryState={inspectionSummaryState}
+                onSummaryStateChange={setInspectionSummaryState}
+                summaryScrollRef={inspectionSummaryScroll}
                 onSelectedAuthorizationChange={setInspectionAuthorizationId}
                 onSelectedRegistrationChange={setInspectionRegistrationId}
                 onSelectedRecordTargetChange={setInspectionRecordTarget}

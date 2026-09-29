@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type Dispatch, type RefObject, type SetStateAction } from 'react'
 import { ArrowDown, ArrowLeft, ArrowUp, BarChart3, ChevronDown, CircleAlert, CircleCheck, ClipboardList, ExternalLink, FileText, List, Plus, Printer, Save, TableRowsSplit, Trash2, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { formatDisplayDate, formatJapaneseDateForFilename } from '../lib/japaneseEra'
+import { formatDisplayDate, formatJapaneseDateForFilename, type CalendarMode } from '../lib/japaneseEra'
 import { useCalendarMode } from '../lib/calendarMode'
 import { matchesFilterText } from '../lib/tableFilters'
 import { JapaneseDateInput, JapaneseFiscalYearInput } from './JapaneseDateInput'
@@ -19,6 +19,9 @@ type Props = {
   selectedAuthorizationId: string | null
   selectedRegistrationId: string | null
   selectedRecordTarget: InspectionRecordTarget | null
+  summaryState: InspectionSummaryState
+  onSummaryStateChange: Dispatch<SetStateAction<InspectionSummaryState>>
+  summaryScrollRef: RefObject<InspectionSummaryScroll>
   onSelectedAuthorizationChange: (authorizationId: string | null) => void
   onSelectedRegistrationChange: (registrationId: string | null) => void
   onSelectedRecordTargetChange: (target: InspectionRecordTarget | null) => void
@@ -133,6 +136,14 @@ type InspectionRegistrationSummaryRow = {
 }
 type SummarySortDirection = 'asc' | 'desc'
 type SummaryColumn = 'settlementNo' | 'purchaseDates' | 'inspectionDates' | 'fullName' | 'origin' | 'municipality' | 'inspectionLocations' | 'authorizationNo' | 'brands' | 'grade' | 'flexconCount' | 'paperBagCount' | 'bulkQuantity' | 'inspectedQuantity' | 'uninspectedQuantity' | 'inspectionStatus'
+export type InspectionSummaryState = {
+  view: 'list' | 'aggregate'
+  sort: { key: SummaryColumn; direction: SummarySortDirection } | null
+  columnFilters: Partial<Record<SummaryColumn, string[]>>
+  textFilters: Partial<Record<SummaryColumn, string>>
+  calendarMode: CalendarMode
+}
+export type InspectionSummaryScroll = { top: number; left: number; pageTop: number; pageLeft: number; mainTop: number; mainLeft: number }
 
 const SUMMARY_COLUMNS: Array<{ key: SummaryColumn; label: string }> = [
   { key: 'inspectionStatus', label: '検査状況' },
@@ -305,7 +316,7 @@ function brandTypeForPrefecture(prefecture: string | null): 'brand_aomori' | 'br
   if (normalized === '岩手') return 'brand_iwate'
   return null
 }
-export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedAuthorizationId, selectedRegistrationId, selectedRecordTarget, onSelectedAuthorizationChange, onSelectedRegistrationChange, onSelectedRecordTargetChange, onBack }: Props) {
+export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedAuthorizationId, selectedRegistrationId, selectedRecordTarget, summaryState, onSummaryStateChange, summaryScrollRef, onSelectedAuthorizationChange, onSelectedRegistrationChange, onSelectedRecordTargetChange, onBack }: Props) {
   const { mode: calendarMode, formatDate: displayDate, formatCropYear: displayCropYear } = useCalendarMode()
   const [authorizations, setAuthorizations] = useState<AuthorizationRecord[]>([])
   const [registrations, setRegistrations] = useState<InspectionRegistration[]>([])
@@ -323,14 +334,36 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
   const [splitPaper, setSplitPaper] = useState<PaperBagInspection | null>(null)
   const [splitCounts, setSplitCounts] = useState({ first: '', second: '' })
   const [detailAddition, setDetailAddition] = useState<DetailAdditionDraft | null>(null)
-  const [summaryView, setSummaryView] = useState<'list' | 'aggregate'>('list')
-  const [summarySort, setSummarySort] = useState<{ key: SummaryColumn; direction: SummarySortDirection } | null>(null)
-  const [summaryColumnFilters, setSummaryColumnFilters] = useState<Partial<Record<SummaryColumn, string[]>>>({})
-  const [summaryTextFilters, setSummaryTextFilters] = useState<Partial<Record<SummaryColumn, string>>>({})
+  const { view: summaryView, sort: summarySort, columnFilters: summaryColumnFilters, textFilters: summaryTextFilters } = summaryState
+  const setSummaryView = (view: InspectionSummaryState['view']) => onSummaryStateChange((current) => ({ ...current, view }))
+  const summaryWrapRef = useRef<HTMLDivElement>(null)
+  const [recordsLoaded, setRecordsLoaded] = useState(false)
   useEffect(() => {
-    setSummaryColumnFilters((current) => ({ ...current, purchaseDates: undefined, inspectionDates: undefined }))
-    setSummaryTextFilters((current) => ({ ...current, purchaseDates: undefined, inspectionDates: undefined }))
-  }, [calendarMode])
+    if (summaryState.calendarMode === calendarMode) return
+    onSummaryStateChange((current) => ({
+      ...current, calendarMode,
+      columnFilters: { ...current.columnFilters, purchaseDates: undefined, inspectionDates: undefined },
+      textFilters: { ...current.textFilters, purchaseDates: undefined, inspectionDates: undefined },
+    }))
+  }, [calendarMode, summaryState.calendarMode, onSummaryStateChange])
+  // Restore after loading so an empty table cannot clamp the saved position.
+  useLayoutEffect(() => {
+    if (!recordsLoaded || selectedAuthorizationId || summaryView !== 'list') return
+    const wrap = summaryWrapRef.current
+    if (!wrap) return
+    const saved = summaryScrollRef.current
+    wrap.scrollTop = saved.top
+    wrap.scrollLeft = saved.left
+    const main = wrap.closest('main')
+    if (main) { main.scrollTop = saved.mainTop; main.scrollLeft = saved.mainLeft }
+    window.scrollTo(saved.pageLeft, saved.pageTop)
+  }, [recordsLoaded, selectedAuthorizationId, summaryView, summaryScrollRef])
+  const rememberSummaryPosition = () => {
+    const wrap = summaryWrapRef.current
+    if (!wrap || !recordsLoaded) return
+    const main = wrap.closest('main')
+    summaryScrollRef.current = { top: wrap.scrollTop, left: wrap.scrollLeft, pageTop: window.scrollY, pageLeft: window.scrollX, mainTop: main?.scrollTop ?? 0, mainLeft: main?.scrollLeft ?? 0 }
+  }
   const [notice, setNotice] = useState<Notice>(null)
   const [version, setVersion] = useState(0)
   const [busy, setBusy] = useState(false)
@@ -393,6 +426,7 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
           feed_rice: loadedWeights.find((item) => item.weight_type === 'feed_rice')?.weight_kg ?? DEFAULT_FEED_RICE_WEIGHT,
         })
       }
+      setRecordsLoaded(true)
     }
     void load()
   }, [version])
@@ -530,18 +564,15 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
     })
   }, [summaryColumnFilters, summaryTextFilters, summaryRows, summarySort])
   const changeSummarySort = (key: SummaryColumn) => {
-    setSummarySort((current) => {
-      if (!current || current.key !== key) return { key, direction: 'asc' }
-      if (current.direction === 'asc') return { key, direction: 'desc' }
-      return null
-    })
+    onSummaryStateChange((current) => ({ ...current, sort: !current.sort || current.sort.key !== key
+      ? { key, direction: 'asc' } : current.sort.direction === 'asc' ? { key, direction: 'desc' } : null }))
   }
   const changeSummaryColumnFilter = (key: SummaryColumn, values: string[] | undefined) => {
-    setSummaryColumnFilters((current) => {
-      const next = { ...current }
+    onSummaryStateChange((current) => {
+      const next = { ...current.columnFilters }
       if (values === undefined) delete next[key]
       else next[key] = values
-      return next
+      return { ...current, columnFilters: next }
     })
   }
 
@@ -725,16 +756,23 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
       setVersion((value) => value + 1)
       return
     }
+    rememberSummaryPosition()
     onSelectedRecordTargetChange(null)
     onSelectedRegistrationChange(registrationId)
     onSelectedAuthorizationChange(addAuthorization.id)
   }
-  const changeSummaryTextFilter = (key: SummaryColumn, value: string) => setSummaryTextFilters((current) => {
-    const next = { ...current }
+  const changeSummaryTextFilter = (key: SummaryColumn, value: string) => onSummaryStateChange((current) => {
+    const next = { ...current.textFilters }
     if (value) next[key] = value
     else delete next[key]
-    return next
+    return { ...current, textFilters: next }
   })
+  const openSummaryRecord = (row: InspectionRegistrationSummaryRow) => {
+    rememberSummaryPosition()
+    onSelectedRecordTargetChange(null)
+    onSelectedRegistrationChange(row.registrationId)
+    onSelectedAuthorizationChange(row.authorizationId)
+  }
 
   const applyBatchMetadata = async (event: React.FormEvent) => {
     event.preventDefault()
@@ -1440,9 +1478,9 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
           {renderInspectionDetailList('未検査詳細一覧', uninspectedDetailRows, 'uninspected')}
         </div>
       </section>}
-      {summaryView === 'list' && <div className="inspection-summary-wrap"><table className="inspection-summary-table">
+      {summaryView === 'list' && <div className="inspection-summary-wrap" ref={summaryWrapRef} onScroll={rememberSummaryPosition}><table className="inspection-summary-table">
         <thead><tr>{SUMMARY_COLUMNS.map((column) => <InspectionSummaryColumnHeader key={column.key} column={column} sort={summarySort} values={summaryFilterValues[column.key]} selectedValues={summaryColumnFilters[column.key]} textValue={summaryTextFilters[column.key] ?? ''} onSort={changeSummarySort} onFilterChange={changeSummaryColumnFilter} onTextChange={changeSummaryTextFilter} />)}{!readOnly && <th className="inspection-summary-actions-heading">操作</th>}</tr></thead>
-        <tbody>{displayedSummary.map((row, index) => <tr className={index > 0 && displayedSummary[index - 1].registrationId !== row.registrationId ? 'inspection-summary-registration-start' : undefined} key={`${row.registrationId}-${row.grade}`} tabIndex={0} onClick={() => { onSelectedRecordTargetChange(null); onSelectedRegistrationChange(row.registrationId); onSelectedAuthorizationChange(row.authorizationId) }} onKeyDown={(event) => { if (event.key === 'Enter' && event.target === event.currentTarget) { onSelectedRecordTargetChange(null); onSelectedRegistrationChange(row.registrationId); onSelectedAuthorizationChange(row.authorizationId) } }}>
+        <tbody>{displayedSummary.map((row, index) => <tr className={index > 0 && displayedSummary[index - 1].registrationId !== row.registrationId ? 'inspection-summary-registration-start' : undefined} key={`${row.registrationId}-${row.grade}`} tabIndex={0} onClick={() => openSummaryRecord(row)} onKeyDown={(event) => { if (event.key === 'Enter' && event.target === event.currentTarget) openSummaryRecord(row) }}>
           <td><span className={`inspection-completion-status ${row.inspectionStatus === '完了' ? 'complete' : 'incomplete'}`}>{row.inspectionStatus === '完了' ? <CircleCheck size={15} aria-hidden="true" /> : <CircleAlert size={15} aria-hidden="true" />}{row.inspectionStatus}</span></td>
           <td className="numeric-cell">{row.authorizationNo}</td><td>{row.settlementNo}</td><td>{row.purchaseDates}</td><td>{row.inspectionDates}</td><td><strong>{row.fullName}</strong></td><td>{row.origin}</td><td>{row.municipality}</td><td>{row.inspectionLocations}</td><td>{row.brands}</td><td>{row.grade}</td><td className="numeric-cell">{row.flexconCount}本</td><td className="numeric-cell">{row.paperBagCount}袋</td><td className="numeric-cell">{row.bulkQuantity.toLocaleString()}kg</td><td className="inspection-progress-inspected numeric-cell">{row.inspectedQuantity.toLocaleString()}kg</td><td className="inspection-progress-uninspected numeric-cell">{row.uninspectedQuantity.toLocaleString()}kg</td>
           {!readOnly && <td className="inspection-summary-actions"><button className="icon-button delete-icon" type="button" title="この登録行を削除" aria-label={`登録No. ${row.registrationNo}を削除`} disabled={busy} onClick={(event) => { event.stopPropagation(); void deleteInspectionRegistration(row) }}><Trash2 size={17} /></button></td>}
