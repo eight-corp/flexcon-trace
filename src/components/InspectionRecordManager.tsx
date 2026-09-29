@@ -11,6 +11,7 @@ import { selectedInspectionGrade } from '../lib/inspectionGrade'
 import { findWarehouseForInspectionLocation } from '../lib/inspectionWarehouse'
 import { navigateInspectionField } from '../lib/inspectionFieldNavigation'
 import { groupInspectionRecordsByDate } from '../lib/inspectionDateGroups'
+import { certificateDefaultRange } from '../lib/certificateDefaultRange'
 import type { AuthorizationRecord, FlexconInspection, InspectionOption, InspectionRegistration, InspectionWeight, PaperBagInspection } from '../types'
 
 type Props = {
@@ -1084,16 +1085,12 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
   }
   const openCertificateDialog = (kind: CertificateKind) => {
     const candidates = certificateFlexconsFor(kind)
-    const registeredCount = kind === 'bulk' ? selectedBulkFlexcons.length : selectedStandardFlexcons.length
     if (candidates.length === 0) return
     if (generatedCertificate) URL.revokeObjectURL(generatedCertificate.url)
     setGeneratedCertificate(null)
     setCertificateError('')
     setCertificateKind(kind)
-    setCertificateRange({
-      start: String(candidates[0].flexcon_no),
-      count: String(registeredCount),
-    })
+    setCertificateRange(certificateDefaultRange(candidates))
     setCertificateDialogOpen(true)
   }
   const closeCertificateDialog = () => {
@@ -1538,7 +1535,7 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
           <span aria-hidden="true">から</span>
           <label>枚数<input type="number" min="1" step="1" value={certificateRange.count} onChange={(event) => setCertificateRange((current) => ({ ...current, count: event.target.value }))} required /></label>
         </div>
-        <div className="certificate-range-summary">対象 {certificateTargets().length}本　印刷済み {certificateTargets().filter((item) => (item.certificate_print_count ?? 0) > 0).length}本</div>
+        <div className="certificate-range-summary">{!certificateRange.start && !certificateRange.count && certificateFlexconsFor(certificateKind).every((item) => (item.certificate_print_count ?? 0) > 0) ? 'すべて印刷済み' : <>対象 {certificateTargets().length}本　印刷済み {certificateTargets().filter((item) => (item.certificate_print_count ?? 0) > 0).length}本</>}</div>
         {certificateError && <div className="inline-error">{certificateError}</div>}
         <div className="modal-actions"><button className="primary-button" type="submit" disabled={certificateBusy}><FileText size={18} />{certificateBusy ? 'PDF作成中...' : 'PDFを作成'}</button><button className="secondary-button" type="button" onClick={closeCertificateDialog} disabled={certificateBusy}>取り消し</button></div>
       </form> : <div className="certificate-created-panel">

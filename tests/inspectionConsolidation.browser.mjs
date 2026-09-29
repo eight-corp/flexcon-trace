@@ -23,6 +23,7 @@ async function createDatabase() {
   await db.exec(fs.readFileSync('supabase/migrations/202609290001_consolidate_inspection_authorizations.sql', 'utf8'))
   await db.exec(fs.readFileSync('supabase/migrations/202609290002_fill_missing_inspection_metadata.sql', 'utf8'))
   await db.exec(fs.readFileSync('supabase/migrations/202609290003_inspection_metadata_range_override.sql', 'utf8'))
+  await db.exec('alter table flexcon_inspection_flexcons add column certificate_print_count integer not null default 0')
   await db.exec("insert into flexcon_inspection_options(option_type,name) values ('brand_aomori','Rice'),('grade','1等'),('grade','2等'),('inspector','Tester'),('inspector','Other')")
   return db
 }
@@ -395,6 +396,66 @@ try {
         await page.screenshot({ path: path.join(process.env.QA_ARTIFACTS, `inspection-completion-${width}.png`) })
       }
 
+      const certificateDialog = page.getByRole('dialog', { name: '検査証明書作成' })
+      const openProducer = async () => {
+        await table.locator('tbody tr').first().click()
+        await page.locator('.producer-inspection-page').waitFor()
+      }
+      const openCertificate = async kind => {
+        await page.locator('.inspection-detail-section').nth(kind === 'bulk' ? 1 : 0).getByRole('button', { name: '検査証明書作成' }).click()
+        await certificateDialog.waitFor()
+      }
+      const checkCertificateRange = async (start, count) => {
+        assert.equal(await certificateDialog.getByLabel('開始№', { exact: true }).inputValue(), start)
+        assert.equal(await certificateDialog.getByLabel('枚数', { exact: true }).inputValue(), count)
+      }
+      const closeCertificate = async () => certificateDialog.getByRole('button', { name: '閉じる', exact: true }).click()
+      const backToList = async () => page.getByRole('button', { name: '検査記録へ戻る', exact: true }).click()
+
+      await openProducer()
+      await openCertificate('standard')
+      await checkCertificateRange('2', '19') // No. 1 has a non-certificate quantity.
+      await closeCertificate()
+      await openCertificate('bulk')
+      await checkCertificateRange('1', '1')
+      await closeCertificate()
+      await backToList()
+
+      await db.exec("update flexcon_inspection_flexcons set certificate_print_count=1 where record_kind='standard' and flexcon_no between 2 and 10")
+      await reloadList()
+      await openProducer()
+      await openCertificate('standard')
+      await checkCertificateRange('11', '10')
+      await closeCertificate()
+      await backToList()
+
+      await db.exec("update flexcon_inspection_flexcons set certificate_print_count=0 where record_kind='standard' and flexcon_no=5")
+      await reloadList()
+      await openProducer()
+      await openCertificate('standard')
+      await checkCertificateRange('5', '1')
+      await certificateDialog.getByLabel('開始№', { exact: true }).fill('12')
+      await certificateDialog.getByLabel('枚数', { exact: true }).fill('2')
+      assert.match(await certificateDialog.locator('.certificate-range-summary').innerText(), /対象 2本/)
+      await closeCertificate()
+      await openCertificate('standard')
+      await checkCertificateRange('5', '1')
+      if (process.env.QA_ARTIFACTS) await page.screenshot({ path: path.join(process.env.QA_ARTIFACTS, `inspection-certificate-default-gap-${width}.png`) })
+      await closeCertificate()
+      await backToList()
+
+      await db.exec("update flexcon_inspection_flexcons set certificate_print_count=1 where record_kind='standard' and flexcon_no between 2 and 20")
+      await reloadList()
+      await openProducer()
+      await openCertificate('standard')
+      await checkCertificateRange('', '')
+      assert.equal(await certificateDialog.locator('.certificate-range-summary').innerText(), 'すべて印刷済み')
+      await certificateDialog.getByLabel('開始№', { exact: true }).fill('12')
+      await certificateDialog.getByLabel('枚数', { exact: true }).fill('2')
+      assert.match(await certificateDialog.locator('.certificate-range-summary').innerText(), /対象 2本/)
+      await closeCertificate()
+      await backToList()
+
       // Multiple producers make vertical and horizontal restoration observable.
       await db.exec(`
         insert into flexcon_authorizations(authorization_no,full_name,prefecture)
@@ -464,7 +525,7 @@ try {
       assert.equal(await page.locator('.shipment-filter-menu').getByLabel('B', { exact: true }).isChecked(), false)
       await page.keyboard.press('Escape')
       assert.deepEqual(errors, [])
-      console.log(`PASS ${width}px: date-separated summaries, complete authorization details, batch settings and list filters/sort/scroll preserved across detail round trips`)
+      console.log(`PASS ${width}px: certificate defaults, date-separated summaries, complete authorization details, batch settings and list state`)
     } finally { await context.close(); await db.close() }
   }
 } finally {
