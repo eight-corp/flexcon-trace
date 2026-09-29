@@ -22,6 +22,7 @@ async function createDatabase() {
   }
   await db.exec(fs.readFileSync('supabase/migrations/202609290001_consolidate_inspection_authorizations.sql', 'utf8'))
   await db.exec(fs.readFileSync('supabase/migrations/202609290002_fill_missing_inspection_metadata.sql', 'utf8'))
+  await db.exec(fs.readFileSync('supabase/migrations/202609290003_inspection_metadata_range_override.sql', 'utf8'))
   await db.exec("insert into flexcon_inspection_options(option_type,name) values ('brand_aomori','Rice'),('grade','1等'),('grade','2等'),('inspector','Tester'),('inspector','Other')")
   return db
 }
@@ -49,7 +50,7 @@ try {
             body = { ok: true, workerId: 'tester', workerName: 'Tester', permissions: { rice_shipping: 'admin' } }
           } else if (resource.startsWith('rpc/')) {
             const fn = resource.slice(4)
-            assert.ok(['flexcon_add_inspection_group_with_warehouse', 'flexcon_save_inspection_detail_with_settlement', 'flexcon_set_inspection_registration_metadata'].includes(fn))
+            assert.ok(['flexcon_add_inspection_group_with_warehouse', 'flexcon_save_inspection_detail_with_settlement', 'flexcon_set_inspection_registration_metadata_range'].includes(fn))
             const params = route.request().postDataJSON()
             const keys = Object.keys(params)
             assert.ok(keys.every((key) => /^p_[a-z_]+$/.test(key)))
@@ -203,21 +204,28 @@ try {
       await moistureSaved
       assert.equal(Number((await db.query('select moisture from flexcon_inspection_flexcons where id=$1::uuid', [detailId])).rows[0].moisture), 15.5)
       const batch = page.locator('.inspection-batch-metadata-form')
+      assert.equal(await batch.getByLabel('上書きする').isChecked(), false)
+      assert.equal(await batch.getByLabel('開始№', { exact: true }).isDisabled(), true)
+      assert.equal(await batch.getByLabel(/^対象/).locator('option[value="bulk"]').count(), 0)
       const beforeBatch = (await db.query('select * from flexcon_inspection_flexcons order by id')).rows
       await batch.getByPlaceholder('変更なし', { exact: true }).fill('令和8年10月1日')
       await batch.getByPlaceholder('変更なし', { exact: true }).press('Tab')
       await batch.getByLabel(/^検査員/).selectOption('Tester')
       await batch.getByLabel(/^検査場所/).selectOption('A')
       await batch.getByLabel(/^等級/).selectOption('1等')
-      const batchApplied = page.waitForResponse(response => response.url().endsWith('/rpc/flexcon_set_inspection_registration_metadata'))
+      const batchApplied = page.waitForResponse(response => response.url().endsWith('/rpc/flexcon_set_inspection_registration_metadata_range'))
       await moisture.fill('16.4')
       // Submit without blurring the edited detail to exercise the unsaved draft flush.
       await batch.evaluate(form => form.requestSubmit())
       await batchApplied
-      await page.getByText(/未設定の検査日・検査員・検査場所・等級に反映しました/).waitFor({ state: 'attached' })
+      await page.getByText(/件の明細の検査日・検査員・検査場所・等級を未設定のみ更新しました/).waitFor({ state: 'attached' })
       const afterBatch = (await db.query('select * from flexcon_inspection_flexcons order by id')).rows
       for (const original of beforeBatch) {
         const saved = afterBatch.find(row => row.id === original.id)
+        if (original.record_kind === 'bulk') {
+          assert.deepEqual(saved, original)
+          continue
+        }
         assert.equal(saved.inspection_location, original.inspection_location)
         assert.deepEqual(saved.inspection_date, original.inspection_date ?? new Date('2026-10-01'))
         assert.equal(saved.grade, original.grade || '1等')
@@ -235,11 +243,71 @@ try {
       await batch.getByLabel(/^検査員/).selectOption('Other')
       await batch.getByLabel(/^検査場所/).selectOption('B')
       await batch.getByLabel(/^等級/).selectOption('2等')
-      const repeatedBatch = page.waitForResponse(response => response.url().endsWith('/rpc/flexcon_set_inspection_registration_metadata'))
+      const repeatedBatch = page.waitForResponse(response => response.url().endsWith('/rpc/flexcon_set_inspection_registration_metadata_range'))
       await batch.getByRole('button', { name: 'まとめて反映', exact: true }).click()
       await repeatedBatch
       assert.deepEqual((await db.query('select * from flexcon_inspection_flexcons order by id')).rows, afterBatch)
       assert.deepEqual((await db.query('select * from flexcon_inspection_paper_bags')).rows[0], paperAfterBatch)
+
+      await page.getByText(/0件の明細の検査日・検査員・検査場所・等級を未設定のみ更新しました/).waitFor({ state: 'attached' })
+      await batch.getByLabel(/^対象/).selectOption('standard')
+      await batch.getByLabel('開始№', { exact: true }).fill('2')
+      await batch.getByLabel('終了№', { exact: true }).fill('3')
+      await batch.getByLabel('上書きする').check()
+      await batch.getByPlaceholder('変更なし', { exact: true }).fill('令和8年10月3日')
+      await batch.getByPlaceholder('変更なし', { exact: true }).press('Tab')
+      await batch.getByLabel(/^検査員/).selectOption('Other')
+      await batch.getByLabel(/^検査場所/).selectOption('A')
+      await batch.getByLabel(/^等級/).selectOption('2等')
+      const rangeApplied = page.waitForResponse(response => response.url().endsWith('/rpc/flexcon_set_inspection_registration_metadata_range'))
+      await batch.getByRole('button', { name: 'まとめて反映', exact: true }).click()
+      await rangeApplied
+      await page.getByText(/2件の明細の検査日・検査員・検査場所・等級を上書きしました/).waitFor({ state: 'attached' })
+      const afterRange = (await db.query('select * from flexcon_inspection_flexcons order by id')).rows
+      for (const original of afterBatch) {
+        const saved = afterRange.find(row => row.id === original.id)
+        if (original.record_kind !== 'standard' || original.flexcon_no < 2 || original.flexcon_no > 3) {
+          assert.deepEqual(saved, original)
+          continue
+        }
+        assert.equal(saved.inspector_name, 'Other')
+        assert.equal(saved.grade, '2等')
+        assert.equal(saved.inspection_location, 'A')
+        assert.deepEqual(saved.inspection_date, new Date('2026-10-03'))
+        for (const field of ['warehouse_id', 'settlement_no', 'quantity_kg', 'moisture', 'lot_number']) assert.deepEqual(saved[field], original[field])
+      }
+      assert.deepEqual((await db.query('select * from flexcon_inspection_paper_bags')).rows[0], paperAfterBatch)
+      await batch.getByLabel(/^対象/).selectOption('paper')
+      assert.equal(await batch.getByLabel('開始№', { exact: true }).inputValue(), '')
+      assert.equal(await batch.getByLabel('終了№', { exact: true }).isDisabled(), true)
+      await batch.getByLabel(/^検査場所/).selectOption('A')
+      const paperApplied = page.waitForResponse(response => response.url().endsWith('/rpc/flexcon_set_inspection_registration_metadata_range'))
+      await batch.getByRole('button', { name: 'まとめて反映', exact: true }).click()
+      await paperApplied
+      await page.getByText(/1件の明細の検査場所を上書きしました/).waitFor({ state: 'attached' })
+      assert.deepEqual((await db.query('select * from flexcon_inspection_flexcons order by id')).rows, afterRange)
+      const paperAfterRange = (await db.query('select * from flexcon_inspection_paper_bags')).rows[0]
+      assert.equal(paperAfterRange.inspection_location, 'A')
+      for (const field of ['grade', 'inspector_name', 'inspection_date', 'warehouse_id', 'bag_count', 'settlement_no']) assert.deepEqual(paperAfterRange[field], paperAfterBatch[field])
+      await batch.getByLabel(/^対象/).selectOption('standard')
+      await batch.getByLabel('開始№', { exact: true }).fill('2')
+      await batch.getByLabel('終了№', { exact: true }).fill('3')
+      const positions = await batch.evaluate(form => Array.from(form.children).map(el => {
+        const rect = el.getBoundingClientRect()
+        return rect.y + rect.height / 2
+      }))
+      assert.ok(Math.max(...positions) - Math.min(...positions) <= 1, 'all batch controls stay in one row')
+      const batchBand = page.locator('.inspection-batch-metadata')
+      if (width === 390) {
+        assert.ok(await batchBand.evaluate(el => el.scrollWidth > el.clientWidth))
+        await batchBand.evaluate(el => { el.scrollLeft = el.scrollWidth })
+        const buttonBox = await batch.getByRole('button', { name: 'まとめて反映', exact: true }).boundingBox()
+        assert.ok(buttonBox.x >= 0 && buttonBox.x + buttonBox.width <= width)
+        if (process.env.QA_ARTIFACTS) await page.screenshot({ path: path.join(process.env.QA_ARTIFACTS, `inspection-batch-range-end-${width}.png`) })
+      }
+      await batchBand.evaluate(el => { el.scrollLeft = 0 })
+      await detailPage.evaluate(el => { el.scrollTop = 0 })
+      if (process.env.QA_ARTIFACTS) await page.screenshot({ path: path.join(process.env.QA_ARTIFACTS, `inspection-batch-range-${width}.png`) })
       if (process.env.QA_ARTIFACTS) await page.screenshot({ path: path.join(process.env.QA_ARTIFACTS, `inspection-consolidated-detail-${width}.png`) })
       await page.getByRole('button', { name: '検査記録へ戻る', exact: true }).click()
       await table.locator('tbody tr').first().waitFor()
@@ -277,7 +345,7 @@ try {
         await page.screenshot({ path: path.join(process.env.QA_ARTIFACTS, `inspection-completion-${width}.png`) })
       }
       assert.deepEqual(errors, [])
-      console.log(`PASS ${width}px: additions, navigation, completion, sticky heading and missing-only batch settings with unsaved edits preserved`)
+      console.log(`PASS ${width}px: additions, navigation, completion, sticky heading, batch ranges/overwrite and bulk exclusion with unsaved edits preserved`)
     } finally { await context.close(); await db.close() }
   }
 } finally {

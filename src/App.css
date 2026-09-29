@@ -767,14 +767,17 @@
 .producer-inspection-heading h1 { margin: 0; }
 .producer-inspection-heading p { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
 .producer-inspection-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; justify-self: end; gap: 8px; }
-.inspection-batch-metadata { padding: 10px 12px; border-color: #9dbca7; background: #f6fbf7; }
-.inspection-batch-metadata .section-title { margin-bottom: 8px; }
-.inspection-batch-metadata .section-title > div { display: flex; align-items: baseline; gap: 9px; }
-.inspection-batch-metadata .section-title h2 { margin: 0; font-size: 17px; }
-.inspection-batch-metadata .section-title span { color: var(--muted); font-size: 12px; }
-.inspection-batch-metadata-form { display: grid; grid-template-columns: 150px minmax(145px, 1fr) minmax(160px, 1fr) minmax(100px, .65fr) auto; align-items: end; gap: 8px; }
-.inspection-batch-metadata-form label { min-width: 0; margin: 0; font-size: 12px; }
-.inspection-batch-metadata-form input, .inspection-batch-metadata-form select { width: 100%; min-width: 0; height: 34px; min-height: 34px; }
+.inspection-batch-metadata { padding: 10px 12px; border-color: #9dbca7; background: #f6fbf7; overflow-x: auto; }
+.inspection-batch-metadata-form { display: flex; flex-wrap: nowrap; width: max-content; min-width: 100%; max-width: none; align-items: center; gap: 8px; }
+.inspection-batch-metadata-form h2 { margin: 0; font-size: 14px; white-space: nowrap; }
+.inspection-batch-metadata-form label { display: flex; flex: none; align-items: center; gap: 4px; margin: 0; font-size: 12px; white-space: nowrap; }
+.inspection-batch-metadata-form input, .inspection-batch-metadata-form select { width: 105px; min-width: 0; height: 34px; min-height: 34px; }
+.inspection-batch-metadata-form .batch-target select { width: 118px; }
+.inspection-batch-metadata-form .japanese-date-input { width: 148px; }
+.inspection-batch-metadata-form .japanese-date-input input { width: 100%; }
+.inspection-batch-metadata-form .batch-number-range { display: flex; flex: none; align-items: center; gap: 4px; }
+.inspection-batch-metadata-form .batch-number-range input { width: 52px; }
+.inspection-batch-metadata-form .batch-overwrite input { width: 16px; height: 16px; min-height: 16px; margin: 0; }
 .inspection-batch-metadata-form .primary-button { height: 34px; min-height: 34px; white-space: nowrap; }
 .inspection-registration-settlement form { display: grid; grid-template-columns: minmax(140px, 280px) auto; align-items: end; justify-content: start; gap: 8px; }
 .inspection-registration-settlement label { min-width: 0; margin: 0; font-size: 12px; }
@@ -1143,9 +1146,6 @@ table thead th { text-align: center !important; }
   .producer-inspection-heading { grid-template-columns: 42px minmax(0, 1fr); }
   .producer-inspection-actions { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr; width: 100%; justify-self: stretch; }
   .producer-inspection-actions > button { width: 100%; }
-  .inspection-batch-metadata .section-title > div { align-items: flex-start; flex-direction: column; gap: 2px; }
-  .inspection-batch-metadata-form { grid-template-columns: 1fr; }
-  .inspection-batch-metadata-form .primary-button { width: 100%; }
   .inspection-group-add { grid-template-columns: 1fr; }
   .inspection-detail-section .section-title { align-items: stretch; flex-direction: column; }
   .inspection-detail-section .section-title .button-row > * { flex: 1; }

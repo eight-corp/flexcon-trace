@@ -56,10 +56,18 @@ type DetailAdditionKind = 'standard' | 'paper' | 'bulk'
 type DetailAdditionDraft = { registrationId: string; kind: DetailAdditionKind; form: AddGroupForm }
 type BatchInspectionMetadata = {
   registration_id: string | null
+  target_kind: 'all' | 'standard' | 'paper'
+  start_no: string
+  end_no: string
+  overwrite: boolean
   inspection_date: string
   inspector_name: string
   inspection_location: string
   grade: string
+}
+const EMPTY_BATCH_METADATA: Omit<BatchInspectionMetadata, 'registration_id'> = {
+  target_kind: 'all', start_no: '', end_no: '', overwrite: false,
+  inspection_date: '', inspector_name: '', inspection_location: '', grade: '',
 }
 type GeneratedCertificate = {
   url: string
@@ -309,7 +317,7 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
   const [addGroupFormOpen, setAddGroupFormOpen] = useState(false)
   const [producerPickerOpen, setProducerPickerOpen] = useState(false)
   const [detailDrafts, setDetailDrafts] = useState<Record<string, InlineDetailDraft>>({})
-  const [batchMetadataDraft, setBatchMetadataDraft] = useState<BatchInspectionMetadata>({ registration_id: null, inspection_date: '', inspector_name: '', inspection_location: '', grade: '' })
+  const [batchMetadataDraft, setBatchMetadataDraft] = useState<BatchInspectionMetadata>({ registration_id: null, ...EMPTY_BATCH_METADATA })
   const [batchMetadataBusy, setBatchMetadataBusy] = useState(false)
   const batchMetadataBusyRef = useRef(false)
   const [splitPaper, setSplitPaper] = useState<PaperBagInspection | null>(null)
@@ -434,11 +442,16 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
   const selectedRegistrationRecords: Array<FlexconInspection | PaperBagInspection> = [...selectedFlexcons, ...selectedPaperBags]
   const batchMetadata = batchMetadataDraft.registration_id === selectedRegistrationId ? batchMetadataDraft : {
     registration_id: selectedRegistrationId,
-    inspection_date: '',
-    inspector_name: '',
-    inspection_location: '',
-    grade: '',
+    ...EMPTY_BATCH_METADATA,
   }
+  const batchStartNo = batchMetadata.start_no.trim() === '' ? null : Number(batchMetadata.start_no)
+  const batchEndNo = batchMetadata.end_no.trim() === '' ? null : Number(batchMetadata.end_no)
+  const batchTargetRecords: Array<FlexconInspection | PaperBagInspection> = batchMetadata.target_kind === 'paper' ? selectedPaperBags : [
+    ...selectedStandardFlexcons.filter((item) => batchMetadata.target_kind === 'all' || (
+      (batchStartNo === null || item.flexcon_no >= batchStartNo) && (batchEndNo === null || item.flexcon_no <= batchEndNo)
+    )),
+    ...(batchMetadata.target_kind === 'all' ? selectedPaperBags : []),
+  ]
   const changeBatchMetadata = (values: Partial<BatchInspectionMetadata>) => {
     setBatchMetadataDraft({ ...batchMetadata, registration_id: selectedRegistrationId, ...values })
   }
@@ -656,8 +669,8 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
   const locationOptions = inspectionOptions.filter((item) => item.active && item.option_type === 'location')
   const inspectorOptions = inspectionOptions.filter((item) => item.active && item.option_type === 'inspector')
   const gradeOptions = inspectionOptions.filter((item) => item.active && item.option_type === 'grade' && Boolean(selectedInspectionGrade(item.name)))
-  const batchUngradedRecords = selectedRegistrationRecords.filter((item) => !(detailDrafts[item.id]?.grade ?? item.grade)?.trim())
-  const batchGradeOptions = gradeOptions.filter((option) => batchUngradedRecords.every((item) => isGradeAllowedForBrand(detailDrafts[item.id]?.brand ?? item.brand ?? '', option.name)))
+  const batchGradeTargets = batchTargetRecords.filter((item) => batchMetadata.overwrite || !(detailDrafts[item.id]?.grade ?? item.grade)?.trim())
+  const batchGradeOptions = gradeOptions.filter((option) => batchGradeTargets.every((item) => isGradeAllowedForBrand(detailDrafts[item.id]?.brand ?? item.brand ?? '', option.name)))
   const reasonOptions = inspectionOptions.filter((item) => item.active && item.option_type === 'grade_reason')
   const selectedBrandType = brandTypeForPrefecture(selectedAuthorization?.prefecture ?? null)
   const brandOptions = inspectionOptions.filter((item) => item.active && (item.option_type === selectedBrandType || item.option_type === 'brand'))
@@ -726,6 +739,11 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
   const applyBatchMetadata = async (event: React.FormEvent) => {
     event.preventDefault()
     if (!selectedRegistration || batchMetadataBusyRef.current) return
+    if (batchMetadata.target_kind === 'standard') {
+      if ([batchStartNo, batchEndNo].some((value) => value !== null && (!Number.isInteger(value) || value < 1 || value > 2147483647))) return setNotice({ type: 'error', text: '番号範囲は1以上の整数で入力してください。' })
+      if (batchStartNo !== null && batchEndNo !== null && batchStartNo > batchEndNo) return setNotice({ type: 'error', text: '開始№は終了№以下にしてください。' })
+    }
+    if (batchTargetRecords.length === 0) return setNotice({ type: 'error', text: '指定した対象・番号範囲に明細がありません。' })
     const selectedFields = [
       batchMetadata.inspection_date && '検査日',
       batchMetadata.inspector_name && '検査員',
@@ -733,7 +751,7 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
       batchMetadata.grade && '等級',
     ].filter(Boolean)
     if (selectedFields.length === 0) return setNotice({ type: 'error', text: '反映する項目を1つ以上入力してください。' })
-    if (batchMetadata.grade && !batchUngradedRecords.every((item) => isGradeAllowedForBrand(detailDrafts[item.id]?.brand ?? item.brand ?? '', batchMetadata.grade))) return setNotice({ type: 'error', text: '未設定の明細の銘柄に設定できない等級が選択されています。' })
+    if (batchMetadata.grade && !batchGradeTargets.every((item) => isGradeAllowedForBrand(detailDrafts[item.id]?.brand ?? item.brand ?? '', batchMetadata.grade))) return setNotice({ type: 'error', text: '対象の明細の銘柄に設定できない等級が選択されています。' })
 
     batchMetadataBusyRef.current = true
     setBatchMetadataBusy(true)
@@ -748,20 +766,24 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
         const saved = await saveInlineDetail('quantity_kg' in item ? 'flexcon' : 'paper', item, {}, true)
         if (!saved) return
       }
-      const { error } = await supabase.rpc('flexcon_set_inspection_registration_metadata', {
+      const { data, error } = await supabase.rpc('flexcon_set_inspection_registration_metadata_range', {
         p_worker_id: workerId,
         p_registration_id: selectedRegistration.id,
         p_inspection_date: batchMetadata.inspection_date || null,
         p_inspector_name: batchMetadata.inspector_name || null,
         p_inspection_location: batchMetadata.inspection_location || null,
         p_grade: batchMetadata.grade || null,
+        p_target_kind: batchMetadata.target_kind,
+        p_start_no: batchMetadata.target_kind === 'standard' ? batchStartNo : null,
+        p_end_no: batchMetadata.target_kind === 'standard' ? batchEndNo : null,
+        p_overwrite: batchMetadata.overwrite,
       })
       if (error) return setNotice({ type: 'error', text: error.message })
 
       detailDraftsRef.current = {}
       setDetailDrafts({})
-      setBatchMetadataDraft({ registration_id: selectedRegistration.id, inspection_date: '', inspector_name: '', inspection_location: '', grade: '' })
-      setNotice({ type: 'success', text: `登録No. ${selectedRegistration.registration_no}の未設定の${selectedFields.join('・')}に反映しました。` })
+      setBatchMetadataDraft({ ...batchMetadata, registration_id: selectedRegistration.id, inspection_date: '', inspector_name: '', inspection_location: '', grade: '' })
+      setNotice({ type: 'success', text: `${Number(data)}件の明細の${selectedFields.join('・')}を${batchMetadata.overwrite ? '上書き' : '未設定のみ更新'}しました。` })
       setVersion((value) => value + 1)
     } catch (error) {
       setNotice({ type: 'error', text: error instanceof Error ? error.message : '一括設定に失敗しました。' })
@@ -1441,13 +1463,16 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
       </div>}
     </div>
     {!readOnly && selectedRegistration && <section className="section-band inspection-batch-metadata">
-      <div className="section-title"><div><h2>検査情報を一括設定</h2><span>未設定の項目のみ反映</span></div></div>
       <form className="inspection-batch-metadata-form" onSubmit={(event) => void applyBatchMetadata(event)}>
+        <h2>一括設定</h2>
+        <label className="batch-target">対象<select value={batchMetadata.target_kind} disabled={batchMetadataBusy} onChange={(event) => changeBatchMetadata({ target_kind: event.target.value as BatchInspectionMetadata['target_kind'], start_no: '', end_no: '', grade: '' })}><option value="all">推フレ・紙袋</option><option value="standard">推フレ</option><option value="paper">紙袋</option></select></label>
+        <div className="batch-number-range"><label>№<input aria-label="開始№" type="text" inputMode="numeric" value={batchMetadata.start_no} disabled={batchMetadataBusy || batchMetadata.target_kind !== 'standard'} onChange={(event) => changeBatchMetadata({ start_no: event.target.value, grade: '' })} /></label><span>～</span><input aria-label="終了№" type="text" inputMode="numeric" value={batchMetadata.end_no} disabled={batchMetadataBusy || batchMetadata.target_kind !== 'standard'} onChange={(event) => changeBatchMetadata({ end_no: event.target.value, grade: '' })} /></div>
         <label>検査日<JapaneseDateInput value={batchMetadata.inspection_date} placeholder="変更なし" disabled={batchMetadataBusy} onChange={(inspection_date) => changeBatchMetadata({ inspection_date })} /></label>
         <label>検査員<select value={batchMetadata.inspector_name} disabled={batchMetadataBusy} onChange={(event) => changeBatchMetadata({ inspector_name: event.target.value })}><option value="">変更なし</option>{inspectorOptions.map((option) => <option key={option.id} value={option.name}>{option.name}</option>)}</select></label>
         <label>検査場所<select value={batchMetadata.inspection_location} disabled={batchMetadataBusy} onChange={(event) => changeBatchMetadata({ inspection_location: event.target.value })}><option value="">変更なし</option>{locationOptions.map((option) => <option key={option.id} value={option.name}>{option.name}</option>)}</select></label>
         <label>等級<select value={batchMetadata.grade} disabled={batchMetadataBusy} onChange={(event) => changeBatchMetadata({ grade: event.target.value })}><option value="">変更なし</option>{batchGradeOptions.map((option) => <option key={option.id} value={option.name}>{option.name}</option>)}</select></label>
-        <button className="primary-button" type="submit" disabled={batchMetadataBusy}><Save size={18} />{batchMetadataBusy ? '設定中...' : 'まとめて反映'}</button>
+        <label className="batch-overwrite"><input type="checkbox" checked={batchMetadata.overwrite} disabled={batchMetadataBusy} onChange={(event) => changeBatchMetadata({ overwrite: event.target.checked, grade: '' })} />上書きする</label>
+        <button className="primary-button" type="submit" disabled={batchMetadataBusy}><Save size={16} />{batchMetadataBusy ? '設定中...' : 'まとめて反映'}</button>
       </form>
     </section>}
     {renderFlexconSection('推フレ', selectedStandardFlexcons, 'standard')}
