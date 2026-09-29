@@ -10,6 +10,7 @@ import { formatPrefectureName } from '../lib/prefecture'
 import { selectedInspectionGrade } from '../lib/inspectionGrade'
 import { findWarehouseForInspectionLocation } from '../lib/inspectionWarehouse'
 import { navigateInspectionField } from '../lib/inspectionFieldNavigation'
+import { groupInspectionRecordsByDate } from '../lib/inspectionDateGroups'
 import type { AuthorizationRecord, FlexconInspection, InspectionOption, InspectionRegistration, InspectionWeight, PaperBagInspection } from '../types'
 
 type Props = {
@@ -120,6 +121,7 @@ type InspectionRegistrationSummaryRow = {
   authorizationId: string
   purchaseDates: string
   inspectionDates: string
+  inspectionDate: string | null
   fullName: string
   origin: string
   municipality: string
@@ -463,14 +465,14 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
     ].some((value) => String(value ?? '').toLowerCase().includes(term))).slice(0, 20)
   }, [addGroupForm.producer_name, authorizations])
   const selectedFlexcons = flexcons
-    .filter((item) => item.authorization_id === selectedAuthorizationId && (readOnly || !selectedRegistrationId || item.registration_id === selectedRegistrationId))
+    .filter((item) => item.authorization_id === selectedAuthorizationId)
     .sort((left, right) => left.flexcon_no - right.flexcon_no)
   const selectedStandardFlexcons = selectedFlexcons.filter((item) => flexconRecordKind(item, weights) === 'standard')
   const selectedBulkFlexcons = selectedFlexcons.filter((item) => flexconRecordKind(item, weights) === 'bulk')
   const standardCertificateFlexcons = selectedStandardFlexcons.filter((item) => (
     isFeedRiceBrand(item.brand ?? '') || item.quantity_kg === weights.branded_rice
   ))
-  const selectedPaperBags = paperBags.filter((item) => item.authorization_id === selectedAuthorizationId && (readOnly || !selectedRegistrationId || item.registration_id === selectedRegistrationId))
+  const selectedPaperBags = paperBags.filter((item) => item.authorization_id === selectedAuthorizationId)
   const selectedRegistration = registrations.find((item) => item.id === selectedRegistrationId) ?? null
   const certificateFlexconsFor = (kind: CertificateKind) => kind === 'bulk' ? selectedBulkFlexcons : standardCertificateFlexcons
   const selectedRegistrationRecords: Array<FlexconInspection | PaperBagInspection> = [...selectedFlexcons, ...selectedPaperBags]
@@ -480,12 +482,12 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
   }
   const batchStartNo = batchMetadata.start_no.trim() === '' ? null : Number(batchMetadata.start_no)
   const batchEndNo = batchMetadata.end_no.trim() === '' ? null : Number(batchMetadata.end_no)
-  const batchTargetRecords: Array<FlexconInspection | PaperBagInspection> = batchMetadata.target_kind === 'paper' ? selectedPaperBags : [
+  const batchTargetRecords: Array<FlexconInspection | PaperBagInspection> = (batchMetadata.target_kind === 'paper' ? selectedPaperBags : [
     ...selectedStandardFlexcons.filter((item) => batchMetadata.target_kind === 'all' || (
       (batchStartNo === null || item.flexcon_no >= batchStartNo) && (batchEndNo === null || item.flexcon_no <= batchEndNo)
     )),
     ...(batchMetadata.target_kind === 'all' ? selectedPaperBags : []),
-  ]
+  ]).filter((item) => item.registration_id === selectedRegistrationId)
   const changeBatchMetadata = (values: Partial<BatchInspectionMetadata>) => {
     setBatchMetadataDraft({ ...batchMetadata, registration_id: selectedRegistrationId, ...values })
   }
@@ -509,36 +511,39 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
       if (!authorization) return []
       const registeredFlexcons = flexconsByRegistration.get(registration.id) ?? []
       const registeredPaperBags = paperBagsByRegistration.get(registration.id) ?? []
-      const records: Array<FlexconInspection | PaperBagInspection> = [...registeredFlexcons, ...registeredPaperBags]
-      if (records.length === 0) return []
-
-      const grade = joinDistinct(records.map((item) => selectedInspectionGrade(item.grade) || '未入力'))
-      const standardFlexcons = registeredFlexcons.filter((item) => flexconRecordKind(item, weights) === 'standard')
-      const bulkFlexcons = registeredFlexcons.filter((item) => flexconRecordKind(item, weights) === 'bulk')
-      const quantityFor = (item: FlexconInspection | PaperBagInspection) => (
-        'quantity_kg' in item ? item.quantity_kg : item.bag_count * 30
-      )
-      return [{
-        registrationId: registration.id,
-        registrationNo: registration.registration_no,
-        settlementNo: joinDistinct(records.map((item) => item.settlement_no ?? registration.settlement_no)),
-        authorizationId: authorization.id,
-        purchaseDates: joinDistinct(records.map((item) => item.purchase_date), (value) => formatDisplayDate(value, calendarMode)),
-        inspectionDates: joinDistinct(records.map((item) => item.inspection_date), (value) => formatDisplayDate(value, calendarMode)),
-        fullName: authorization.full_name,
-        origin: formatPrefectureName(authorization.prefecture),
-        municipality: authorization.municipality ?? '',
-        inspectionLocations: joinDistinct(records.map((item) => item.inspection_location)),
-        authorizationNo: authorization.authorization_no,
-        brands: joinDistinct(records.map((item) => item.brand)),
-        grade,
-        flexconCount: standardFlexcons.length,
-        paperBagCount: registeredPaperBags.reduce((total, item) => total + item.bag_count, 0),
-        bulkQuantity: bulkFlexcons.reduce((total, item) => total + item.quantity_kg, 0),
-        inspectedQuantity: records.filter(isInspectionResultComplete).reduce((total, item) => total + quantityFor(item), 0),
-        uninspectedQuantity: records.filter((item) => !isInspectionResultComplete(item)).reduce((total, item) => total + quantityFor(item), 0),
-        inspectionStatus: records.every(isInspectionResultComplete) ? '完了' : '未完了',
-      }]
+      const registrationRecords: Array<FlexconInspection | PaperBagInspection> = [...registeredFlexcons, ...registeredPaperBags]
+      return groupInspectionRecordsByDate(registrationRecords).map(([inspectionDate, records]): InspectionRegistrationSummaryRow => {
+        const dateFlexcons = records.filter((item): item is FlexconInspection => 'quantity_kg' in item)
+        const datePaperBags = records.filter((item): item is PaperBagInspection => !('quantity_kg' in item))
+        const grade = joinDistinct(records.map((item) => selectedInspectionGrade(item.grade) || '未入力'))
+        const standardFlexcons = dateFlexcons.filter((item) => flexconRecordKind(item, weights) === 'standard')
+        const bulkFlexcons = dateFlexcons.filter((item) => flexconRecordKind(item, weights) === 'bulk')
+        const quantityFor = (item: FlexconInspection | PaperBagInspection) => (
+          'quantity_kg' in item ? item.quantity_kg : item.bag_count * 30
+        )
+        return {
+          registrationId: registration.id,
+          registrationNo: registration.registration_no,
+          settlementNo: joinDistinct(records.map((item) => item.settlement_no ?? registration.settlement_no)),
+          authorizationId: authorization.id,
+          purchaseDates: joinDistinct(records.map((item) => item.purchase_date), (value) => formatDisplayDate(value, calendarMode)),
+          inspectionDate,
+          inspectionDates: inspectionDate ? formatDisplayDate(inspectionDate, calendarMode) : '',
+          fullName: authorization.full_name,
+          origin: formatPrefectureName(authorization.prefecture),
+          municipality: authorization.municipality ?? '',
+          inspectionLocations: joinDistinct(records.map((item) => item.inspection_location)),
+          authorizationNo: authorization.authorization_no,
+          brands: joinDistinct(records.map((item) => item.brand)),
+          grade,
+          flexconCount: standardFlexcons.length,
+          paperBagCount: datePaperBags.reduce((total, item) => total + item.bag_count, 0),
+          bulkQuantity: bulkFlexcons.reduce((total, item) => total + item.quantity_kg, 0),
+          inspectedQuantity: records.filter(isInspectionResultComplete).reduce((total, item) => total + quantityFor(item), 0),
+          uninspectedQuantity: records.filter((item) => !isInspectionResultComplete(item)).reduce((total, item) => total + quantityFor(item), 0),
+          inspectionStatus: records.every(isInspectionResultComplete) ? '完了' : '未完了',
+        }
+      })
     }).sort((left, right) => left.registrationNo - right.registrationNo)
   }, [authorizations, flexcons, paperBags, registrations, weights, calendarMode])
   const summaryFilterValues = useMemo(() => Object.fromEntries(SUMMARY_COLUMNS.map((column) => [
@@ -583,7 +588,7 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
       `紙袋 ${registrationRows.reduce((total, item) => total + item.paperBagCount, 0)}袋`,
       `バラ ${registrationRows.reduce((total, item) => total + item.bulkQuantity, 0).toLocaleString()}kg`,
     ].join('、')
-    if (!window.confirm(`登録No. ${row.registrationNo}（${row.fullName}）の全等級を削除しますか？\n${details}\n\nこの操作は取り消せません。`)) return
+    if (!window.confirm(`登録No. ${row.registrationNo}（${row.fullName}）のすべての検査日の明細を削除しますか？\n${details}\n\n選択した検査日の行だけではなく、この登録全体が対象です。この操作は取り消せません。`)) return
 
     setBusy(true)
     setNotice(null)
@@ -1480,10 +1485,10 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
       </section>}
       {summaryView === 'list' && <div className="inspection-summary-wrap" ref={summaryWrapRef} onScroll={rememberSummaryPosition}><table className="inspection-summary-table">
         <thead><tr>{SUMMARY_COLUMNS.map((column) => <InspectionSummaryColumnHeader key={column.key} column={column} sort={summarySort} values={summaryFilterValues[column.key]} selectedValues={summaryColumnFilters[column.key]} textValue={summaryTextFilters[column.key] ?? ''} onSort={changeSummarySort} onFilterChange={changeSummaryColumnFilter} onTextChange={changeSummaryTextFilter} />)}{!readOnly && <th className="inspection-summary-actions-heading">操作</th>}</tr></thead>
-        <tbody>{displayedSummary.map((row, index) => <tr className={index > 0 && displayedSummary[index - 1].registrationId !== row.registrationId ? 'inspection-summary-registration-start' : undefined} key={`${row.registrationId}-${row.grade}`} tabIndex={0} onClick={() => openSummaryRecord(row)} onKeyDown={(event) => { if (event.key === 'Enter' && event.target === event.currentTarget) openSummaryRecord(row) }}>
+        <tbody>{displayedSummary.map((row, index) => <tr className={index > 0 && displayedSummary[index - 1].registrationId !== row.registrationId ? 'inspection-summary-registration-start' : undefined} key={JSON.stringify([row.registrationId, row.inspectionDate])} tabIndex={0} onClick={() => openSummaryRecord(row)} onKeyDown={(event) => { if (event.key === 'Enter' && event.target === event.currentTarget) openSummaryRecord(row) }}>
           <td><span className={`inspection-completion-status ${row.inspectionStatus === '完了' ? 'complete' : 'incomplete'}`}>{row.inspectionStatus === '完了' ? <CircleCheck size={15} aria-hidden="true" /> : <CircleAlert size={15} aria-hidden="true" />}{row.inspectionStatus}</span></td>
           <td className="numeric-cell">{row.authorizationNo}</td><td>{row.settlementNo}</td><td>{row.purchaseDates}</td><td>{row.inspectionDates}</td><td><strong>{row.fullName}</strong></td><td>{row.origin}</td><td>{row.municipality}</td><td>{row.inspectionLocations}</td><td>{row.brands}</td><td>{row.grade}</td><td className="numeric-cell">{row.flexconCount}本</td><td className="numeric-cell">{row.paperBagCount}袋</td><td className="numeric-cell">{row.bulkQuantity.toLocaleString()}kg</td><td className="inspection-progress-inspected numeric-cell">{row.inspectedQuantity.toLocaleString()}kg</td><td className="inspection-progress-uninspected numeric-cell">{row.uninspectedQuantity.toLocaleString()}kg</td>
-          {!readOnly && <td className="inspection-summary-actions"><button className="icon-button delete-icon" type="button" title="この登録行を削除" aria-label={`登録No. ${row.registrationNo}を削除`} disabled={busy} onClick={(event) => { event.stopPropagation(); void deleteInspectionRegistration(row) }}><Trash2 size={17} /></button></td>}
+          {!readOnly && <td className="inspection-summary-actions"><button className="icon-button delete-icon" type="button" title="この登録の全検査日の明細を削除" aria-label={`登録No. ${row.registrationNo}の全検査日の明細を削除`} disabled={busy} onClick={(event) => { event.stopPropagation(); void deleteInspectionRegistration(row) }}><Trash2 size={17} /></button></td>}
         </tr>)}
         {displayedSummary.length === 0 && <tr><td colSpan={SUMMARY_COLUMNS.length + (readOnly ? 0 : 1)} className="empty-state">該当する検査記録はありません</td></tr>}</tbody>
       </table></div>}
