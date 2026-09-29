@@ -72,8 +72,10 @@ try {
       assert.equal(await table.locator('tbody tr').count(), 1)
       assert.match(await table.locator('tbody tr').first().innerText(), /OLD-A、OLD-B/)
       assert.match(await table.locator('tbody tr').first().innerText(), /1等、未入力/)
-      assert.match(await table.locator('thead th').last().innerText(), /検査状況/)
-      assert.equal(await table.locator('tbody tr').first().locator('td').last().innerText(), '未完了')
+      assert.match(await table.locator('thead th').first().innerText(), /検査状況/)
+      assert.match(await table.locator('thead th').nth(1).innerText(), /委任状/)
+      assert.equal(await table.locator('thead th').last().innerText(), '操作')
+      assert.equal(await table.locator('tbody tr').first().locator('td').first().innerText(), '未完了')
       const heading = page.locator('.inspection-summary-heading')
       const addButton = heading.getByRole('button', { name: '追加', exact: true })
       const descriptionBox = await heading.locator('p').boundingBox()
@@ -243,12 +245,12 @@ try {
       await table.locator('tbody tr').first().waitFor()
       assert.equal(await table.locator('tbody tr').count(), 1)
       assert.match(await table.locator('tbody tr').first().innerText(), new RegExp(`UI-${width}`))
-      assert.equal(await table.locator('tbody tr').first().locator('td').last().innerText(), '未完了')
+      assert.equal(await table.locator('tbody tr').first().locator('td').first().innerText(), '未完了')
       if (process.env.QA_ARTIFACTS) await page.screenshot({ path: path.join(process.env.QA_ARTIFACTS, `inspection-consolidated-list-${width}.png`) })
 
       // Confirm all three detail kinds contribute to the binary completion status.
       await db.exec("update flexcon_inspection_flexcons set inspection_date='2026-09-29', inspector_name='Tester', grade='1等', moisture=15; update flexcon_inspection_paper_bags set inspection_date='2026-09-29', inspector_name='Tester', grade='1等', moisture=15")
-      const statusCell = table.locator('tbody tr').first().locator('td').last()
+      const statusCell = table.locator('tbody tr').first().locator('td').first()
       const reloadList = async () => {
         await page.reload()
         await page.getByRole('button', { name: '検査記録', exact: true }).click()
