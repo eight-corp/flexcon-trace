@@ -110,6 +110,8 @@ export type InspectionRecord = {
 
 export type FlexconInspection = {
   id: string
+  warehouse_id: string
+  settlement_no: string
   registration_id: string
   authorization_id: string
   fiscal_year: number
@@ -137,6 +139,8 @@ export type FlexconInspection = {
 
 export type PaperBagInspection = {
   id: string
+  warehouse_id: string
+  settlement_no: string
   registration_id: string
   authorization_id: string
   fiscal_year: number

@@ -9,6 +9,7 @@ import { TableColumnFilter } from './TableColumnFilter'
 import { formatPrefectureName } from '../lib/prefecture'
 import { selectedInspectionGrade } from '../lib/inspectionGrade'
 import { findWarehouseForInspectionLocation } from '../lib/inspectionWarehouse'
+import { navigateInspectionField } from '../lib/inspectionFieldNavigation'
 import type { AuthorizationRecord, FlexconInspection, InspectionOption, InspectionRegistration, InspectionWeight, PaperBagInspection } from '../types'
 
 type Props = {
@@ -39,6 +40,7 @@ type AddGroupForm = {
   bulk_quantity_kg: string
 }
 type InlineDetailDraft = {
+  settlement_no: string
   fiscal_year: string
   purchase_date: string
   inspection_date: string
@@ -145,7 +147,6 @@ const DEFAULT_BRANDED_RICE_WEIGHT = 1020
 const DEFAULT_FEED_RICE_WEIGHT = 1000
 const INLINE_DETAIL_SAVE_DELAY_MS = 2_000
 const AUTHORIZATION_NO_COLLATOR = new Intl.Collator('ja', { numeric: true, sensitivity: 'base' })
-const SUMMARY_GRADE_ORDER = ['1等', '2等', '3等', '合格', '未入力']
 
 function currentFiscalYear() { return new Date().getFullYear() - 2018 }
 function westernYear(fiscalYear: number) { return fiscalYear >= 2000 ? fiscalYear : fiscalYear + 2018 }
@@ -303,7 +304,6 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
   const [inspectionOptions, setInspectionOptions] = useState<InspectionOption[]>([])
   const [weights, setWeights] = useState<Record<InspectionWeight['weight_type'], number>>({ branded_rice: DEFAULT_BRANDED_RICE_WEIGHT, feed_rice: DEFAULT_FEED_RICE_WEIGHT })
   const [addGroupForm, setAddGroupForm] = useState<AddGroupForm>(emptyAddGroupForm)
-  const [registrationSettlementDraft, setRegistrationSettlementDraft] = useState<{ registrationId: string; value: string } | null>(null)
   const [addGroupFormOpen, setAddGroupFormOpen] = useState(false)
   const [producerPickerOpen, setProducerPickerOpen] = useState(false)
   const [detailDrafts, setDetailDrafts] = useState<Record<string, InlineDetailDraft>>({})
@@ -462,49 +462,33 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
       const records: Array<FlexconInspection | PaperBagInspection> = [...registeredFlexcons, ...registeredPaperBags]
       if (records.length === 0) return []
 
-      const gradeGroups = new Map<string, Array<FlexconInspection | PaperBagInspection>>()
-      records.forEach((item) => {
-        const grade = selectedInspectionGrade(item.grade) || '未入力'
-        gradeGroups.set(grade, [...(gradeGroups.get(grade) ?? []), item])
-      })
-
-      return [...gradeGroups.entries()].map(([grade, gradeRecords]) => {
-        const gradeFlexcons = gradeRecords.filter((item): item is FlexconInspection => 'quantity_kg' in item)
-        const gradePaperBags = gradeRecords.filter((item): item is PaperBagInspection => 'bag_count' in item)
-        const standardFlexcons = gradeFlexcons.filter((item) => flexconRecordKind(item, weights) === 'standard')
-        const bulkFlexcons = gradeFlexcons.filter((item) => flexconRecordKind(item, weights) === 'bulk')
-        const quantityFor = (item: FlexconInspection | PaperBagInspection) => (
-          'quantity_kg' in item ? item.quantity_kg : item.bag_count * 30
-        )
-        return {
-          registrationId: registration.id,
-          registrationNo: registration.registration_no,
-          settlementNo: registration.settlement_no ?? '',
-          authorizationId: authorization.id,
-          purchaseDates: joinDistinct(gradeRecords.map((item) => item.purchase_date), (value) => formatDisplayDate(value, calendarMode)),
-          inspectionDates: joinDistinct(gradeRecords.map((item) => item.inspection_date), (value) => formatDisplayDate(value, calendarMode)),
-          fullName: authorization.full_name,
-          origin: formatPrefectureName(authorization.prefecture),
-          municipality: authorization.municipality ?? '',
-          inspectionLocations: joinDistinct(gradeRecords.map((item) => item.inspection_location)),
-          authorizationNo: authorization.authorization_no,
-          brands: joinDistinct(gradeRecords.map((item) => item.brand)),
-          grade,
-          flexconCount: standardFlexcons.length,
-          paperBagCount: gradePaperBags.reduce((total, item) => total + item.bag_count, 0),
-          bulkQuantity: bulkFlexcons.reduce((total, item) => total + item.quantity_kg, 0),
-          inspectedQuantity: gradeRecords.filter(isInspectionResultComplete).reduce((total, item) => total + quantityFor(item), 0),
-          uninspectedQuantity: gradeRecords.filter((item) => !isInspectionResultComplete(item)).reduce((total, item) => total + quantityFor(item), 0),
-        }
-      })
-    }).sort((left, right) => {
-      const registrationComparison = left.registrationNo - right.registrationNo
-      if (registrationComparison !== 0) return registrationComparison
-      const leftRank = SUMMARY_GRADE_ORDER.indexOf(left.grade)
-      const rightRank = SUMMARY_GRADE_ORDER.indexOf(right.grade)
-      return (leftRank < 0 ? SUMMARY_GRADE_ORDER.length : leftRank) - (rightRank < 0 ? SUMMARY_GRADE_ORDER.length : rightRank)
-        || left.grade.localeCompare(right.grade, 'ja', { numeric: true })
-    })
+      const grade = joinDistinct(records.map((item) => selectedInspectionGrade(item.grade) || '未入力'))
+      const standardFlexcons = registeredFlexcons.filter((item) => flexconRecordKind(item, weights) === 'standard')
+      const bulkFlexcons = registeredFlexcons.filter((item) => flexconRecordKind(item, weights) === 'bulk')
+      const quantityFor = (item: FlexconInspection | PaperBagInspection) => (
+        'quantity_kg' in item ? item.quantity_kg : item.bag_count * 30
+      )
+      return [{
+        registrationId: registration.id,
+        registrationNo: registration.registration_no,
+        settlementNo: joinDistinct(records.map((item) => item.settlement_no ?? registration.settlement_no)),
+        authorizationId: authorization.id,
+        purchaseDates: joinDistinct(records.map((item) => item.purchase_date), (value) => formatDisplayDate(value, calendarMode)),
+        inspectionDates: joinDistinct(records.map((item) => item.inspection_date), (value) => formatDisplayDate(value, calendarMode)),
+        fullName: authorization.full_name,
+        origin: formatPrefectureName(authorization.prefecture),
+        municipality: authorization.municipality ?? '',
+        inspectionLocations: joinDistinct(records.map((item) => item.inspection_location)),
+        authorizationNo: authorization.authorization_no,
+        brands: joinDistinct(records.map((item) => item.brand)),
+        grade,
+        flexconCount: standardFlexcons.length,
+        paperBagCount: registeredPaperBags.reduce((total, item) => total + item.bag_count, 0),
+        bulkQuantity: bulkFlexcons.reduce((total, item) => total + item.quantity_kg, 0),
+        inspectedQuantity: records.filter(isInspectionResultComplete).reduce((total, item) => total + quantityFor(item), 0),
+        uninspectedQuantity: records.filter((item) => !isInspectionResultComplete(item)).reduce((total, item) => total + quantityFor(item), 0),
+      }]
+    }).sort((left, right) => left.registrationNo - right.registrationNo)
   }, [authorizations, flexcons, paperBags, registrations, weights, calendarMode])
   const summaryFilterValues = useMemo(() => Object.fromEntries(SUMMARY_COLUMNS.map((column) => [
     column.key,
@@ -709,8 +693,8 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
     setAddGroupFormOpen(false)
     setProducerPickerOpen(false)
     const registrationNo = Number((data as { registration_no?: unknown } | null)?.registration_no)
-    let registrationId: string | null = null
-    if (Number.isFinite(registrationNo)) {
+    let registrationId = (data as { registration_id?: string } | null)?.registration_id ?? null
+    if (!registrationId && Number.isFinite(registrationNo)) {
       const { data: registrationData } = await supabase
         .from('flexcon_inspection_registrations')
         .select('id')
@@ -733,26 +717,6 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
     else delete next[key]
     return next
   })
-
-  const saveRegistrationSettlementNo = async (event: React.FormEvent) => {
-    event.preventDefault()
-    if (!selectedRegistration || busy) return
-    const value = registrationSettlementDraft?.registrationId === selectedRegistration.id
-      ? registrationSettlementDraft.value.trim()
-      : selectedRegistration.settlement_no ?? ''
-    if (value.length > 80) return setNotice({ type: 'error', text: '仕切書№は80文字以内で入力してください。' })
-    setBusy(true); setNotice(null)
-    const { error } = await supabase.rpc('flexcon_set_inspection_registration_settlement_no', {
-      p_worker_id: workerId,
-      p_registration_id: selectedRegistration.id,
-      p_settlement_no: value,
-    })
-    setBusy(false)
-    if (error) return setNotice({ type: 'error', text: error.message })
-    setRegistrationSettlementDraft(null)
-    setNotice({ type: 'success', text: '仕切書№を保存しました。' })
-    setVersion((version) => version + 1)
-  }
 
   const applyBatchMetadata = async (event: React.FormEvent) => {
     event.preventDefault()
@@ -789,6 +753,7 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
   }
 
   const detailDraft = (item: FlexconInspection | PaperBagInspection): InlineDetailDraft => detailDrafts[item.id] ?? {
+    settlement_no: item.settlement_no ?? '',
     fiscal_year: String(item.fiscal_year),
     purchase_date: item.purchase_date,
     inspection_date: item.inspection_date ?? '',
@@ -826,6 +791,7 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
     if (!Number.isInteger(fiscalYear) || fiscalYear < 1 || fiscalYear > 99) return setNotice({ type: 'error', text: '年度は1から99の整数で入力してください。' })
     if (!draft.purchase_date) return setNotice({ type: 'error', text: '仕入日を入力してください。' })
     if (!draft.brand) return setNotice({ type: 'error', text: '銘柄を選択してください。' })
+    if (draft.settlement_no.trim().length > 80) return setNotice({ type: 'error', text: '仕切書№は80文字以内で入力してください。' })
     if (!Number.isInteger(quantity) || quantity <= 0) return setNotice({ type: 'error', text: detailKind === 'flexcon' ? '数量は1kg以上の整数で入力してください。' : '紙袋数は1以上の整数で入力してください。' })
     if (moisture !== null && (!Number.isFinite(moisture) || moisture < 0 || moisture > 100)) return setNotice({ type: 'error', text: '水分は0から100の範囲で入力してください。' })
     changeDetailDraft(item, draft)
@@ -843,14 +809,17 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
       p_moisture: moisture,
     }
     const runSave = async () => {
-      const { error } = detailKind === 'flexcon'
-        ? await supabase.rpc('flexcon_save_inspection_flexcon', { ...common, p_flexcon_id: item.id, p_flexcon_no: (item as FlexconInspection).flexcon_no, p_quantity_kg: quantity })
-        : await supabase.rpc('flexcon_save_inspection_paper_bags', { ...common, p_paper_bag_id: item.id, p_bag_count: quantity })
+      const { error } = await supabase.rpc('flexcon_save_inspection_detail_with_settlement', {
+        ...common, p_detail_kind: detailKind, p_detail_id: item.id,
+        p_flexcon_no: detailKind === 'flexcon' ? (item as FlexconInspection).flexcon_no : null,
+        p_quantity: quantity, p_settlement_no: draft.settlement_no.trim(),
+      })
       if (error) {
         setNotice({ type: 'error', text: error.message })
         return
       }
       const savedValues = {
+        settlement_no: draft.settlement_no.trim(),
         fiscal_year: fiscalYear,
         purchase_date: draft.purchase_date,
         inspection_date: draft.inspection_date || null,
@@ -908,8 +877,9 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
     const draft = detailDraft(item)
     const save = (values: Partial<InlineDetailDraft> = {}) => void saveInlineDetail(detailKind, item, values)
     return <>
-      <td className="inspection-inline-cell inspection-year-cell"><JapaneseFiscalYearInput className={!draft.fiscal_year || Number(draft.fiscal_year) <= 0 ? 'inspection-missing' : ''} value={draft.fiscal_year} disabled={busy} onChange={(fiscal_year) => scheduleInlineDetailSave(detailKind, item, { fiscal_year })} onBlur={() => save()} /></td>
+      <td className="inspection-inline-cell inspection-year-cell"><JapaneseFiscalYearInput textInput className={!draft.fiscal_year || Number(draft.fiscal_year) <= 0 ? 'inspection-missing' : ''} value={draft.fiscal_year} disabled={busy} onChange={(fiscal_year) => scheduleInlineDetailSave(detailKind, item, { fiscal_year })} onBlur={() => save()} /></td>
       <td className="inspection-inline-cell inspection-date-cell"><JapaneseDateInput className={!draft.purchase_date ? 'inspection-missing' : ''} value={draft.purchase_date} aria-label="仕入日" disabled={busy} onChange={(purchase_date) => { changeDetailDraft(item, { purchase_date }); save({ purchase_date }) }} /></td>
+      <td className="inspection-inline-cell"><input value={draft.settlement_no} aria-label="仕切り書" maxLength={80} disabled={busy} onChange={(event) => scheduleInlineDetailSave(detailKind, item, { settlement_no: event.target.value })} onBlur={() => save()} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur() }} /></td>
       <td className="inspection-inline-cell inspection-date-cell"><JapaneseDateInput className={!draft.inspection_date ? 'inspection-missing' : ''} value={draft.inspection_date} aria-label="検査日" disabled={busy} onChange={(inspection_date) => { changeDetailDraft(item, { inspection_date }); save({ inspection_date }) }} /></td>
       <td className="inspection-inline-cell inspection-inspector-cell"><select className={!draft.inspector_name ? 'inspection-missing' : ''} value={draft.inspector_name} aria-label="検査員" disabled={busy} onChange={(event) => { const inspector_name = event.target.value; changeDetailDraft(item, { inspector_name }); save({ inspector_name }) }}><option value="">未選択</option>{inspectorOptions.map((option) => <option key={option.id} value={option.name}>{option.name}</option>)}</select></td>
       <td className="inspection-inline-cell inspection-location-cell"><select className={!draft.inspection_location ? 'inspection-missing' : ''} value={draft.inspection_location} aria-label="検査場所" disabled={busy} onChange={(event) => { const inspection_location = event.target.value; changeDetailDraft(item, { inspection_location }); save({ inspection_location }) }}><option value="">未選択</option>{locationOptions.map((option) => <option key={option.id} value={option.name}>{option.name}</option>)}</select></td>
@@ -924,7 +894,7 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
     ))
     const save = (values: Partial<InlineDetailDraft> = {}) => void saveInlineDetail(detailKind, item, values)
     return <>
-      <td className="inspection-inline-cell"><input className={[draft.moisture === '' ? 'inspection-missing' : '', isHighMoisture(draft.moisture) ? 'moisture-high' : ''].filter(Boolean).join(' ')} type="number" min="0" max="100" step="1" value={draft.moisture} aria-label="水分" disabled={busy} onChange={(event) => scheduleInlineDetailSave(detailKind, item, { moisture: event.target.value })} onBlur={() => save()} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur() }} /></td>
+      <td className="inspection-inline-cell"><input className={[draft.moisture === '' ? 'inspection-missing' : '', isHighMoisture(draft.moisture) ? 'moisture-high' : ''].filter(Boolean).join(' ')} type="text" inputMode="decimal" value={draft.moisture} aria-label="水分" disabled={busy} onChange={(event) => scheduleInlineDetailSave(detailKind, item, { moisture: event.target.value })} onBlur={() => save()} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur() }} /></td>
       <td className="inspection-inline-cell"><select className={!draft.grade ? 'inspection-missing' : ''} value={draft.grade} aria-label="等級" disabled={busy} onChange={(event) => { const grade = event.target.value; const reason = grade === '1等' || grade === '合格' ? '' : draft.reason; changeDetailDraft(item, { grade, reason }); save({ grade, reason }) }}><option value="">未選択</option>{availableGradeOptions.map((option) => <option key={option.id} value={option.name}>{option.name}</option>)}</select></td>
       <td className="inspection-inline-cell inspection-inline-reason-cell"><select className={!reasonForbidden && Boolean(draft.grade) && !draft.reason ? 'inspection-missing' : ''} value={reasonForbidden ? '' : draft.reason} aria-label="理由" disabled={busy || reasonForbidden} title={reasonForbidden ? '1等と合格には理由を入力できません' : undefined} onChange={(event) => { const reason = event.target.value; changeDetailDraft(item, { reason }); save({ reason }) }}><option value="">未選択</option>{reasonOptions.map((option) => <option key={option.id} value={option.name}>{option.name}</option>)}</select></td>
     </>
@@ -934,12 +904,13 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
     const save = (values: Partial<InlineDetailDraft> = {}) => void saveInlineDetail(detailKind, item, values)
     return <>
       <td className="inspection-inline-cell inspection-brand-cell"><select className={!draft.brand ? 'inspection-missing' : ''} value={draft.brand} aria-label="銘柄" disabled={busy} onChange={(event) => { const brand = event.target.value; const grade = isGradeAllowedForBrand(brand, draft.grade) ? draft.grade : ''; const reason = grade ? draft.reason : ''; changeDetailDraft(item, { brand, grade, reason }); save({ brand, grade, reason }) }}><option value="">未選択</option>{brandOptions.map((option) => <option key={option.id} value={option.name}>{option.name}</option>)}</select></td>
-      <td className="inspection-inline-cell inspection-quantity-cell"><input className={!draft.quantity || Number(draft.quantity) <= 0 ? 'inspection-missing' : ''} type="number" min="1" step="1" value={draft.quantity} aria-label={detailKind === 'flexcon' ? '数量（kg）' : '数量（袋）'} disabled={busy} onChange={(event) => scheduleInlineDetailSave(detailKind, item, { quantity: event.target.value })} onBlur={() => save()} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur() }} /></td>
+      <td className="inspection-inline-cell inspection-quantity-cell"><input className={!draft.quantity || Number(draft.quantity) <= 0 ? 'inspection-missing' : ''} type="text" inputMode="numeric" value={draft.quantity} aria-label={detailKind === 'flexcon' ? '数量（kg）' : '数量（袋）'} disabled={busy} onChange={(event) => scheduleInlineDetailSave(detailKind, item, { quantity: event.target.value })} onBlur={() => save()} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur() }} /></td>
     </>
   }
   const renderReadOnlyMetadataFields = (item: FlexconInspection | PaperBagInspection) => <>
     <td>{displayCropYear(item.fiscal_year).replace('年産', '年度')}</td>
     <td>{displayDate(item.purchase_date)}</td>
+    <td>{item.settlement_no ?? ''}</td>
     <td className={item.inspection_date ? undefined : 'inspection-missing'}>{displayDate(item.inspection_date)}</td>
     <td className={item.inspector_name ? undefined : 'inspection-missing'}>{item.inspector_name ?? ''}</td>
     <td className={item.inspection_location ? undefined : 'inspection-missing'}>{item.inspection_location ?? ''}</td>
@@ -1346,7 +1317,7 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
     setDetailAddition({ registrationId: selectedRegistration.id, kind, form: {
       ...emptyAddGroupForm(), authorization_id: selectedAuthorization.id, producer_name: selectedAuthorization.full_name,
       fiscal_year: base ? String(base.fiscal_year) : String(currentFiscalYear()),
-      settlement_no: selectedRegistration.settlement_no ?? '',
+      settlement_no: '',
       inspection_location: base?.inspection_location ?? '', brand: base?.brand ?? '',
       flexcon_count: kind === 'standard' ? '1' : '',
     } })
@@ -1383,10 +1354,10 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
   const renderFlexconSection = (title: string, items: FlexconInspection[], certificateSectionKind: CertificateKind) => items.length === 0 && (readOnly || !selectedRegistration) ? null : <section className="section-band inspection-detail-section">
     <div className="section-title"><div><h2>{title}</h2><span>{items.length}本</span></div>{!readOnly && <div className="button-row">{items.length > 0 && <span className="certificate-status-key"><span aria-hidden="true" />印刷済み</span>}{selectedRegistration && <button className="secondary-button" type="button" aria-expanded={detailAddition?.registrationId === selectedRegistration.id && detailAddition.kind === certificateSectionKind} disabled={busy} onClick={() => openDetailAddition(certificateSectionKind)}><Plus size={17} />追加</button>}<button className="secondary-button certificate-create-button" type="button" disabled={certificateFlexconsFor(certificateSectionKind).length === 0} onClick={() => openCertificateDialog(certificateSectionKind)}><FileText size={18} />検査証明書作成</button></div>}</div>
     {renderDetailAddition(certificateSectionKind)}
-    <div className="inspection-detail-table-wrap"><table className="inspection-detail-table">
-      <thead><tr><th>№</th><th>年度</th><th>仕入日</th><th>検査日</th><th>検査員</th><th>検査場所</th><th>産地</th><th>銘柄</th><th>数量（kg）</th><th>水分</th><th>等級</th><th>理由</th>{!readOnly && <th></th>}</tr></thead>
+    <div className="inspection-detail-table-wrap"><table className="inspection-detail-table" onKeyDownCapture={navigateInspectionField}>
+      <thead><tr><th>№</th><th>年度</th><th>仕入日</th><th>仕切り書</th><th>検査日</th><th>検査員</th><th>検査場所</th><th>産地</th><th>銘柄</th><th>数量（kg）</th><th>水分</th><th>等級</th><th>理由</th>{!readOnly && <th></th>}</tr></thead>
       <tbody>{items.map((item) => <tr id={`inspection-record-${item.id}`} className={[(item.certificate_print_count ?? 0) > 0 ? 'certificate-printed-row' : '', isInspectionResultComplete(item) ? 'inspection-complete-row' : '', selectedRecordTarget?.kind === 'flexcon' && selectedRecordTarget.id === item.id ? 'inspection-target-row' : ''].filter(Boolean).join(' ') || undefined} title={(item.certificate_print_count ?? 0) > 0 ? `印刷済み（${item.certificate_print_count}回）` : '未印刷'} key={item.id}><td>{item.flexcon_no}</td>{readOnly ? renderReadOnlyMetadataFields(item) : renderInlineMetadataFields('flexcon', item)}{readOnly ? renderReadOnlyProductFields(item) : renderInlineProductFields('flexcon', item)}{readOnly ? renderReadOnlyResultFields(item) : renderInlineResultFields('flexcon', item)}{!readOnly && <td className="inspection-row-actions"><button className="icon-button delete-icon" type="button" title="削除" aria-label={`№${item.flexcon_no}を削除`} onClick={() => void deleteFlexcon(item)}><Trash2 size={17} /></button></td>}</tr>)}
-      {items.length === 0 && <tr><td colSpan={readOnly ? 12 : 13} className="empty-state">登録されていません</td></tr>}
+      {items.length === 0 && <tr><td colSpan={readOnly ? 13 : 14} className="empty-state">登録されていません</td></tr>}
       </tbody>
     </table></div>
   </section>
@@ -1444,18 +1415,12 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
   return <div className="producer-inspection-page">
     <div className="producer-inspection-heading">
       <button className="icon-button" type="button" title={readOnly ? '委任状一覧へ戻る' : '検査記録へ戻る'} aria-label={readOnly ? '委任状一覧へ戻る' : '検査記録へ戻る'} onClick={onBack}><ArrowLeft size={21} /></button>
-      <div><h1>{selectedAuthorization.full_name}</h1><p>委任状№ {selectedAuthorization.authorization_no}　{[selectedAuthorization.prefecture, selectedAuthorization.municipality].filter(Boolean).join(' ')}{!readOnly && selectedRegistration ? `　登録No. ${selectedRegistration.registration_no}` : ''}{selectedRegistration?.settlement_no ? `　仕切書№ ${selectedRegistration.settlement_no}` : ''}</p></div>
+      <div><h1>{selectedAuthorization.full_name}</h1><p>委任状№ {selectedAuthorization.authorization_no}　{[selectedAuthorization.prefecture, selectedAuthorization.municipality].filter(Boolean).join(' ')}{!readOnly && selectedRegistration ? `　登録No. ${selectedRegistration.registration_no}` : ''}</p></div>
       {readOnly && <div className="producer-inspection-actions">
         <button className="secondary-button" type="button" onClick={() => void createInspectionLedgerPdf()} disabled={inspectionLedgerBusy || gradingNoticeBusy}><ClipboardList size={18} />{inspectionLedgerBusy ? 'PDF作成中...' : '検査請求者別検査台帳'}</button>
         <button className="secondary-button" type="button" onClick={() => void createGradingNoticePdf()} disabled={gradingNoticeBusy || inspectionLedgerBusy}><FileText size={18} />{gradingNoticeBusy ? 'PDF作成中...' : '格付結果通知票'}</button>
       </div>}
     </div>
-    {!readOnly && selectedRegistration && <section className="section-band inspection-registration-settlement">
-      <form onSubmit={(event) => void saveRegistrationSettlementNo(event)}>
-        <label>仕切書№<input value={registrationSettlementDraft?.registrationId === selectedRegistration.id ? registrationSettlementDraft.value : selectedRegistration.settlement_no ?? ''} maxLength={80} disabled={busy} onChange={(event) => setRegistrationSettlementDraft({ registrationId: selectedRegistration.id, value: event.target.value })} /></label>
-        <button className="secondary-button" type="submit" disabled={busy}><Save size={18} />仕切書№を保存</button>
-      </form>
-    </section>}
     {!readOnly && selectedRegistration && <section className="section-band inspection-batch-metadata">
       <div className="section-title"><div><h2>検査情報を一括設定</h2><span>この登録の推フレ・バラ・紙袋すべてに反映</span></div></div>
       <form className="inspection-batch-metadata-form" onSubmit={(event) => void applyBatchMetadata(event)}>
@@ -1471,10 +1436,10 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
     {(selectedPaperBags.length > 0 || (!readOnly && selectedRegistration)) && <section className="section-band inspection-detail-section">
       <div className="section-title"><div><h2>紙袋</h2><span>{selectedPaperBags.reduce((total, item) => total + item.bag_count, 0)}袋 / {selectedPaperBags.length}件</span></div>{!readOnly && selectedRegistration && <button className="secondary-button" type="button" aria-expanded={detailAddition?.registrationId === selectedRegistration.id && detailAddition.kind === 'paper'} disabled={busy} onClick={() => openDetailAddition('paper')}><Plus size={17} />追加</button>}</div>
       {renderDetailAddition('paper')}
-      <div className="inspection-detail-table-wrap"><table className="inspection-detail-table paper-detail-table">
-        <thead><tr><th>年度</th><th>仕入日</th><th>検査日</th><th>検査員</th><th>検査場所</th><th>産地</th><th>銘柄</th><th>数量（袋）</th><th>総重量</th><th>水分</th><th>等級</th><th>理由</th>{!readOnly && <th></th>}</tr></thead>
+      <div className="inspection-detail-table-wrap"><table className="inspection-detail-table paper-detail-table" onKeyDownCapture={navigateInspectionField}>
+        <thead><tr><th>年度</th><th>仕入日</th><th>仕切り書</th><th>検査日</th><th>検査員</th><th>検査場所</th><th>産地</th><th>銘柄</th><th>数量（袋）</th><th>総重量</th><th>水分</th><th>等級</th><th>理由</th>{!readOnly && <th></th>}</tr></thead>
         <tbody>{selectedPaperBags.map((item) => <tr id={`inspection-record-${item.id}`} className={[isInspectionResultComplete(item) ? 'inspection-complete-row' : '', selectedRecordTarget?.kind === 'paper' && selectedRecordTarget.id === item.id ? 'inspection-target-row' : ''].filter(Boolean).join(' ') || undefined} key={item.id}>{readOnly ? renderReadOnlyMetadataFields(item) : renderInlineMetadataFields('paper', item)}{readOnly ? renderReadOnlyProductFields(item) : renderInlineProductFields('paper', item)}<td>{(item.bag_count * 30).toLocaleString()}kg</td>{readOnly ? renderReadOnlyResultFields(item) : renderInlineResultFields('paper', item)}{!readOnly && <td className="inspection-row-actions inspection-row-actions-wide"><button className="icon-button" type="button" title="2行に分割" aria-label={`${item.brand ?? ''}の紙袋を2行に分割`} disabled={busy || item.bag_count < 2} onClick={() => beginSplitPaperBags(item)}><TableRowsSplit size={17} /></button><button className="icon-button delete-icon" type="button" title="削除" aria-label={`${item.brand ?? ''}の紙袋を削除`} onClick={() => void deletePaperBags(item)}><Trash2 size={17} /></button></td>}</tr>)}
-        {selectedPaperBags.length === 0 && <tr><td colSpan={readOnly ? 12 : 13} className="empty-state">登録されていません</td></tr>}
+        {selectedPaperBags.length === 0 && <tr><td colSpan={readOnly ? 13 : 14} className="empty-state">登録されていません</td></tr>}
         </tbody>
       </table></div>
     </section>}

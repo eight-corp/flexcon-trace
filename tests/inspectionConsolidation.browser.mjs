@@ -4,17 +4,30 @@ import path from 'node:path'
 import { PGlite } from '@electric-sql/pglite'
 import { chromium } from 'playwright'
 
-const db = new PGlite()
 const root = path.resolve('dist')
-await db.exec(fs.readFileSync('tests/fixtures/inspectionDatabase.sql', 'utf8'))
-const original = fs.readFileSync('supabase/migrations/202609070007_inspection_registration_summary.sql', 'utf8')
-const start = original.indexOf('create or replace function public.flexcon_split_inspection_paper_bags(')
-await db.exec(original.slice(start, original.indexOf('$$;', start) + 3))
-await db.exec(fs.readFileSync('supabase/migrations/202609290001_consolidate_inspection_authorizations.sql', 'utf8'))
-await db.exec("insert into flexcon_inspection_options(option_type,name) values ('brand_aomori','Rice')")
+async function createDatabase() {
+  const db = new PGlite()
+  await db.exec(fs.readFileSync('tests/fixtures/inspectionDatabase.sql', 'utf8'))
+  const original = fs.readFileSync('supabase/migrations/202609070007_inspection_registration_summary.sql', 'utf8')
+  const start = original.indexOf('create or replace function public.flexcon_split_inspection_paper_bags(')
+  await db.exec(original.slice(start, original.indexOf('$$;', start) + 3))
+  for (const [file, name] of [
+    ['202609080002_separate_standard_bulk_numbers.sql', 'flexcon_save_inspection_flexcon'],
+    ['202609050010_inspection_officers.sql', 'flexcon_save_inspection_paper_bags'],
+  ]) {
+    const sql = fs.readFileSync(`supabase/migrations/${file}`, 'utf8')
+    const offset = sql.indexOf(`create or replace function public.${name}(`)
+    assert.ok(offset >= 0)
+    await db.exec(sql.slice(offset, sql.indexOf('$$;', offset) + 3))
+  }
+  await db.exec(fs.readFileSync('supabase/migrations/202609290001_consolidate_inspection_authorizations.sql', 'utf8'))
+  await db.exec("insert into flexcon_inspection_options(option_type,name) values ('brand_aomori','Rice'),('grade','1等')")
+  return db
+}
 const browser = await chromium.launch({ channel: 'chrome', headless: true })
 try {
   for (const width of [1440, 390]) {
+    const db = await createDatabase()
     const context = await browser.newContext({ viewport: { width, height: 900 }, serviceWorkers: 'block' })
     const errors = []
     try {
@@ -35,7 +48,7 @@ try {
             body = { ok: true, workerId: 'tester', workerName: 'Tester', permissions: { rice_shipping: 'admin' } }
           } else if (resource.startsWith('rpc/')) {
             const fn = resource.slice(4)
-            assert.equal(fn, 'flexcon_add_inspection_group_with_warehouse')
+            assert.ok(['flexcon_add_inspection_group_with_warehouse', 'flexcon_save_inspection_detail_with_settlement'].includes(fn))
             const params = route.request().postDataJSON()
             const keys = Object.keys(params)
             assert.ok(keys.every((key) => /^p_[a-z_]+$/.test(key)))
@@ -67,10 +80,108 @@ try {
       await form.getByLabel(/^検査場所/).selectOption('B')
       await form.getByLabel(/^銘柄/).selectOption('Rice')
       await form.getByLabel('推フレ数', { exact: true }).fill('1')
+      await form.getByLabel('バラ（kg）', { exact: true }).fill('50')
       await form.getByRole('button', { name: '追加', exact: true }).click()
       await page.locator('.producer-inspection-page').waitFor()
       assert.equal((await db.query('select count(*)::integer as count from flexcon_inspection_registrations')).rows[0].count, before)
       assert.ok(await page.getByRole('textbox', { name: '仕切り書', exact: true }).count() >= 3)
+      const detailTables = page.locator('.inspection-detail-table')
+      const standardRows = detailTables.first().locator('tbody tr')
+      const firstRow = standardRows.nth(0)
+      const secondRow = standardRows.nth(1)
+      const settlement = firstRow.getByRole('textbox', { name: '仕切り書', exact: true })
+      const secondSettlement = secondRow.getByRole('textbox', { name: '仕切り書', exact: true })
+      const purchase = firstRow.getByRole('textbox', { name: '仕入日', exact: true })
+      const inspection = firstRow.getByRole('textbox', { name: '検査日', exact: true })
+      const detailId = (await firstRow.getAttribute('id')).replace('inspection-record-', '')
+      const originalDetails = (await db.query('select id,quantity_kg,grade,moisture from flexcon_inspection_flexcons order by id')).rows
+      const focusAt = async (field, position) => field.evaluate((el, pos) => { el.focus(); el.setSelectionRange(pos, pos) }, position)
+      const focused = async (field) => assert.equal(await field.evaluate(el => el === document.activeElement), true)
+      const endOf = async (field) => (await field.inputValue()).length
+
+      await focusAt(settlement, 1)
+      await settlement.press('ArrowLeft')
+      await focused(settlement)
+      assert.equal(await settlement.evaluate(el => el.selectionStart), 0)
+      await settlement.press('ArrowLeft')
+      await focused(purchase)
+      await purchase.press('End')
+      await purchase.press('ArrowRight')
+      await focused(settlement)
+      await focusAt(settlement, 1)
+      await settlement.press('ArrowDown')
+      await focused(settlement)
+      await focusAt(settlement, await endOf(settlement))
+      await settlement.press('ArrowDown')
+      await focused(secondSettlement)
+      await focusAt(secondSettlement, 1)
+      await secondSettlement.press('ArrowUp')
+      await focused(secondSettlement)
+      await focusAt(secondSettlement, 0)
+      await secondSettlement.press('ArrowUp')
+      await focused(settlement)
+      await settlement.press('End')
+      await settlement.press('ArrowRight')
+      await focused(inspection)
+      await settlement.evaluate(el => { el.focus(); el.setSelectionRange(0, el.value.length) })
+      await settlement.press('ArrowRight')
+      await focused(settlement)
+
+      const quantity = firstRow.getByRole('textbox', { name: '数量（kg）', exact: true })
+      const secondQuantity = secondRow.getByRole('textbox', { name: '数量（kg）', exact: true })
+      const beforeQuantity = await quantity.inputValue()
+      await focusAt(quantity, 0)
+      await quantity.press('ArrowUp')
+      await focused(quantity)
+      assert.equal(await quantity.inputValue(), beforeQuantity)
+      await focusAt(quantity, await endOf(quantity))
+      await quantity.press('ArrowDown')
+      await focused(secondQuantity)
+      assert.equal(await quantity.inputValue(), beforeQuantity)
+      await focusAt(quantity, 0)
+      await quantity.press('ArrowLeft')
+      const brand = firstRow.getByRole('combobox', { name: '銘柄', exact: true })
+      await focused(brand)
+      const beforeBrand = await brand.inputValue()
+      await brand.press('ArrowRight')
+      await focused(quantity)
+      assert.equal(await brand.inputValue(), beforeBrand)
+      const grade = firstRow.getByRole('combobox', { name: '等級', exact: true })
+      await grade.focus()
+      await grade.press('ArrowRight')
+      await focused(grade) // The disabled reason field and delete button are skipped.
+      await focusAt(firstRow.getByRole('textbox', { name: '年度', exact: true }), 0)
+      await page.keyboard.press('ArrowDown')
+      await focused(firstRow.getByRole('textbox', { name: '年度', exact: true }))
+      assert.equal(await detailTables.locator('input[type="number"]').count(), 0)
+
+      for (const tableIndex of [1, 2]) {
+        const row = detailTables.nth(tableIndex).locator('tbody tr').first()
+        const field = row.getByRole('textbox', { name: tableIndex === 1 ? '数量（kg）' : '数量（袋）', exact: true })
+        const originalValue = await field.inputValue()
+        await focusAt(field, await endOf(field))
+        await field.press('ArrowRight')
+        await focused(row.getByRole('textbox', { name: '水分', exact: true }))
+        assert.equal(await field.inputValue(), originalValue)
+      }
+      assert.deepEqual((await db.query('select id,quantity_kg,grade,moisture from flexcon_inspection_flexcons order by id')).rows, originalDetails)
+      const quantitySaved = page.waitForResponse(response => {
+        if (!response.url().endsWith('/rpc/flexcon_save_inspection_detail_with_settlement')) return false
+        const params = response.request().postDataJSON()
+        return params.p_detail_id === detailId && params.p_quantity === 1050
+      })
+      await quantity.fill('1050')
+      await quantitySaved
+      assert.equal((await db.query('select quantity_kg from flexcon_inspection_flexcons where id=$1::uuid', [detailId])).rows[0].quantity_kg, 1050)
+      const moisture = firstRow.getByRole('textbox', { name: '水分', exact: true })
+      const moistureSaved = page.waitForResponse(response => {
+        if (!response.url().endsWith('/rpc/flexcon_save_inspection_detail_with_settlement')) return false
+        const params = response.request().postDataJSON()
+        return params.p_detail_id === detailId && params.p_moisture === 15.5
+      })
+      await moisture.fill('15.5')
+      await moistureSaved
+      assert.equal(Number((await db.query('select moisture from flexcon_inspection_flexcons where id=$1::uuid', [detailId])).rows[0].moisture), 15.5)
       if (process.env.QA_ARTIFACTS) await page.screenshot({ path: path.join(process.env.QA_ARTIFACTS, `inspection-consolidated-detail-${width}.png`) })
       await page.getByRole('button', { name: '検査記録へ戻る', exact: true }).click()
       await table.locator('tbody tr').first().waitFor()
@@ -78,10 +189,9 @@ try {
       assert.match(await table.locator('tbody tr').first().innerText(), new RegExp(`UI-${width}`))
       if (process.env.QA_ARTIFACTS) await page.screenshot({ path: path.join(process.env.QA_ARTIFACTS, `inspection-consolidated-list-${width}.png`) })
       assert.deepEqual(errors, [])
-      console.log(`PASS ${width}px: one authorization row, existing registration reused, separate detail metadata, isolated database`)
-    } finally { await context.close() }
+      console.log(`PASS ${width}px: consolidated additions and caret-boundary arrow navigation for standard, bulk and paper, isolated database`)
+    } finally { await context.close(); await db.close() }
   }
 } finally {
   await browser.close()
-  await db.close()
 }
