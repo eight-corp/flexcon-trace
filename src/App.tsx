@@ -164,7 +164,7 @@ function App() {
         </div>
       </header>
 
-      <main className={`app-main ${statementApplication || tab === 'history' || tab === 'inventory-history' || tab === 'inventory' || tab === 'authorizations' || tab === 'memos' || tab === 'inspections' ? 'app-main-wide' : ''} ${statementApplication ? 'app-main-statements' : ''}`}>
+      <main className={`app-main ${statementApplication || tab === 'history' || tab === 'inventory-history' || tab === 'inventory' || tab === 'authorizations' || tab === 'memos' || tab === 'inspections' ? 'app-main-wide' : ''} ${statementApplication ? 'app-main-statements' : ''} ${!statementApplication && tab === 'inspections' && inspectionAuthorizationId ? 'app-main-inspection-detail' : ''}`}>
         {!statementApplication && tab === 'scan' && isAdmin && (
           <>
             <button className="secondary-button qr-scan-back" type="button" onClick={() => setTab('shipping-record')}><ArrowLeft size={18} />出荷記録へ戻る</button>

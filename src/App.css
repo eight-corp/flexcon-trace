@@ -471,7 +471,7 @@
 .auth-brand p { margin: 0; color: var(--muted); font-size: 13px; }
 .search-row { display: flex; gap: 8px; margin-bottom: 14px; }
 .search-row input { flex: 1; }
-.shipment-history-actions, .inspection-summary-actions { display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 14px; }
+.shipment-history-actions { display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 14px; }
 .view-mode-switch { display: flex; flex: 0 0 auto; border: 1px solid #b8c1ba; border-radius: 6px; overflow: hidden; background: #fff; }
 .view-mode-switch button { width: 42px; min-height: 42px; display: grid; place-items: center; border: 0; border-right: 1px solid #d6dcd7; background: #fff; color: #5d685f; }
 .view-mode-switch button:last-child { border-right: 0; }
@@ -691,6 +691,12 @@
 .inspection-weight-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)) auto; align-items: end; gap: 10px; }
 .inspection-weight-form label { margin: 0; }
 .inspection-summary-wrap { flex: 1; min-height: 0; max-width: 100%; overflow: auto; border: 1px solid var(--line); border-radius: 7px; background: #fff; }
+.inspection-summary-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.inspection-summary-heading p { flex: 1; min-width: 0; margin: 0; }
+.inspection-summary-add-button { flex: 0 0 auto; min-height: 32px; padding: 4px 8px; gap: 4px; font-size: 12px; }
+.inspection-completion-status { display: inline-flex; align-items: center; gap: 5px; padding: 3px 6px; border-radius: 4px; font-size: 12px; font-weight: 700; }
+.inspection-completion-status.complete { background: var(--green-soft); color: var(--green-dark); }
+.inspection-completion-status.incomplete { background: var(--amber-soft); color: var(--amber); }
 .inspection-summary-table { width: max-content; min-width: 0; border-collapse: separate; border-spacing: 0; font-size: 13px; }
 .inspection-summary-table th, .inspection-summary-table td { height: 36px; padding: 5px 8px; border-right: 1px solid #e5e8e5; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
 .inspection-summary-table thead { position: sticky; top: 0; z-index: 4; }
@@ -756,6 +762,8 @@
 .inspection-record-detail-table th:nth-child(12), .inspection-record-detail-table td:nth-child(12) { text-align: right; font-variant-numeric: tabular-nums; }
 .producer-inspection-page { height: 100%; min-height: 0; overflow-y: auto; padding-right: 2px; }
 .producer-inspection-heading { display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; align-items: center; gap: 8px; margin-bottom: 12px; }
+.producer-inspection-page > .producer-inspection-heading { position: sticky; top: 0; z-index: 12; padding: 6px 0 10px; border-bottom: 1px solid var(--line); background: #f3f5f2; }
+.producer-inspection-page > .producer-inspection-heading > div { min-width: 0; overflow-wrap: anywhere; }
 .producer-inspection-heading h1 { margin: 0; }
 .producer-inspection-heading p { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
 .producer-inspection-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; justify-self: end; gap: 8px; }
@@ -940,6 +948,10 @@ table thead th { text-align: center !important; }
   .bottom-nav button { height: 63px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 0 2px; white-space: nowrap; font-size: 11px; }
   .bottom-nav button svg { width: 18px; height: 18px; }
   .bottom-nav button span { overflow-wrap: normal; }
+}
+
+@media (max-width: 959px) {
+  .app-main.app-main-inspection-detail { height: calc(100dvh - 64px - 74px); overflow: hidden; padding-bottom: 16px; }
 }
 
 @media (max-width: 440px) {

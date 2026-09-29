@@ -71,6 +71,14 @@ try {
       assert.equal(await table.locator('tbody tr').count(), 1)
       assert.match(await table.locator('tbody tr').first().innerText(), /OLD-A、OLD-B/)
       assert.match(await table.locator('tbody tr').first().innerText(), /1等、未入力/)
+      assert.match(await table.locator('thead th').last().innerText(), /検査状況/)
+      assert.equal(await table.locator('tbody tr').first().locator('td').last().innerText(), '未完了')
+      const heading = page.locator('.inspection-summary-heading')
+      const addButton = heading.getByRole('button', { name: '追加', exact: true })
+      const descriptionBox = await heading.locator('p').boundingBox()
+      const addBox = await addButton.boundingBox()
+      assert.ok(addBox.x >= descriptionBox.x + descriptionBox.width)
+      assert.ok(addBox.height <= 34)
       const before = (await db.query('select count(*)::integer as count from flexcon_inspection_registrations')).rows[0].count
       await page.getByRole('button', { name: '追加', exact: true }).click()
       const form = page.locator('form.inspection-summary-add')
@@ -79,12 +87,21 @@ try {
       await form.getByLabel('仕切書№', { exact: true }).fill(`UI-${width}`)
       await form.getByLabel(/^検査場所/).selectOption('B')
       await form.getByLabel(/^銘柄/).selectOption('Rice')
-      await form.getByLabel('推フレ数', { exact: true }).fill('1')
+      await form.getByLabel('推フレ数', { exact: true }).fill('18')
       await form.getByLabel('バラ（kg）', { exact: true }).fill('50')
       await form.getByRole('button', { name: '追加', exact: true }).click()
       await page.locator('.producer-inspection-page').waitFor()
       assert.equal((await db.query('select count(*)::integer as count from flexcon_inspection_registrations')).rows[0].count, before)
       assert.ok(await page.getByRole('textbox', { name: '仕切り書', exact: true }).count() >= 3)
+      const detailPage = page.locator('.producer-inspection-page')
+      const producerHeading = detailPage.locator('.producer-inspection-heading')
+      const headingTop = (await producerHeading.boundingBox()).y
+      await detailPage.evaluate(el => { el.scrollTop = el.scrollHeight })
+      assert.ok(await detailPage.evaluate(el => el.scrollTop) > 0)
+      assert.ok(Math.abs((await producerHeading.boundingBox()).y - headingTop) <= 1)
+      assert.equal(await producerHeading.locator('h1').innerText(), 'Producer')
+      if (process.env.QA_ARTIFACTS) await page.screenshot({ path: path.join(process.env.QA_ARTIFACTS, `inspection-sticky-producer-${width}.png`) })
+      await detailPage.evaluate(el => { el.scrollTop = 0 })
       const detailTables = page.locator('.inspection-detail-table')
       const standardRows = detailTables.first().locator('tbody tr')
       const firstRow = standardRows.nth(0)
@@ -187,9 +204,39 @@ try {
       await table.locator('tbody tr').first().waitFor()
       assert.equal(await table.locator('tbody tr').count(), 1)
       assert.match(await table.locator('tbody tr').first().innerText(), new RegExp(`UI-${width}`))
+      assert.equal(await table.locator('tbody tr').first().locator('td').last().innerText(), '未完了')
       if (process.env.QA_ARTIFACTS) await page.screenshot({ path: path.join(process.env.QA_ARTIFACTS, `inspection-consolidated-list-${width}.png`) })
+
+      // Confirm all three detail kinds contribute to the binary completion status.
+      await db.exec("update flexcon_inspection_flexcons set inspection_date='2026-09-29', inspector_name='Tester', grade='1等', moisture=15; update flexcon_inspection_paper_bags set inspection_date='2026-09-29', inspector_name='Tester', grade='1等', moisture=15")
+      const statusCell = table.locator('tbody tr').first().locator('td').last()
+      const reloadList = async () => {
+        await page.reload()
+        await page.getByRole('button', { name: '検査記録', exact: true }).click()
+        await table.locator('tbody tr').first().waitFor()
+      }
+      await reloadList()
+      assert.equal(await statusCell.innerText(), '完了')
+      for (const [detailTable, condition] of [
+        ['flexcon_inspection_flexcons', "record_kind='standard' and flexcon_no=1"],
+        ['flexcon_inspection_flexcons', "record_kind='bulk'"],
+        ['flexcon_inspection_paper_bags', 'true'],
+      ]) {
+        await db.exec(`update ${detailTable} set moisture=null where ${condition}`)
+        await reloadList()
+        assert.equal(await statusCell.innerText(), '未完了')
+        await db.exec(`update ${detailTable} set moisture=15 where ${condition}`)
+      }
+      await reloadList()
+      assert.equal(await statusCell.innerText(), '完了')
+      await page.getByRole('button', { name: '検査状況', exact: true }).click()
+      assert.equal(await table.locator('tbody tr').count(), 1)
+      if (process.env.QA_ARTIFACTS) {
+        await statusCell.scrollIntoViewIfNeeded()
+        await page.screenshot({ path: path.join(process.env.QA_ARTIFACTS, `inspection-completion-${width}.png`) })
+      }
       assert.deepEqual(errors, [])
-      console.log(`PASS ${width}px: consolidated additions and caret-boundary arrow navigation for standard, bulk and paper, isolated database`)
+      console.log(`PASS ${width}px: consolidated additions, arrow navigation, compact heading action, sticky producer and completion for all detail kinds`)
     } finally { await context.close(); await db.close() }
   }
 } finally {
