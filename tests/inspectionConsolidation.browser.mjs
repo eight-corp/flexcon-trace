@@ -21,7 +21,8 @@ async function createDatabase() {
     await db.exec(sql.slice(offset, sql.indexOf('$$;', offset) + 3))
   }
   await db.exec(fs.readFileSync('supabase/migrations/202609290001_consolidate_inspection_authorizations.sql', 'utf8'))
-  await db.exec("insert into flexcon_inspection_options(option_type,name) values ('brand_aomori','Rice'),('grade','1等')")
+  await db.exec(fs.readFileSync('supabase/migrations/202609290002_fill_missing_inspection_metadata.sql', 'utf8'))
+  await db.exec("insert into flexcon_inspection_options(option_type,name) values ('brand_aomori','Rice'),('grade','1等'),('grade','2等'),('inspector','Tester'),('inspector','Other')")
   return db
 }
 const browser = await chromium.launch({ channel: 'chrome', headless: true })
@@ -48,7 +49,7 @@ try {
             body = { ok: true, workerId: 'tester', workerName: 'Tester', permissions: { rice_shipping: 'admin' } }
           } else if (resource.startsWith('rpc/')) {
             const fn = resource.slice(4)
-            assert.ok(['flexcon_add_inspection_group_with_warehouse', 'flexcon_save_inspection_detail_with_settlement'].includes(fn))
+            assert.ok(['flexcon_add_inspection_group_with_warehouse', 'flexcon_save_inspection_detail_with_settlement', 'flexcon_set_inspection_registration_metadata'].includes(fn))
             const params = route.request().postDataJSON()
             const keys = Object.keys(params)
             assert.ok(keys.every((key) => /^p_[a-z_]+$/.test(key)))
@@ -199,6 +200,44 @@ try {
       await moisture.fill('15.5')
       await moistureSaved
       assert.equal(Number((await db.query('select moisture from flexcon_inspection_flexcons where id=$1::uuid', [detailId])).rows[0].moisture), 15.5)
+      const batch = page.locator('.inspection-batch-metadata-form')
+      const beforeBatch = (await db.query('select * from flexcon_inspection_flexcons order by id')).rows
+      await batch.getByPlaceholder('変更なし', { exact: true }).fill('令和8年10月1日')
+      await batch.getByPlaceholder('変更なし', { exact: true }).press('Tab')
+      await batch.getByLabel(/^検査員/).selectOption('Tester')
+      await batch.getByLabel(/^検査場所/).selectOption('A')
+      await batch.getByLabel(/^等級/).selectOption('1等')
+      const batchApplied = page.waitForResponse(response => response.url().endsWith('/rpc/flexcon_set_inspection_registration_metadata'))
+      await moisture.fill('16.4')
+      // Submit without blurring the edited detail to exercise the unsaved draft flush.
+      await batch.evaluate(form => form.requestSubmit())
+      await batchApplied
+      await page.getByText(/未設定の検査日・検査員・検査場所・等級に反映しました/).waitFor({ state: 'attached' })
+      const afterBatch = (await db.query('select * from flexcon_inspection_flexcons order by id')).rows
+      for (const original of beforeBatch) {
+        const saved = afterBatch.find(row => row.id === original.id)
+        assert.equal(saved.inspection_location, original.inspection_location)
+        assert.deepEqual(saved.inspection_date, original.inspection_date ?? new Date('2026-10-01'))
+        assert.equal(saved.grade, original.grade || '1等')
+        assert.equal(saved.inspector_name, original.inspector_name || 'Tester')
+        assert.equal(saved.warehouse_id, original.warehouse_id)
+        assert.equal(saved.settlement_no, original.settlement_no)
+      }
+      assert.equal(Number(afterBatch.find(row => row.id === detailId).moisture), 16.4)
+      const paperAfterBatch = (await db.query('select * from flexcon_inspection_paper_bags')).rows[0]
+      assert.equal(paperAfterBatch.inspection_location, 'B')
+      assert.equal(paperAfterBatch.inspector_name, 'Tester')
+      assert.equal(paperAfterBatch.grade, '1等')
+      await batch.getByPlaceholder('変更なし', { exact: true }).fill('令和8年10月2日')
+      await batch.getByPlaceholder('変更なし', { exact: true }).press('Tab')
+      await batch.getByLabel(/^検査員/).selectOption('Other')
+      await batch.getByLabel(/^検査場所/).selectOption('B')
+      await batch.getByLabel(/^等級/).selectOption('2等')
+      const repeatedBatch = page.waitForResponse(response => response.url().endsWith('/rpc/flexcon_set_inspection_registration_metadata'))
+      await batch.getByRole('button', { name: 'まとめて反映', exact: true }).click()
+      await repeatedBatch
+      assert.deepEqual((await db.query('select * from flexcon_inspection_flexcons order by id')).rows, afterBatch)
+      assert.deepEqual((await db.query('select * from flexcon_inspection_paper_bags')).rows[0], paperAfterBatch)
       if (process.env.QA_ARTIFACTS) await page.screenshot({ path: path.join(process.env.QA_ARTIFACTS, `inspection-consolidated-detail-${width}.png`) })
       await page.getByRole('button', { name: '検査記録へ戻る', exact: true }).click()
       await table.locator('tbody tr').first().waitFor()
@@ -236,7 +275,7 @@ try {
         await page.screenshot({ path: path.join(process.env.QA_ARTIFACTS, `inspection-completion-${width}.png`) })
       }
       assert.deepEqual(errors, [])
-      console.log(`PASS ${width}px: consolidated additions, arrow navigation, compact heading action, sticky producer and completion for all detail kinds`)
+      console.log(`PASS ${width}px: additions, navigation, completion, sticky heading and missing-only batch settings with unsaved edits preserved`)
     } finally { await context.close(); await db.close() }
   }
 } finally {
