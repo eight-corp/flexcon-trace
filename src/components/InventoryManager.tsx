@@ -37,7 +37,8 @@ type InventoryMovement = {
   movement_to: string
 }
 type InventoryBalance = { warehouse_id: string | null; warehouse_name: string; crop_year: number | null; origin: string; product_name: string; grade: string; quantity: number; unit: string }
-type InventoryBalanceRow = { warehouseId: string | null; warehouseName: string; cropYear: number | null; origin: string; productName: string; unit: string; quantities: Record<string, number> }
+type InventoryShippedQuantity = { warehouse_id: string | null; crop_year: number | null; origin: string; product_name: string; unit: string; shipped_quantity: number }
+type InventoryBalanceRow = { warehouseId: string | null; warehouseName: string; cropYear: number | null; origin: string; productName: string; unit: string; quantities: Record<string, number>; shippedQuantity: number }
 type MovementForm = { movementDate: string; cropYear: string; settlementNo: string; producerName: string; origin: string; productName: string; grade: string; quantity: string; unit: string; fromWarehouseId: string; toWarehouseId: string; note: string }
 type PurchaseImportRecord = {
   settlement_no: string
@@ -259,6 +260,7 @@ function balanceValue(row: InventoryBalanceRow, key: string) {
   if (key === 'origin') return row.origin
   if (key === 'productName') return row.productName
   if (key === 'unit') return row.unit
+  if (key === 'shippedQuantity') return formatQuantity(row.shippedQuantity)
   const quantity = row.quantities[key.slice('grade:'.length)] ?? 0
   return quantity === 0 ? '' : formatQuantity(quantity)
 }
@@ -302,6 +304,7 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
   const [productOptions, setProductOptions] = useState<InspectionOption[]>([])
   const [movements, setMovements] = useState<InventoryMovement[]>([])
   const [balances, setBalances] = useState<InventoryBalance[]>([])
+  const [shippedQuantities, setShippedQuantities] = useState<InventoryShippedQuantity[]>([])
   const [form, setForm] = useState<MovementForm>(emptyForm)
   const [editing, setEditing] = useState<InventoryMovement | null>(null)
   const [editForm, setEditForm] = useState<MovementForm>(emptyForm)
@@ -342,8 +345,9 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
         .not('source_type', 'in', '(inspection_flexcon,inspection_paper_bag,shipment_record)')
         .order('movement_date', { ascending: false }).order('created_at', { ascending: false }).order('id', { ascending: true }).limit(1000),
       supabase.from('flexcon_inventory_balances_by_crop_year').select('*').order('crop_year', { ascending: false, nullsFirst: false }).order('warehouse_name').order('origin').order('product_name').order('grade').order('unit'),
-    ]).then(([warehouseResult, productResult, movementResult, balanceResult]) => {
-      if (warehouseResult.error || movementResult.error || balanceResult.error) return setNotice({ type: 'error', text: '在庫情報を取得できません。在庫管理用SQLを実行してください。' })
+      supabase.from('flexcon_inventory_shipped_quantities_by_crop_year').select('*'),
+    ]).then(([warehouseResult, productResult, movementResult, balanceResult, shippedResult]) => {
+      if (warehouseResult.error || movementResult.error || balanceResult.error || shippedResult.error) return setNotice({ type: 'error', text: '在庫情報を取得できません。在庫管理用SQLを実行してください。' })
       setWarehouses((warehouseResult.data ?? []) as InspectionOption[])
       if (!productResult.error) setProductOptions((productResult.data ?? []) as InspectionOption[])
       const movementRows = (movementResult.data ?? []) as InventoryMovement[]
@@ -352,6 +356,7 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
       }
       setMovements(movementRows)
       setBalances((balanceResult.data ?? []) as InventoryBalance[])
+      setShippedQuantities((shippedResult.data ?? []) as InventoryShippedQuantity[])
     })
   }, [version])
 
@@ -405,6 +410,10 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
   ])], [balances, productOptions])
   const balanceRows = useMemo(() => {
     const grouped = new Map<string, InventoryBalanceRow>()
+    const shippedByRow = new Map(shippedQuantities.map((item) => [
+      `${item.crop_year}\u001f${item.warehouse_id}\u001f${item.origin}\u001f${item.product_name}\u001f${item.unit}`,
+      Number(item.shipped_quantity),
+    ]))
     balances.forEach((balance) => {
       const key = `${balance.crop_year}\u001f${balance.warehouse_id}\u001f${balance.origin}\u001f${balance.product_name}\u001f${balance.unit}`
       const row = grouped.get(key) ?? {
@@ -415,6 +424,7 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
         productName: balance.product_name,
         unit: balance.unit,
         quantities: {},
+        shippedQuantity: shippedByRow.get(key) ?? 0,
       }
       const grade = balance.grade || '対象外'
       row.quantities[grade] = (row.quantities[grade] ?? 0) + Number(balance.quantity)
@@ -425,13 +435,14 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
       || left.origin.localeCompare(right.origin, 'ja', { numeric: true })
       || left.productName.localeCompare(right.productName, 'ja', { numeric: true })
       || left.unit.localeCompare(right.unit, 'ja', { numeric: true }))
-  }, [balances])
+  }, [balances, shippedQuantities])
   const balanceColumns = useMemo(() => [
     { key: 'warehouseName', label: '倉庫' },
     { key: 'origin', label: '産地' },
     { key: 'productName', label: '名称' },
     { key: 'unit', label: '単位' },
     ...balanceGradeColumns.map((grade) => ({ key: `grade:${grade}`, label: grade })),
+    { key: 'shippedQuantity', label: '出荷数量' },
   ], [balanceGradeColumns])
   const balanceFilterValues = useMemo(() => Object.fromEntries(balanceColumns.map((column) => [
     column.key,
@@ -445,14 +456,15 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
     }))
   }, [balanceRows, balanceColumnFilters, balanceTextFilters, balanceColumns])
   const balanceYearGroups = useMemo(() => {
-    const groups = new Map<number | null | undefined, { rows: InventoryBalanceRow[]; totals: Record<string, Record<string, number>> }>()
+    const groups = new Map<number | null | undefined, { rows: InventoryBalanceRow[]; totals: Record<string, Record<string, number>>; shippedTotals: Record<string, number> }>()
     balanceRows.forEach((row) => {
-      if (!groups.has(row.cropYear)) groups.set(row.cropYear, { rows: [], totals: {} })
+      if (!groups.has(row.cropYear)) groups.set(row.cropYear, { rows: [], totals: {}, shippedTotals: {} })
     })
-    if (groups.size === 0) groups.set(undefined, { rows: [], totals: {} })
+    if (groups.size === 0) groups.set(undefined, { rows: [], totals: {}, shippedTotals: {} })
     displayedBalanceRows.forEach((row) => {
       const group = groups.get(row.cropYear)!
       group.rows.push(row)
+      group.shippedTotals[row.unit] = (group.shippedTotals[row.unit] ?? 0) + row.shippedQuantity
       balanceGradeColumns.forEach((grade) => {
         const quantity = row.quantities[grade] ?? 0
         if (!quantity) return
@@ -1018,12 +1030,12 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
     </> : view === 'balance' ? <>
       {balanceYearGroups.map(([cropYear, group]) => <section className="inventory-year-section" key={cropYear ?? 'unknown'}>
         {cropYear !== undefined && <div className="inventory-subheading"><h2>{cropYear === null ? '産年未設定' : formatJapaneseCropYear(cropYear)}</h2><span>{group.rows.length}件</span></div>}
-        <div className="inventory-table-wrap"><table className="inventory-table inventory-balance-table" style={{ '--inventory-balance-mobile-width': `${358 + balanceGradeColumns.length * 62}px` } as React.CSSProperties}>
-          <colgroup><col className="inventory-balance-warehouse-col" /><col className="inventory-balance-origin-col" /><col className="inventory-balance-product-col" /><col className="inventory-balance-unit-col" />{balanceGradeColumns.map((grade) => <col className="inventory-balance-grade-col" key={grade} />)}</colgroup>
+        <div className="inventory-table-wrap"><table className="inventory-table inventory-balance-table" style={{ '--inventory-balance-mobile-width': `${442 + balanceGradeColumns.length * 62}px` } as React.CSSProperties}>
+          <colgroup><col className="inventory-balance-warehouse-col" /><col className="inventory-balance-origin-col" /><col className="inventory-balance-product-col" /><col className="inventory-balance-unit-col" />{balanceGradeColumns.map((grade) => <col className="inventory-balance-grade-col" key={grade} />)}<col className="inventory-balance-shipped-col" /></colgroup>
           <thead><tr>{balanceColumns.map((column, index) => <FilterableColumnHeader key={column.key} column={column} values={balanceFilterValues[column.key]} selectedValues={balanceColumnFilters[column.key]} textValue={balanceTextFilters[column.key] ?? ''} onFilterChange={changeBalanceColumnFilter} onTextChange={changeBalanceTextFilter} openRight={index === 0} />)}</tr></thead>
           <tbody>
-            <tr className="inventory-balance-total"><td><span className="warehouse-name"><Warehouse size={17} />{balanceIsFiltered ? '絞り込み合計' : '全倉庫合計'}</span></td><td>{balanceIsFiltered ? '表示中' : '全産地'}</td><td>{balanceIsFiltered ? '表示中' : '全名称'}</td><td>単位別</td>{balanceGradeColumns.map((grade) => { const totals = group.totals[grade] ?? {}; const values = ['本', '袋', 'kg', '俵'].filter((unit) => totals[unit]).map((unit) => `${formatQuantity(totals[unit])}${unit}`); const negative = Object.values(totals).some((quantity) => quantity < 0); return <td className={`numeric-cell inventory-balance-grade ${negative ? 'inventory-negative' : ''}`} key={grade}>{values.join(' / ')}</td> })}</tr>
-            {group.rows.map((row) => <tr key={`${row.warehouseId}-${row.origin}-${row.productName}-${row.unit}`}><td><span className="warehouse-name"><Warehouse size={17} />{row.warehouseName}</span></td><td>{row.origin}</td><td>{row.productName}</td><td>{row.unit}</td>{balanceGradeColumns.map((grade) => { const quantity = row.quantities[grade] ?? 0; return <td className={`numeric-cell inventory-balance-grade ${quantity < 0 ? 'inventory-negative' : ''}`} key={grade}>{quantity === 0 ? '' : formatQuantity(quantity)}</td> })}</tr>)}
+            <tr className="inventory-balance-total"><td><span className="warehouse-name"><Warehouse size={17} />{balanceIsFiltered ? '絞り込み合計' : '全倉庫合計'}</span></td><td>{balanceIsFiltered ? '表示中' : '全産地'}</td><td>{balanceIsFiltered ? '表示中' : '全名称'}</td><td>単位別</td>{balanceGradeColumns.map((grade) => { const totals = group.totals[grade] ?? {}; const values = ['本', '袋', 'kg', '俵'].filter((unit) => totals[unit]).map((unit) => `${formatQuantity(totals[unit])}${unit}`); const negative = Object.values(totals).some((quantity) => quantity < 0); return <td className={`numeric-cell inventory-balance-grade ${negative ? 'inventory-negative' : ''}`} key={grade}>{values.join(' / ')}</td> })}<td className="numeric-cell inventory-balance-shipped">{['本', '袋', 'kg', '俵'].filter((unit) => group.shippedTotals[unit]).map((unit) => `${formatQuantity(group.shippedTotals[unit])}${unit}`).join(' / ') || '0'}</td></tr>
+            {group.rows.map((row) => <tr key={`${row.warehouseId}-${row.origin}-${row.productName}-${row.unit}`}><td><span className="warehouse-name"><Warehouse size={17} />{row.warehouseName}</span></td><td>{row.origin}</td><td>{row.productName}</td><td>{row.unit}</td>{balanceGradeColumns.map((grade) => { const quantity = row.quantities[grade] ?? 0; return <td className={`numeric-cell inventory-balance-grade ${quantity < 0 ? 'inventory-negative' : ''}`} key={grade}>{quantity === 0 ? '' : formatQuantity(quantity)}</td> })}<td className="numeric-cell inventory-balance-shipped">{formatQuantity(row.shippedQuantity)}</td></tr>)}
             {group.rows.length === 0 && <tr><td className="empty-state" colSpan={balanceColumns.length}>該当する倉庫在庫はありません</td></tr>}
           </tbody>
         </table></div>

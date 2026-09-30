@@ -394,6 +394,7 @@
 .inventory-balance-table th:nth-child(3), .inventory-balance-table td:nth-child(3) { white-space: nowrap; }
 .inventory-balance-table .inventory-balance-grade { white-space: nowrap; }
 .inventory-balance-table td.inventory-balance-grade { text-align: right; }
+.inventory-balance-table td.inventory-balance-shipped { text-align: right; font-weight: 700; }
 .inventory-balance-table .inventory-balance-total { background: #e3eee6; font-weight: 700; }
 .inventory-balance-table .inventory-balance-total td { border-bottom: 2px solid #9aae9f; }
 .inventory-subheading { display: flex; align-items: baseline; gap: 10px; margin-bottom: 7px; }
@@ -1090,6 +1091,7 @@ table thead th { text-align: center !important; }
   .inventory-balance-table .inventory-balance-product-col { width: 130px; }
   .inventory-balance-table .inventory-balance-unit-col { width: 44px; }
   .inventory-balance-table .inventory-balance-grade-col { width: 62px; }
+  .inventory-balance-table .inventory-balance-shipped-col { width: 84px; }
   .inventory-balance-table .inventory-balance-grade { width: 62px; min-width: 0; max-width: 62px; padding-inline: 4px; }
   .inventory-balance-table td.inventory-balance-grade { line-height: 1.25; white-space: normal; overflow-wrap: anywhere; }
   .scan-list li { grid-template-columns: 58px minmax(0, 1fr) minmax(96px, max-content) 42px; gap: 5px 7px; }
