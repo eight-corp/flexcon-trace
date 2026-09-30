@@ -96,6 +96,10 @@ function shipmentProductSummary(shipment: Shipment) {
     .join('、')
 }
 
+function shipmentDestinationLabel(shipment: Shipment) {
+  return shipment.flexcon_destinations?.name ?? (shipment.shipment_kind === 'manual_record' ? '未設定' : '納品先不明')
+}
+
 function shipmentProductGroups(shipment: Shipment): ShipmentProductGroup[] {
   if (shipment.shipment_kind !== 'qr_flexcon') {
     if (shipment.flexcon_manual_shipment_items.length > 0) {
@@ -273,7 +277,7 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
       originalOrder: shipmentIndex * 100 + groupIndex,
       shippedAt: formatDisplayDateTime(shipment.shipped_at, calendarMode),
       shippedAtValue: new Date(shipment.shipped_at).getTime(),
-      destination: shipment.flexcon_destinations?.name ?? '納品先不明',
+      destination: shipmentDestinationLabel(shipment),
       origin: group.origin,
       productName: group.name,
       grade: shipment.shipment_kind === 'other_rice' || shipment.shipment_kind === 'manual_record' ? group.grade : group.grade || '未入力',
@@ -397,7 +401,7 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
   const beginEdit = (shipment: Shipment) => {
     setEditing(shipment)
     setShippedAt(toLocalDateTime(shipment.shipped_at))
-    setDestinationId(shipment.destination_id)
+    setDestinationId(shipment.destination_id ?? '')
     setTransportProfileId(
       shipment.transport_profile_id
       ?? transportProfiles.find((item) => item.company_name === shipment.carrier_name)?.id
@@ -472,11 +476,11 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
     const commonValues = {
       p_worker_id: workerId,
       p_shipment_id: editing.id,
-      p_destination_id: destinationId,
-      p_transport_profile_id: editing.shipment_kind === 'manual_record' ? null : transportProfileId,
+      p_destination_id: editing.shipment_kind === 'manual_record' ? destinationId || null : destinationId,
+      p_transport_profile_id: editing.shipment_kind === 'manual_record' ? transportProfileId || null : transportProfileId,
       p_shipped_at: new Date(shippedAt).toISOString(),
-      p_driver_name: editing.shipment_kind === 'manual_record' ? null : driverName.trim(),
-      p_vehicle_no: editing.shipment_kind === 'manual_record' ? null : vehicleNo.trim(),
+      p_driver_name: editing.shipment_kind === 'manual_record' ? driverName.trim() || null : driverName.trim(),
+      p_vehicle_no: editing.shipment_kind === 'manual_record' ? vehicleNo.trim() || null : vehicleNo.trim(),
       p_purchase_price_per_bale: purchasePrice.trim() === '' ? null : Number(purchasePrice),
       p_note: note.trim() || null,
     }
@@ -521,7 +525,7 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
 
   const deleteShipment = async (shipment: Shipment) => {
     if (!isAdmin) return
-    const destination = shipment.flexcon_destinations?.name ?? '納品先不明'
+    const destination = shipmentDestinationLabel(shipment)
     const count = shipment.quantity_count ?? shipment.flexcon_shipment_items.length
     const unit = shipment.shipment_kind === 'manual_record' ? '件' : shipment.shipment_kind === 'paper_bag' ? '袋' : '本'
     const displayCount = shipment.shipment_kind === 'manual_record' ? shipment.flexcon_manual_shipment_items.length : count
@@ -627,12 +631,13 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
               <div className="shipment-head">
                 <div>
                   <div className="shipment-title-line">
-                    <strong>{shipment.flexcon_destinations?.name ?? '納品先不明'}</strong>
+                    <strong>{shipmentDestinationLabel(shipment)}</strong>
                     <span>{shipmentProductSummary(shipment)}</span>
                   </div>
                   <small>{formatShipmentDateTime(shipment.shipped_at)}</small>
                   <small><UserRound size={13} className="inline-icon" />担当：{shipment.workers?.worker_name ?? '不明'}</small>
-                  {shipment.carrier_name && <small><Building2 size={13} className="inline-icon" />{shipment.carrier_name} / {shipment.driver_name ?? 'ドライバー不明'}</small>}
+                  {shipment.carrier_name && <small><Building2 size={13} className="inline-icon" />{shipment.carrier_name}{shipment.driver_name ? ` / ${shipment.driver_name}` : ''}</small>}
+                  {!shipment.carrier_name && shipment.driver_name && <small>ドライバー：{shipment.driver_name}</small>}
                   {shipment.vehicle_no && <small><Truck size={13} className="inline-icon" />{shipment.vehicle_no}</small>}
                   {shipment.purchase_price_per_bale != null && <small>仕入値：{shipment.purchase_price_per_bale.toLocaleString('ja-JP')}円／俵</small>}
                 </div>
@@ -755,26 +760,26 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
               {(editing.shipment_kind === 'paper_bag' || editing.shipment_kind === 'other_rice') && <ManualShipmentItemsEditor key={editing.id} kind={editing.shipment_kind} items={manualItems} onChange={setManualItems} shipmentProducts={shipmentProducts} disabled={busy} />}
               <div className="form-grid two">
                 <label>出荷日時<JapaneseDateTimeInput value={shippedAt} onChange={setShippedAt} required /></label>
-                <label>納品先
-                  <select value={destinationId} onChange={(e) => setDestinationId(e.target.value)} required>
-                    <option value="">選択してください</option>
+                <label>{editing.shipment_kind === 'manual_record' ? '納品先（任意）' : '納品先'}
+                  <select value={destinationId} onChange={(e) => setDestinationId(e.target.value)} required={editing.shipment_kind !== 'manual_record'}>
+                    <option value="">{editing.shipment_kind === 'manual_record' ? '未設定' : '選択してください'}</option>
                     {destinations.map((item) => <option key={item.id} value={item.id} disabled={!item.active}>{item.name}{item.active ? '' : '（無効）'}</option>)}
                   </select>
                 </label>
               </div>
-              {editing.shipment_kind !== 'manual_record' && <><label>運送会社
-                <select value={transportProfileId} onChange={(e) => setTransportProfileId(e.target.value)} required>
-                  <option value="">選択してください</option>
+              <label>{editing.shipment_kind === 'manual_record' ? '運送会社（任意）' : '運送会社'}
+                <select value={transportProfileId} onChange={(e) => setTransportProfileId(e.target.value)} required={editing.shipment_kind !== 'manual_record'}>
+                  <option value="">{editing.shipment_kind === 'manual_record' ? '未設定' : '選択してください'}</option>
                   {transportProfiles.map((item) => <option key={item.id} value={item.id} disabled={!item.active}>{item.company_name}{item.active ? '' : '（無効）'}</option>)}
                 </select>
               </label>
               <fieldset className="driver-vehicle-fields">
                 <legend>ドライバー・車両情報</legend>
                 <div className="form-grid two">
-                  <label>ドライバー名<input value={driverName} onChange={(e) => setDriverName(e.target.value)} required /></label>
-                  <label>車両番号<input value={vehicleNo} onChange={(e) => setVehicleNo(e.target.value)} required /></label>
+                  <label>{editing.shipment_kind === 'manual_record' ? 'ドライバー名（任意）' : 'ドライバー名'}<input value={driverName} onChange={(e) => setDriverName(e.target.value)} required={editing.shipment_kind !== 'manual_record'} /></label>
+                  <label>{editing.shipment_kind === 'manual_record' ? '車体番号（任意）' : '車両番号'}<input value={vehicleNo} onChange={(e) => setVehicleNo(e.target.value)} required={editing.shipment_kind !== 'manual_record'} /></label>
                 </div>
-              </fieldset></>}
+              </fieldset>
               <label>仕入値（任意・1俵当たり）<input type="number" min="0" step="1" inputMode="decimal" value={purchasePrice} onChange={(e) => setPurchasePrice(e.target.value)} /></label>
               <label>備考（任意）<textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} /></label>
               <div className="modal-actions">
