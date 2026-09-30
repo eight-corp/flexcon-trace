@@ -37,7 +37,7 @@ function App() {
   const [inspectionRegistrationId, setInspectionRegistrationId] = useState<string | null>(null)
   const [inspectionRecordTarget, setInspectionRecordTarget] = useState<InspectionRecordTarget | null>(null)
   const [inspectionReadOnly, setInspectionReadOnly] = useState(false)
-  const [inspectionSummaryState, setInspectionSummaryState] = useState<InspectionSummaryState>({ view: 'list', sort: null, columnFilters: {}, textFilters: {}, calendarMode })
+  const [inspectionSummaryState, setInspectionSummaryState] = useState<InspectionSummaryState>({ view: 'list', sort: null, columnFilters: {}, textFilters: {}, calendarMode, period: { basis: 'inspection', start: '', end: '' } })
   const inspectionSummaryScroll = useRef<InspectionSummaryScroll>({ top: 0, left: 0, pageTop: 0, pageLeft: 0, mainTop: 0, mainLeft: 0 })
 
   useEffect(() => {

@@ -12,6 +12,7 @@ import { findWarehouseForInspectionLocation } from '../lib/inspectionWarehouse'
 import { navigateInspectionField } from '../lib/inspectionFieldNavigation'
 import { groupInspectionRecordsByDate } from '../lib/inspectionDateGroups'
 import { certificateDefaultRange } from '../lib/certificateDefaultRange'
+import { matchesInspectionPeriod, type InspectionPeriod } from '../lib/inspectionPeriod'
 import type { AuthorizationRecord, FlexconInspection, InspectionOption, InspectionRegistration, InspectionWeight, PaperBagInspection } from '../types'
 
 type Props = {
@@ -145,6 +146,7 @@ export type InspectionSummaryState = {
   columnFilters: Partial<Record<SummaryColumn, string[]>>
   textFilters: Partial<Record<SummaryColumn, string>>
   calendarMode: CalendarMode
+  period: InspectionPeriod
 }
 export type InspectionSummaryScroll = { top: number; left: number; pageTop: number; pageLeft: number; mainTop: number; mainLeft: number }
 
@@ -338,6 +340,9 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
   const [splitCounts, setSplitCounts] = useState({ first: '', second: '' })
   const [detailAddition, setDetailAddition] = useState<DetailAdditionDraft | null>(null)
   const { view: summaryView, sort: summarySort, columnFilters: summaryColumnFilters, textFilters: summaryTextFilters } = summaryState
+  const inspectionPeriod = summaryState.period
+  const invalidInspectionPeriod = Boolean(inspectionPeriod.start && inspectionPeriod.end && inspectionPeriod.start > inspectionPeriod.end)
+  const changeInspectionPeriod = (values: Partial<InspectionPeriod>) => onSummaryStateChange((current) => ({ ...current, period: { ...current.period, ...values } }))
   const setSummaryView = (view: InspectionSummaryState['view']) => onSummaryStateChange((current) => ({ ...current, view }))
   const summaryWrapRef = useRef<HTMLDivElement>(null)
   const [recordsLoaded, setRecordsLoaded] = useState(false)
@@ -604,6 +609,8 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
     setVersion((value) => value + 1)
   }
 
+  const periodFlexcons = useMemo(() => flexcons.filter((item) => matchesInspectionPeriod(item, inspectionPeriod)), [flexcons, inspectionPeriod])
+  const periodPaperBags = useMemo(() => paperBags.filter((item) => matchesInspectionPeriod(item, inspectionPeriod)), [paperBags, inspectionPeriod])
   const inspectionProgressRows = useMemo(() => {
     const authorizationById = new Map(authorizations.map((authorization) => [authorization.id, authorization]))
     const grouped = new Map<string, InspectionProgressRow>()
@@ -629,25 +636,25 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
       }
       grouped.set(key, row)
     }
-    flexcons.forEach((item) => addRecord(item, item.quantity_kg))
-    paperBags.forEach((item) => addRecord(item, item.bag_count * 30))
+    periodFlexcons.forEach((item) => addRecord(item, item.quantity_kg))
+    periodPaperBags.forEach((item) => addRecord(item, item.bag_count * 30))
     return [...grouped.values()].sort((left, right) => (
       right.fiscalYear - left.fiscalYear
       || left.origin.localeCompare(right.origin, 'ja', { numeric: true })
       || left.brand.localeCompare(right.brand, 'ja', { numeric: true })
     ))
-  }, [authorizations, flexcons, paperBags])
+  }, [authorizations, periodFlexcons, periodPaperBags])
   const inspectionAggregateGrades = useMemo(() => {
     const masterGrades = inspectionOptions
       .filter((item) => item.active && item.option_type === 'grade')
       .map((item) => item.name.trim())
       .filter((grade) => Boolean(selectedInspectionGrade(grade)))
-    const usedGrades = [...flexcons, ...paperBags]
+    const usedGrades = [...periodFlexcons, ...periodPaperBags]
       .filter(isInspectionResultComplete)
       .map((item) => selectedInspectionGrade(item.grade))
       .filter(Boolean)
     return [...new Set([...masterGrades, ...usedGrades])]
-  }, [flexcons, inspectionOptions, paperBags])
+  }, [periodFlexcons, inspectionOptions, periodPaperBags])
   const inspectionProgressTotals = useMemo(() => inspectionProgressRows.reduce((totals, row) => ({
     inspected: totals.inspected + row.inspectedQuantity,
     uninspected: totals.uninspected + row.uninspectedQuantity,
@@ -668,21 +675,21 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
         purchaseDate: item.purchase_date,
         inspectionDate: item.inspection_date,
         inspectionLocation: item.inspection_location ?? '',
-        moisture: item.moisture,
+        moisture: item.moisture === null ? null : Number(item.moisture),
         grade: selectedInspectionGrade(item.grade) || null,
         missingFields: incompleteInspectionFields(item),
         complete: isInspectionResultComplete(item),
       }
     }
     const rows: InspectionDetailRow[] = [
-      ...flexcons.map((item) => ({
+      ...periodFlexcons.map((item) => ({
         ...commonDetail(item),
         kind: 'flexcon' as const,
         recordNo: item.flexcon_no,
         quantityKg: item.quantity_kg,
         quantityLabel: `${item.quantity_kg.toLocaleString()}kg`,
       })),
-      ...paperBags.map((item) => ({
+      ...periodPaperBags.map((item) => ({
         ...commonDetail(item),
         kind: 'paper' as const,
         recordNo: null,
@@ -699,7 +706,7 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
       || (left.recordNo ?? 0) - (right.recordNo ?? 0)
       || left.purchaseDate.localeCompare(right.purchaseDate)
     ))
-  }, [authorizations, flexcons, paperBags])
+  }, [authorizations, periodFlexcons, periodPaperBags])
   const inspectedDetailRows = inspectionDetailRows.filter((row) => row.complete)
   const uninspectedDetailRows = inspectionDetailRows.filter((row) => !row.complete)
 
@@ -1466,8 +1473,15 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
       {summaryView === 'aggregate' && <section className="inspection-progress-section inspection-summary-aggregate section-band">
         <div className="section-title">
           <div><h2>検査数量</h2><span>産年・産地・銘柄別</span></div>
+          <div className="inspection-progress-period">
+            <label>基準<select aria-label="期間の基準日" value={inspectionPeriod.basis} onChange={(event) => changeInspectionPeriod({ basis: event.target.value as InspectionPeriod['basis'] })}><option value="inspection">検査日</option><option value="purchase">仕入日</option></select></label>
+            <label>開始<JapaneseDateInput value={inspectionPeriod.start} aria-label="期間の開始日" onChange={(start) => changeInspectionPeriod({ start })} /></label>
+            <label>終了<JapaneseDateInput value={inspectionPeriod.end} aria-label="期間の終了日" onChange={(end) => changeInspectionPeriod({ end })} /></label>
+            <button className="icon-button" type="button" title="期間をクリア" aria-label="期間をクリア" disabled={!inspectionPeriod.start && !inspectionPeriod.end} onClick={() => changeInspectionPeriod({ start: '', end: '' })}><X size={17} /></button>
+          </div>
           <div className="inspection-progress-totals"><span>検査済み <strong>{inspectionProgressTotals.inspected.toLocaleString()}kg</strong></span><span>未検査 <strong>{inspectionProgressTotals.uninspected.toLocaleString()}kg</strong></span></div>
         </div>
+        {invalidInspectionPeriod && <div className="inline-error" role="alert">開始日は終了日以前にしてください。</div>}
         <div className="inspection-progress-table-wrap"><table className="inspection-progress-table">
           <thead><tr><th>産年</th><th>産地</th><th>銘柄</th>{inspectionAggregateGrades.map((grade) => <th className="numeric-cell" key={grade}>{grade}</th>)}<th className="numeric-cell">検査済み合計</th><th className="numeric-cell">未検査数量</th></tr></thead>
           <tbody>{inspectionProgressRows.map((row) => <tr key={`${row.fiscalYear}-${row.origin}-${row.brand}`}>
