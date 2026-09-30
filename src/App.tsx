@@ -186,7 +186,7 @@ function App() {
             onOpenQrScanner={isAdmin ? () => setTab('scan') : undefined}
           />
         )}
-        {!statementApplication && tab === 'history' && <ShipmentHistory refreshKey={historyVersion} workerId={worker.worker_id} isAdmin={worker.role === 'admin'} />}
+        {!statementApplication && tab === 'history' && <ShipmentHistory refreshKey={historyVersion} workerId={worker.worker_id} canEdit={canOperate} isAdmin={isAdmin} />}
         {!statementApplication && tab === 'inventory-history' && <InventoryManager view="history" workerId={worker.worker_id} workerName={worker.worker_name} canOperate={canOperate} isAdmin={isAdmin} />}
         {!statementApplication && tab === 'inventory' && <InventoryManager view="balance" workerId={worker.worker_id} workerName={worker.worker_name} canOperate={canOperate} isAdmin={isAdmin} />}
         {statementApplication && tab === 'statement-reader' && canOperate && <PurchaseStatementManager mode="reader" workerId={worker.worker_id} canOperate={canOperate} isAdmin={isAdmin} />}

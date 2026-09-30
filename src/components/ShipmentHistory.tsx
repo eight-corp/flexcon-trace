@@ -15,6 +15,7 @@ import { type ShipmentRecordItemDraft, validateShipmentRecordItems } from '../li
 type Props = {
   refreshKey: number
   workerId: string
+  canEdit: boolean
   isAdmin: boolean
 }
 
@@ -196,7 +197,7 @@ function ShipmentColumnHeader({
   )
 }
 
-export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
+export function ShipmentHistory({ refreshKey, workerId, canEdit, isAdmin }: Props) {
   const { mode: calendarMode, formatDateTime: formatShipmentDateTime } = useCalendarMode()
   const [shipments, setShipments] = useState<Shipment[]>([])
   const [destinations, setDestinations] = useState<Destination[]>([])
@@ -254,7 +255,7 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
   }, [refreshKey, localVersion])
 
   useEffect(() => {
-    if (!isAdmin) return
+    if (!canEdit) return
     void Promise.all([
       supabase.from('flexcon_destinations').select('*').order('active', { ascending: false }).order('name'),
       supabase.from('flexcon_transport_profiles').select('*').order('active', { ascending: false }).order('company_name'),
@@ -266,7 +267,7 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
       else setTransportProfiles((transportResult.data ?? []) as TransportProfile[])
       if (!productResult.error) setShipmentProducts((productResult.data ?? []) as InspectionOption[])
     })
-  }, [isAdmin])
+  }, [canEdit])
 
   const filtered = shipments
 
@@ -446,7 +447,7 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
 
   const saveEdit = async (event: React.FormEvent) => {
     event.preventDefault()
-    if (!editing || !isAdmin) return
+    if (!editing || !canEdit) return
     setBusy(true)
     if (editing.shipment_kind === 'manual_record') {
       const recordError = validateShipmentRecordItems(recordItems, shipmentProducts, false)
@@ -643,10 +644,10 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
                 </div>
                 <div className="shipment-side">
                   <span className="shipment-count">{shipment.shipment_kind === 'manual_record' ? shipment.flexcon_manual_shipment_items.length : shipment.quantity_count ?? shipment.flexcon_shipment_items.length}{shipment.shipment_kind === 'manual_record' ? '件' : shipment.shipment_kind === 'paper_bag' ? '袋' : '本'}</span>
-                  {isAdmin && (
+                  {canEdit && (
                     <div className="shipment-admin-actions">
                       <button className="icon-button" type="button" title="出荷履歴を編集" aria-label="出荷履歴を編集" onClick={() => beginEdit(shipment)} disabled={busy}><Pencil size={18} /></button>
-                      <button className="icon-button delete-icon" type="button" title="出荷履歴を削除" aria-label="出荷履歴を削除" onClick={() => void deleteShipment(shipment)} disabled={busy}><Trash2 size={18} /></button>
+                      {isAdmin && <button className="icon-button delete-icon" type="button" title="出荷履歴を削除" aria-label="出荷履歴を削除" onClick={() => void deleteShipment(shipment)} disabled={busy}><Trash2 size={18} /></button>}
                     </div>
                   )}
                 </div>
@@ -689,6 +690,7 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
             <table className="shipment-table">
               <thead>
                 <tr>
+                  {canEdit && <th className="shipment-actions-heading">操作</th>}
                   {TABLE_COLUMNS.map((column) => (
                     <ShipmentColumnHeader
                       key={column.key}
@@ -702,12 +704,19 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
                       onTextChange={changeColumnTextFilter}
                     />
                   ))}
-                  {isAdmin && <th className="shipment-actions-heading">操作</th>}
                 </tr>
               </thead>
               <tbody>
                 {displayedTableRows.map((row) => (
                   <tr key={row.id}>
+                    {canEdit && (
+                      <td className="shipment-actions-cell">
+                        <div className="shipment-table-actions">
+                          <button className="icon-button" type="button" title="出荷履歴を編集" aria-label={`${row.destination}の出荷履歴を編集`} onClick={() => beginEdit(row.shipment)} disabled={busy}><Pencil size={17} /></button>
+                          {isAdmin && <button className="icon-button delete-icon" type="button" title="出荷履歴を削除" aria-label={`${row.destination}の出荷履歴を削除`} onClick={() => void deleteShipment(row.shipment)} disabled={busy}><Trash2 size={17} /></button>}
+                        </div>
+                      </td>
+                    )}
                     <td>{row.shippedAt}</td>
                     <td>{row.destination}</td>
                     <td>{row.origin}</td>
@@ -723,14 +732,6 @@ export function ShipmentHistory({ refreshKey, workerId, isAdmin }: Props) {
                     <td>{row.vehicle}</td>
                     <td>{row.worker}</td>
                     <td className="shipment-note-cell">{row.note}</td>
-                    {isAdmin && (
-                      <td className="shipment-actions-cell">
-                        <div className="shipment-table-actions">
-                          <button className="icon-button" type="button" title="出荷履歴を編集" aria-label={`${row.destination}の出荷履歴を編集`} onClick={() => beginEdit(row.shipment)} disabled={busy}><Pencil size={17} /></button>
-                          <button className="icon-button delete-icon" type="button" title="出荷履歴を削除" aria-label={`${row.destination}の出荷履歴を削除`} onClick={() => void deleteShipment(row.shipment)} disabled={busy}><Trash2 size={17} /></button>
-                        </div>
-                      </td>
-                    )}
                   </tr>
                 ))}
               </tbody>

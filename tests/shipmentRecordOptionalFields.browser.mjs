@@ -25,7 +25,7 @@ try {
         const resource = new URL(route.request().url()).pathname.split('/rest/v1/')[1]
         let body = []
         if (resource === 'rpc/business_session') {
-          body = { ok: true, workerId: 'tester', workerName: 'Tester', permissions: { rice_shipping: 'admin' } }
+          body = { ok: true, workerId: 'tester', workerName: 'Tester', permissions: { rice_shipping: 'operator' } }
         } else if (resource === 'rpc/flexcon_register_inventory_record') {
           requests.push(route.request().postDataJSON())
           body = uuid(requests.length)
@@ -98,6 +98,17 @@ try {
       assert.deepEqual(errors, [])
       if (process.env.QA_ARTIFACTS) await page.screenshot({ path: path.join(process.env.QA_ARTIFACTS, `shipment-optional-fields-${width}.png`), fullPage: true })
       await page.getByRole('button', { name: '出荷履歴', exact: true }).click()
+      const table = page.locator('.shipment-table')
+      await table.locator('thead th').first().getByText('操作').waitFor()
+      await table.locator('tbody tr').first().getByRole('button', { name: /出荷履歴を編集/ }).waitFor()
+      assert.equal(await table.getByRole('button', { name: /出荷履歴を削除/ }).count(), 0)
+      const editCell = table.locator('tbody tr').first().locator('td').first()
+      const beforeScroll = await editCell.boundingBox()
+      await page.locator('.shipment-table-wrap').evaluate(element => { element.scrollLeft = 500 })
+      const afterScroll = await editCell.boundingBox()
+      assert.ok(beforeScroll && afterScroll)
+      assert.ok(Math.abs(beforeScroll.x - afterScroll.x) < 2)
+      if (process.env.QA_ARTIFACTS) await page.screenshot({ path: path.join(process.env.QA_ARTIFACTS, `shipment-history-operator-${width}.png`), fullPage: true })
       await page.getByRole('button', { name: 'パネル表示' }).click()
       const history = page.locator('.shipment-list')
       await history.locator('.shipment-item').first().waitFor()

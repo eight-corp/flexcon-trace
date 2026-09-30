@@ -498,8 +498,8 @@
 .shipment-table th.shipment-column-flexconQuantity .shipment-column-sort,
 .shipment-table th.shipment-column-paperBagQuantity .shipment-column-sort,
 .shipment-table th.shipment-column-kgQuantity .shipment-column-sort { justify-content: flex-end; text-align: right; }
-.shipment-table th.shipment-actions-heading { padding: 5px 8px; text-align: center; }
-.shipment-table td.shipment-actions-cell { padding: 2px 5px; white-space: nowrap; }
+.shipment-table th.shipment-actions-heading { left: 0; z-index: 5; padding: 5px 8px; text-align: center; }
+.shipment-table td.shipment-actions-cell { position: sticky; left: 0; z-index: 2; padding: 2px 5px; background: inherit; white-space: nowrap; }
 .shipment-table-actions { display: flex; align-items: center; justify-content: center; gap: 4px; }
 .shipment-table-actions .icon-button { width: 32px; height: 32px; }
 .shipment-column-heading { position: relative; min-height: 36px; display: grid; grid-template-columns: minmax(0, 1fr) 32px; align-items: stretch; }
