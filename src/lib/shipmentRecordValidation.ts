@@ -3,6 +3,7 @@ import { selectedInspectionGrade } from './inspectionGrade'
 
 export type ShipmentRecordItemDraft = {
   key: string
+  cropYear: string
   originPrefecture: string
   productName: string
   grade: string
@@ -31,10 +32,12 @@ export function gradesFor(productName: string, options: InspectionOption[], requ
     && (productName === '飼料用玄米' ? ['合格', '未検査'].includes(option.name) : option.name !== '合格'))
 }
 
-export function validateShipmentRecordItems(items: ShipmentRecordItemDraft[], options: InspectionOption[], requireActive = true) {
+export function validateShipmentRecordItems(items: ShipmentRecordItemDraft[], options: InspectionOption[], requireActive = true, requireCropYear = false) {
   if (items.length === 0) return '出荷明細を1件以上追加してください。'
   const seen = new Set<string>()
   for (const item of items) {
+    if (requireCropYear && !item.cropYear) return '産年を入力してください。'
+    if (item.cropYear && (!/^\d{4}$/.test(item.cropYear) || Number(item.cropYear) < 1900 || Number(item.cropYear) > 2100)) return '産年を確認してください。'
     if (!['青森県', '岩手県'].includes(item.originPrefecture)) return '産地を選択してください。'
     const product = productOptions(item.originPrefecture, options).find((option) => option.name === item.productName && (!requireActive || option.active))
     if (!product) return '種類を選択してください。'
@@ -44,8 +47,8 @@ export function validateShipmentRecordItems(items: ShipmentRecordItemDraft[], op
       const grade = item.grade === '未検査' ? item.grade : selectedInspectionGrade(item.grade)
       if (!grade || !gradesFor(item.productName, options, requireActive).some((option) => option.name === grade)) return '銘柄米の等級を選択してください。'
     } else if (item.grade) return '銘柄米以外に等級は入力できません。'
-    const key = `${item.originPrefecture}\u001f${item.productName.toLowerCase()}\u001f${item.grade}\u001f${item.unit}`
-    if (seen.has(key)) return '同じ産地・種類・等級・単位が重複しています。'
+    const key = `${item.cropYear}\u001f${item.originPrefecture}\u001f${item.productName.toLowerCase()}\u001f${item.grade}\u001f${item.unit}`
+    if (seen.has(key)) return '同じ産年・産地・種類・等級・単位が重複しています。'
     seen.add(key)
   }
   return null

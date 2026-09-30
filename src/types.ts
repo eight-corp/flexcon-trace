@@ -53,6 +53,7 @@ export type Shipment = {
   }[]
   flexcon_manual_shipment_items: {
     id: string
+    crop_year: number | null
     origin_prefecture: string | null
     product_name: string
     quantity_count: number

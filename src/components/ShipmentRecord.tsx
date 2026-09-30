@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { RotateCcw, ScanLine, Send, UserRound } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { JapaneseDateTimeInput } from './JapaneseDateInput'
+import { useCalendarMode } from '../lib/calendarMode'
 import type { Destination, InspectionOption, TransportProfile } from '../types'
 import { ShipmentRecordItemsEditor } from './ShipmentRecordItemsEditor'
 import { type ShipmentRecordItemDraft, validateShipmentRecordItems } from '../lib/shipmentRecordValidation'
@@ -20,6 +21,7 @@ function currentLocalDateTime() {
 }
 
 export function ShipmentRecord({ workerId, workerName, onRegistered, onOpenQrScanner }: Props) {
+  const { formatCropYear } = useCalendarMode()
   const [destinations, setDestinations] = useState<Destination[]>([])
   const [transportProfiles, setTransportProfiles] = useState<TransportProfile[]>([])
   const [warehouses, setWarehouses] = useState<InspectionOption[]>([])
@@ -58,7 +60,7 @@ export function ShipmentRecord({ workerId, workerName, onRegistered, onOpenQrSca
 
   const count = items.length
   const origin = [...new Set(items.map((item) => item.originPrefecture).filter(Boolean))].join('、') || '産地未登録'
-  const products = items.map((item) => `${item.productName}${item.grade ? ` ${item.grade}` : ''} ${item.quantityCount}${item.unit}`).join('、') || '明細未登録'
+  const products = items.map((item) => `${formatCropYear(item.cropYear)} ${item.productName}${item.grade ? ` ${item.grade}` : ''} ${item.quantityCount}${item.unit}`).join('、') || '明細未登録'
 
   const clearForm = () => {
     setNotice(null)
@@ -79,7 +81,7 @@ export function ShipmentRecord({ workerId, workerName, onRegistered, onOpenQrSca
     if (busy) return
     if (!shippedAt || !Number.isFinite(new Date(shippedAt).getTime())) return setNotice({ type: 'error', text: '出荷日時を入力してください。' })
     if (!fromWarehouseId) return setNotice({ type: 'error', text: '出庫元倉庫を選択してください。' })
-    const itemError = validateShipmentRecordItems(items, shipmentProducts)
+    const itemError = validateShipmentRecordItems(items, shipmentProducts, true, true)
     if (itemError) return setNotice({ type: 'error', text: itemError })
     const price = purchasePrice.trim() === '' ? null : Number(purchasePrice)
     if (price !== null && (!Number.isFinite(price) || price < 0)) return setNotice({ type: 'error', text: '仕入値は0以上の数値で入力してください。' })
@@ -97,6 +99,7 @@ export function ShipmentRecord({ workerId, workerName, onRegistered, onOpenQrSca
       p_from_warehouse_id: fromWarehouseId,
       p_note: note.trim() || null,
       p_items: items.map((item) => ({
+        crop_year: item.cropYear ? Number(item.cropYear) : null,
         origin_prefecture: item.originPrefecture,
         product_name: item.productName,
         quantity_count: Number(item.quantityCount),

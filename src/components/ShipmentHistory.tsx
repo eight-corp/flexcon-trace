@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ArrowDown, ArrowUp, Building2, Download, LayoutGrid, Pencil, Save, Table2, Trash2, Truck, UserRound, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { formatDisplayDateTime, formatJapaneseDateForFilename } from '../lib/japaneseEra'
+import { formatDisplayCropYear, formatDisplayDateTime, formatJapaneseDateForFilename, type CalendarMode } from '../lib/japaneseEra'
 import { useCalendarMode } from '../lib/calendarMode'
 import { matchesFilterText } from '../lib/tableFilters'
 import { TableColumnFilter } from './TableColumnFilter'
@@ -23,8 +23,9 @@ type Notice = { type: 'success' | 'error'; text: string } | null
 type ViewMode = 'cards' | 'table'
 type SortDirection = 'asc' | 'desc'
 type MixedShipmentInfo = { mixedNo: number; producerLabel: string }
-type TableColumn = 'shippedAt' | 'destination' | 'origin' | 'productName' | 'grade' | 'moisture' | 'reason' | 'flexconQuantity' | 'paperBagQuantity' | 'kgQuantity' | 'carrier' | 'driver' | 'vehicle' | 'worker' | 'note'
+type TableColumn = 'shippedAt' | 'cropYear' | 'destination' | 'origin' | 'productName' | 'grade' | 'moisture' | 'reason' | 'flexconQuantity' | 'paperBagQuantity' | 'kgQuantity' | 'carrier' | 'driver' | 'vehicle' | 'worker' | 'note'
 type ShipmentProductGroup = {
+  cropYear: number | null
   origin: string
   name: string
   count: number
@@ -39,6 +40,7 @@ type ShipmentTableRow = {
   originalOrder: number
   shippedAt: string
   shippedAtValue: number
+  cropYear: string
   destination: string
   origin: string
   productName: string
@@ -59,6 +61,7 @@ type ShipmentTableRow = {
 }
 
 type DestinationSummaryRow = {
+  cropYear: string
   destination: string
   productName: string
   grade: string
@@ -69,6 +72,7 @@ type DestinationSummaryRow = {
 
 const TABLE_COLUMNS: Array<{ key: TableColumn; label: string }> = [
   { key: 'shippedAt', label: '出荷日時' },
+  { key: 'cropYear', label: '産年' },
   { key: 'destination', label: '納品先' },
   { key: 'origin', label: '産地' },
   { key: 'productName', label: '品名' },
@@ -91,9 +95,9 @@ function toLocalDateTime(value: string) {
   return date.toISOString().slice(0, 16)
 }
 
-function shipmentProductSummary(shipment: Shipment) {
+function shipmentProductSummary(shipment: Shipment, calendarMode: CalendarMode) {
   return shipmentProductGroups(shipment)
-    .map((group) => `${group.origin ? `${group.origin} ` : ''}${group.name}${group.grade ? ` ${group.grade}` : ''} ${group.count}${group.unit}`)
+    .map((group) => `${group.cropYear ? `${formatDisplayCropYear(group.cropYear, calendarMode)} ` : ''}${group.origin ? `${group.origin} ` : ''}${group.name}${group.grade ? ` ${group.grade}` : ''} ${group.count}${group.unit}`)
     .join('、')
 }
 
@@ -105,6 +109,7 @@ function shipmentProductGroups(shipment: Shipment): ShipmentProductGroup[] {
   if (shipment.shipment_kind !== 'qr_flexcon') {
     if (shipment.flexcon_manual_shipment_items.length > 0) {
       return [...shipment.flexcon_manual_shipment_items].sort((a, b) => a.sort_order - b.sort_order).map((item) => ({
+        cropYear: shipment.shipment_kind === 'manual_record' ? item.crop_year : null,
         origin: formatPrefectureName(item.origin_prefecture) || '産地未登録',
         name: item.product_name,
         count: item.quantity_count,
@@ -115,6 +120,7 @@ function shipmentProductGroups(shipment: Shipment): ShipmentProductGroup[] {
       }))
     }
     return [{
+      cropYear: null,
       origin: formatPrefectureName(shipment.origin_prefecture) || '産地未登録',
       name: shipment.product_name?.trim() || '品名未登録',
       count: shipment.quantity_count ?? 0,
@@ -135,6 +141,7 @@ function shipmentProductGroups(shipment: Shipment): ShipmentProductGroup[] {
     const reasons = current?.reasons ?? new Set<string>()
     if (item.reason?.trim()) reasons.add(item.reason.trim())
     groups.set(key, {
+      cropYear: null,
       origin,
       name,
       grade,
@@ -148,6 +155,7 @@ function shipmentProductGroups(shipment: Shipment): ShipmentProductGroup[] {
     })
   })
   return [...groups.values()].map((group) => ({
+    cropYear: group.cropYear,
     origin: group.origin,
     name: group.name,
     grade: group.grade,
@@ -228,7 +236,7 @@ export function ShipmentHistory({ refreshKey, workerId, canEdit, isAdmin }: Prop
 
   useEffect(() => {
     void Promise.all([
-      supabase.from('flexcon_shipments').select('id, destination_id, transport_profile_id, shipped_at, carrier_name, driver_name, vehicle_no, note, shipment_kind, origin_prefecture, product_name, quantity_count, purchase_price_per_bale, flexcon_destinations(name), flexcon_shipment_items(lot_number, origin_prefecture, product_name, grade, moisture, reason), flexcon_manual_shipment_items(id, origin_prefecture, product_name, quantity_count, unit, grade, moisture, reason, sort_order), workers(worker_name)').order('shipped_at', { ascending: false }).limit(200),
+      supabase.from('flexcon_shipments').select('id, destination_id, transport_profile_id, shipped_at, carrier_name, driver_name, vehicle_no, note, shipment_kind, origin_prefecture, product_name, quantity_count, purchase_price_per_bale, flexcon_destinations(name), flexcon_shipment_items(lot_number, origin_prefecture, product_name, grade, moisture, reason), flexcon_manual_shipment_items(id, crop_year, origin_prefecture, product_name, quantity_count, unit, grade, moisture, reason, sort_order), workers(worker_name)').order('shipped_at', { ascending: false }).limit(200),
       supabase.from('flexcon_mixed_flexcons').select('mixed_no, lot_number, flexcon_mixed_flexcon_members(sort_order, flexcon_authorizations(full_name))'),
     ]).then(([shipmentResult, mixedResult]) => {
       if (shipmentResult.error) setNotice({ type: 'error', text: shipmentResult.error.message })
@@ -278,6 +286,7 @@ export function ShipmentHistory({ refreshKey, workerId, canEdit, isAdmin }: Prop
       originalOrder: shipmentIndex * 100 + groupIndex,
       shippedAt: formatDisplayDateTime(shipment.shipped_at, calendarMode),
       shippedAtValue: new Date(shipment.shipped_at).getTime(),
+      cropYear: formatDisplayCropYear(group.cropYear, calendarMode),
       destination: shipmentDestinationLabel(shipment),
       origin: group.origin,
       productName: group.name,
@@ -346,7 +355,7 @@ export function ShipmentHistory({ refreshKey, workerId, canEdit, isAdmin }: Prop
     }>()
 
     displayedTableRows.forEach((row) => {
-      const key = `${row.destination}\u001f${row.productName}\u001f${row.grade}`
+      const key = `${row.cropYear}\u001f${row.destination}\u001f${row.productName}\u001f${row.grade}`
       const summary = summaries.get(key) ?? {
         flexconQuantity: 0,
         paperBagQuantity: 0,
@@ -359,8 +368,9 @@ export function ShipmentHistory({ refreshKey, workerId, canEdit, isAdmin }: Prop
     })
 
     return Array.from(summaries, ([key, summary]): DestinationSummaryRow => {
-      const [destination, productName, grade] = key.split('\u001f')
+      const [cropYear, destination, productName, grade] = key.split('\u001f')
       return {
+        cropYear,
         destination,
         productName,
         grade,
@@ -415,6 +425,7 @@ export function ShipmentHistory({ refreshKey, workerId, canEdit, isAdmin }: Prop
     setRecordItems(shipment.shipment_kind === 'manual_record'
       ? [...shipment.flexcon_manual_shipment_items].sort((a, b) => a.sort_order - b.sort_order).map((item) => ({
         key: item.id,
+        cropYear: item.crop_year == null ? '' : String(item.crop_year),
         originPrefecture: formatPrefectureName(item.origin_prefecture),
         productName: item.product_name,
         grade: item.grade ?? '',
@@ -489,6 +500,7 @@ export function ShipmentHistory({ refreshKey, workerId, canEdit, isAdmin }: Prop
       ? await supabase.rpc('flexcon_update_inventory_record', {
         ...commonValues,
         p_items: recordItems.map((item) => ({
+          crop_year: item.cropYear ? Number(item.cropYear) : null,
           origin_prefecture: item.originPrefecture,
           product_name: item.productName,
           quantity_count: Number(item.quantityCount),
@@ -548,10 +560,11 @@ export function ShipmentHistory({ refreshKey, workerId, canEdit, isAdmin }: Prop
   }
 
   const exportCsv = () => {
-    const rows = [['出荷日時', '納品先', '担当者', '運送会社名', 'ドライバー名', '車両番号', '出荷区分', '産地', '品名', '等級', '水分', '理由', '種類別数量', 'QRコード', '混在フレコン情報', '数量', '単位', '仕入値（1俵当たり）', '備考']]
+    const rows = [['出荷日時', '産年', '納品先', '担当者', '運送会社名', 'ドライバー名', '車両番号', '出荷区分', '産地', '品名', '等級', '水分', '理由', '種類別数量', 'QRコード', '混在フレコン情報', '数量', '単位', '仕入値（1俵当たり）', '備考']]
     filtered.forEach((shipment) => {
       const details = shipment.shipment_kind === 'qr_flexcon'
         ? shipment.flexcon_shipment_items.map((item) => ({
+          cropYear: null as number | null,
           lotNumber: item.lot_number,
           originPrefecture: formatPrefectureName(item.origin_prefecture ?? shipment.origin_prefecture),
           productName: item.product_name ?? shipment.product_name ?? '品名未登録',
@@ -563,6 +576,7 @@ export function ShipmentHistory({ refreshKey, workerId, canEdit, isAdmin }: Prop
         }))
         : shipment.flexcon_manual_shipment_items.length > 0
           ? [...shipment.flexcon_manual_shipment_items].sort((a, b) => a.sort_order - b.sort_order).map((item) => ({
+            cropYear: shipment.shipment_kind === 'manual_record' ? item.crop_year : null,
             lotNumber: '',
             originPrefecture: formatPrefectureName(item.origin_prefecture),
             productName: item.product_name,
@@ -573,6 +587,7 @@ export function ShipmentHistory({ refreshKey, workerId, canEdit, isAdmin }: Prop
             unit: item.unit ?? (shipment.shipment_kind === 'paper_bag' ? '袋' : '本'),
           }))
           : [{
+            cropYear: null as number | null,
             lotNumber: '',
             originPrefecture: formatPrefectureName(shipment.origin_prefecture),
             productName: shipment.product_name ?? '品名未登録',
@@ -584,6 +599,7 @@ export function ShipmentHistory({ refreshKey, workerId, canEdit, isAdmin }: Prop
           }]
       details.forEach((item) => rows.push([
         formatShipmentDateTime(shipment.shipped_at),
+        formatDisplayCropYear(item.cropYear, calendarMode),
         shipment.flexcon_destinations?.name ?? '',
         shipment.workers?.worker_name ?? '',
         shipment.carrier_name ?? '',
@@ -595,7 +611,7 @@ export function ShipmentHistory({ refreshKey, workerId, canEdit, isAdmin }: Prop
         item.grade,
         item.moisture === null ? '' : `${Number(item.moisture).toFixed(1)}%`,
         item.reason,
-        shipmentProductSummary(shipment),
+        shipmentProductSummary(shipment, calendarMode),
         item.lotNumber,
         mixedShipmentByLot[item.lotNumber] ? `混在№${mixedShipmentByLot[item.lotNumber].mixedNo} ${mixedShipmentByLot[item.lotNumber].producerLabel}` : '',
         String(item.quantityCount),
@@ -633,7 +649,7 @@ export function ShipmentHistory({ refreshKey, workerId, canEdit, isAdmin }: Prop
                 <div>
                   <div className="shipment-title-line">
                     <strong>{shipmentDestinationLabel(shipment)}</strong>
-                    <span>{shipmentProductSummary(shipment)}</span>
+                    <span>{shipmentProductSummary(shipment, calendarMode)}</span>
                   </div>
                   <small>{formatShipmentDateTime(shipment.shipped_at)}</small>
                   <small><UserRound size={13} className="inline-icon" />担当：{shipment.workers?.worker_name ?? '不明'}</small>
@@ -668,10 +684,11 @@ export function ShipmentHistory({ refreshKey, workerId, canEdit, isAdmin }: Prop
             <div className="section-title"><div><h2 id="destination-summary-title">納品先別集計</h2><span>{destinationSummaryRows.length}件</span></div></div>
             <div className="shipment-summary-table-wrap">
               <table className="shipment-summary-table">
-                <thead><tr><th>納品先</th><th>品名</th><th>等級</th><th>フレコン本数</th><th>紙袋数</th><th>kg数量</th></tr></thead>
+                <thead><tr><th>産年</th><th>納品先</th><th>品名</th><th>等級</th><th>フレコン本数</th><th>紙袋数</th><th>kg数量</th></tr></thead>
                 <tbody>
                   {destinationSummaryRows.map((row) => (
-                    <tr key={`${row.destination}-${row.productName}-${row.grade}`}>
+                    <tr key={`${row.cropYear}-${row.destination}-${row.productName}-${row.grade}`}>
+                      <td>{row.cropYear}</td>
                       <td>{row.destination}</td>
                       <td>{row.productName}</td>
                       <td>{row.grade}</td>
@@ -718,6 +735,7 @@ export function ShipmentHistory({ refreshKey, workerId, canEdit, isAdmin }: Prop
                       </td>
                     )}
                     <td>{row.shippedAt}</td>
+                    <td>{row.cropYear}</td>
                     <td>{row.destination}</td>
                     <td>{row.origin}</td>
                     <td>{row.productName}</td>
