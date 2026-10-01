@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type Dispatch, type RefObject, type SetStateAction } from 'react'
-import { ArrowDown, ArrowLeft, ArrowUp, BarChart3, ChevronDown, CircleAlert, CircleCheck, ClipboardList, ExternalLink, FileText, List, Plus, Printer, Save, TableRowsSplit, Trash2, X } from 'lucide-react'
+import { ArrowDown, ArrowLeft, ArrowUp, BarChart3, ChevronDown, CircleAlert, CircleCheck, ClipboardList, ExternalLink, FileText, FilterX, List, Plus, Printer, Save, TableRowsSplit, Trash2, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { formatDisplayDate, formatJapaneseDateForFilename, type CalendarMode } from '../lib/japaneseEra'
 import { useCalendarMode } from '../lib/calendarMode'
@@ -340,6 +340,7 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
   const [splitCounts, setSplitCounts] = useState({ first: '', second: '' })
   const [detailAddition, setDetailAddition] = useState<DetailAdditionDraft | null>(null)
   const { view: summaryView, sort: summarySort, columnFilters: summaryColumnFilters, textFilters: summaryTextFilters } = summaryState
+  const hasSummaryFilters = SUMMARY_COLUMNS.some((column) => summaryColumnFilters[column.key] !== undefined || Boolean(summaryTextFilters[column.key]))
   const inspectionPeriod = summaryState.period
   const invalidInspectionPeriod = Boolean(inspectionPeriod.start && inspectionPeriod.end && inspectionPeriod.start > inspectionPeriod.end)
   const changeInspectionPeriod = (values: Partial<InspectionPeriod>) => onSummaryStateChange((current) => ({ ...current, period: { ...current.period, ...values } }))
@@ -786,6 +787,7 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
     onSelectedRegistrationChange(row.registrationId)
     onSelectedAuthorizationChange(row.authorizationId)
   }
+  const clearSummaryFilters = () => onSummaryStateChange((current) => ({ ...current, columnFilters: {}, textFilters: {} }))
 
   const applyBatchMetadata = async (event: React.FormEvent) => {
     event.preventDefault()
@@ -1452,7 +1454,7 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
 
   if (!selectedAuthorization) {
     return <div className="inspection-page">
-      <div className="page-heading inspection-summary-heading"><p>生産者詳細で追加した順番に検査記録を表示します。</p>{!readOnly && summaryView === 'list' && <button className={`inspection-summary-add-button ${addGroupFormOpen ? 'secondary-button' : 'primary-button'}`} type="button" aria-expanded={addGroupFormOpen} onClick={() => { setProducerPickerOpen(false); setAddGroupFormOpen((current) => !current) }}>{addGroupFormOpen ? <><X size={16} />閉じる</> : <><Plus size={16} />追加</>}</button>}</div>
+      <div className="page-heading inspection-summary-heading"><p>生産者詳細で追加した順番に検査記録を表示します。</p>{summaryView === 'list' && <div className="inspection-summary-heading-actions"><button className="secondary-button inspection-summary-add-button" type="button" title="一覧の絞り込みをクリア" disabled={!hasSummaryFilters} onClick={clearSummaryFilters}><FilterX size={16} />絞り込み解除</button>{!readOnly && <button className={`inspection-summary-add-button ${addGroupFormOpen ? 'secondary-button' : 'primary-button'}`} type="button" aria-expanded={addGroupFormOpen} onClick={() => { setProducerPickerOpen(false); setAddGroupFormOpen((current) => !current) }}>{addGroupFormOpen ? <><X size={16} />閉じる</> : <><Plus size={16} />追加</>}</button>}</div>}</div>
       <div className="inspection-record-tabs inspection-summary-tabs" role="tablist" aria-label="検査記録の表示">
         <button type="button" role="tab" aria-selected={summaryView === 'list'} className={summaryView === 'list' ? 'active' : ''} onClick={() => setSummaryView('list')}><List size={18} />一覧</button>
         <button type="button" role="tab" aria-selected={summaryView === 'aggregate'} className={summaryView === 'aggregate' ? 'active' : ''} onClick={() => { setProducerPickerOpen(false); setAddGroupFormOpen(false); setSummaryView('aggregate') }}><BarChart3 size={18} />集計</button>

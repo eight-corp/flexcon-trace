@@ -701,8 +701,9 @@
 .app-main-inspection-list .inspection-workspace-content,
 .app-main.app-main-inspection-list .inspection-page { height: auto; flex: none; }
 .app-main-inspection-list .inspection-summary-wrap { flex: none; min-height: auto; overflow-x: auto; }
-.inspection-summary-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.inspection-summary-heading p { flex: 1; min-width: 0; margin: 0; }
+.inspection-summary-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; }
+.inspection-summary-heading p { flex: 1 1 200px; min-width: 0; margin: 0; }
+.inspection-summary-heading-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 6px; margin-left: auto; }
 .inspection-summary-add-button { flex: 0 0 auto; min-height: 32px; padding: 4px 8px; gap: 4px; font-size: 12px; }
 .inspection-completion-status { display: inline-flex; align-items: center; gap: 5px; padding: 3px 6px; border-radius: 4px; font-size: 12px; font-weight: 700; }
 .inspection-completion-status.complete { background: var(--green-soft); color: var(--green-dark); }
