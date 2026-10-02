@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowDown, ArrowUp, FileUp, Plus, Save, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, FileUp, FilterX, Plus, Save, X } from 'lucide-react'
 import type { CellValue } from 'read-excel-file/browser'
 import { supabase } from '../lib/supabase'
 import { authorizationAddError, normalizeName } from '../lib/authorizationValidation'
@@ -163,6 +163,7 @@ export function AuthorizationManager({ workerId, isAdmin, onOpenInspections }: P
   const [sort, setSort] = useState<AuthorizationSort>(null)
   const [columnFilters, setColumnFilters] = useState<AuthorizationFilters>({})
   const [columnTextFilters, setColumnTextFilters] = useState<Partial<Record<AuthorizationColumn, string>>>({})
+  const hasColumnFilters = Object.keys(columnFilters).length > 0 || Object.values(columnTextFilters).some(Boolean)
   const [notice, setNotice] = useState<Notice>(null)
   const [version, setVersion] = useState(0)
   const [modalOpen, setModalOpen] = useState(false)
@@ -613,6 +614,7 @@ export function AuthorizationManager({ workerId, isAdmin, onOpenInspections }: P
       <div className="page-heading"><p>登録済みの委任状情報を確認・更新します。</p></div>
 
       <div className="authorization-actions-row">
+        <button className="secondary-button" type="button" title="一覧の絞り込みをクリア" disabled={!hasColumnFilters} onClick={() => { setColumnFilters({}); setColumnTextFilters({}) }}><FilterX size={16} />絞り込み解除</button>
         {isAdmin && <input
           ref={fileInputRef}
           className="visually-hidden"

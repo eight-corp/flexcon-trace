@@ -525,7 +525,7 @@
 .shipment-filter-values { max-height: 230px; overflow-y: auto; border-top: 1px solid var(--line); padding-top: 5px; }
 .authorization-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
 .authorization-heading > div { min-width: 0; }
-.authorization-actions-row { display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 14px; }
+.authorization-actions-row { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-bottom: 14px; }
 .visually-hidden { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; margin: -1px !important; overflow: hidden !important; clip: rect(0, 0, 0, 0) !important; white-space: nowrap !important; border: 0 !important; }
 .authorization-table-wrap { max-width: 100%; overflow: auto; border: 1px solid var(--line); border-radius: 7px; background: #fff; }
 .memo-page { min-height: 0; display: flex; flex-direction: column; }
