@@ -9,10 +9,21 @@ const records = [
 ]
 
 test('authorization columns cover every displayed data field', () => {
-  assert.equal(AUTHORIZATION_COLUMNS.length, 11)
+  assert.equal(AUTHORIZATION_COLUMNS.length, 12)
+  assert.equal(AUTHORIZATION_COLUMNS[2].key, 'purchase_status')
   assert.equal(authorizationColumnValue(records[0], 'address'), '')
   assert.equal(authorizationColumnValue(records[0], 'seed_purchase_slip'), 'なし')
   assert.equal(authorizationColumnValue(records[1], 'seed_purchase_slip'), 'あり')
+})
+
+test('purchase presence is displayed, filtered, and sorted by linked detail IDs', () => {
+  const purchaseIds = new Set(['a', 'c'])
+  assert.equal(authorizationColumnValue(records[0], 'purchase_status', purchaseIds), 'あり')
+  assert.equal(authorizationColumnValue(records[1], 'purchase_status', purchaseIds), 'なし')
+  assert.equal(authorizationColumnValue(records[1], 'purchase_status', null), '確認不可')
+  assert.deepEqual(selectAuthorizations(records, { purchase_status: ['あり'] }, null, {}, purchaseIds).map((item) => item.id), ['a', 'c'])
+  assert.deepEqual(selectAuthorizations(records, {}, { key: 'purchase_status', direction: 'asc' }, {}, purchaseIds).map((item) => item.id), ['b', 'a', 'c'])
+  assert.deepEqual(selectAuthorizations(records, {}, { key: 'purchase_status', direction: 'desc' }, {}, purchaseIds).map((item) => item.id), ['a', 'c', 'b'])
 })
 
 test('number sorting is numeric and default order is preserved', () => {

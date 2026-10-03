@@ -552,7 +552,7 @@
 .memo-body-field { display: grid; gap: 6px; font-weight: 700; }
 .memo-body-field textarea { width: 100%; min-height: 220px; resize: vertical; font-weight: 400; }
 .memo-full-text { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.7; }
-.authorization-table { width: 1338px; table-layout: fixed; border-collapse: separate; border-spacing: 0; font-size: 13px; }
+.authorization-table { width: 1422px; table-layout: fixed; border-collapse: separate; border-spacing: 0; font-size: 13px; }
 .authorization-table th, .authorization-table td { padding: 5px 5px; border-bottom: 1px solid var(--line); border-right: 1px solid #e5e8e5; text-align: left; vertical-align: middle; overflow-wrap: anywhere; }
 .authorization-table th.authorization-filter-heading { padding: 0; }
 .authorization-filter-heading .shipment-column-heading { grid-template-columns: minmax(0, 1fr) 24px; }
@@ -560,15 +560,15 @@
 .authorization-filter-heading .shipment-column-sort > svg { position: static; flex: 0 0 14px; }
 .authorization-table th:nth-child(1) { width: 60px; }
 .authorization-table th:nth-child(2) { width: 150px; }
-.authorization-table th:nth-child(3), .authorization-table th:nth-child(4) { width: 84px; }
-.authorization-table th:nth-child(5) { width: 230px; }
-.authorization-table th:nth-child(6) { width: 70px; }
-.authorization-table th:nth-child(7) { width: 100px; }
-.authorization-table th:nth-child(8) { width: 115px; }
-.authorization-table th:nth-child(9) { width: 110px; }
-.authorization-table th:nth-child(10) { width: 125px; }
-.authorization-table th:nth-child(11) { width: 160px; }
-.authorization-table th:nth-child(12) { width: 50px; }
+.authorization-table th:nth-child(3), .authorization-table th:nth-child(4), .authorization-table th:nth-child(5) { width: 84px; }
+.authorization-table th:nth-child(6) { width: 230px; }
+.authorization-table th:nth-child(7) { width: 70px; }
+.authorization-table th:nth-child(8) { width: 100px; }
+.authorization-table th:nth-child(9) { width: 115px; }
+.authorization-table th:nth-child(10) { width: 110px; }
+.authorization-table th:nth-child(11) { width: 125px; }
+.authorization-table th:nth-child(12) { width: 160px; }
+.authorization-table th:nth-child(13) { width: 50px; }
 .authorization-table thead { position: sticky; top: 0; z-index: 5; }
 .authorization-table th { position: relative; z-index: 1; background: #eef2ee; box-shadow: 0 2px 0 #c8cec9; color: #3d4840; font-weight: 700; }
 .authorization-table tbody tr { height: 36px; cursor: default; }
@@ -580,6 +580,7 @@
 .authorization-table tbody tr:last-child td { border-bottom: 0; }
 .authorization-table .authorization-no { font-family: Consolas, monospace; font-weight: 700; }
 .authorization-table .authorization-name { font-weight: 700; }
+.authorization-table .authorization-purchase-cell { text-align: center; font-weight: 700; }
 .authorization-table .flag-cell { text-align: center; color: var(--green); }
 .authorization-table .flag-cell .toggle-switch { margin: 0 auto; }
 .authorization-table .authorization-register-header, .authorization-table .authorization-register-cell { text-align: center; }

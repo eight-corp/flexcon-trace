@@ -89,6 +89,17 @@ const REQUIRED_IMPORT_HEADERS = [
   [36, '備考'],
 ] as const
 
+async function loadInspectionAuthorizationIds(table: 'flexcon_inspection_flexcons' | 'flexcon_inspection_paper_bags') {
+  const ids = new Set<string>()
+  const pageSize = 1000
+  for (let start = 0; ; start += pageSize) {
+    const { data, error } = await supabase.from(table).select('authorization_id').order('id').range(start, start + pageSize - 1)
+    if (error) return { ids: null, error }
+    for (const row of data ?? []) ids.add(row.authorization_id)
+    if ((data?.length ?? 0) < pageSize) return { ids, error: null }
+  }
+}
+
 function cellText(value: CellValue | null | undefined): string {
   if (value === null || value === undefined) return ''
   return String(value).trim()
@@ -159,7 +170,7 @@ function AuthorizationColumnHeader({ column, sort, values, selectedValues, textV
 
 export function AuthorizationManager({ workerId, isAdmin, onOpenInspections }: Props) {
   const [items, setItems] = useState<AuthorizationRecord[]>([])
-  const [inspectionTargetAuthorizationIds, setInspectionTargetAuthorizationIds] = useState<Set<string>>(new Set())
+  const [inspectionTargetAuthorizationIds, setInspectionTargetAuthorizationIds] = useState<Set<string> | null>(null)
   const [sort, setSort] = useState<AuthorizationSort>(null)
   const [columnFilters, setColumnFilters] = useState<AuthorizationFilters>({})
   const [columnTextFilters, setColumnTextFilters] = useState<Partial<Record<AuthorizationColumn, string>>>({})
@@ -185,8 +196,8 @@ export function AuthorizationManager({ workerId, isAdmin, onOpenInspections }: P
   useEffect(() => {
     void Promise.all([
       supabase.from('flexcon_authorizations').select('*').order('authorization_no'),
-      supabase.from('flexcon_inspection_flexcons').select('authorization_id'),
-      supabase.from('flexcon_inspection_paper_bags').select('authorization_id'),
+      loadInspectionAuthorizationIds('flexcon_inspection_flexcons'),
+      loadInspectionAuthorizationIds('flexcon_inspection_paper_bags'),
     ]).then(([authorizationResult, flexconResult, paperBagResult]) => {
       if (authorizationResult.error) {
         setNotice({ type: 'error', text: authorizationResult.error.message })
@@ -199,22 +210,23 @@ export function AuthorizationManager({ workerId, isAdmin, onOpenInspections }: P
       setItems(loadedItems)
       setRowForm({ ...EMPTY_FORM, authorization_no: nextAuthorizationNo(loadedItems) })
 
-      if (flexconResult.error || paperBagResult.error) {
-        setInspectionTargetAuthorizationIds(new Set())
+      if (flexconResult.error || paperBagResult.error || !flexconResult.ids || !paperBagResult.ids) {
+        setInspectionTargetAuthorizationIds(null)
+        setNotice({ type: 'error', text: '仕入れ情報を取得できません。時間をおいて再読み込みしてください。' })
         return
       }
       setInspectionTargetAuthorizationIds(new Set([
-        ...(flexconResult.data ?? []).map((item) => item.authorization_id),
-        ...(paperBagResult.data ?? []).map((item) => item.authorization_id),
+        ...flexconResult.ids,
+        ...paperBagResult.ids,
       ]))
     })
   }, [version])
 
   const filterValues = useMemo(() => Object.fromEntries(AUTHORIZATION_COLUMNS.map(({ key }) => [
     key,
-    [...new Set(items.map((item) => authorizationColumnValue(item, key)))].sort(AUTHORIZATION_NO_COLLATOR.compare),
-  ])) as Record<AuthorizationColumn, string[]>, [items])
-  const filtered = useMemo(() => selectAuthorizations(items, columnFilters, sort, columnTextFilters), [items, columnFilters, sort, columnTextFilters])
+    [...new Set(items.map((item) => authorizationColumnValue(item, key, inspectionTargetAuthorizationIds)))].sort(AUTHORIZATION_NO_COLLATOR.compare),
+  ])) as Record<AuthorizationColumn, string[]>, [items, inspectionTargetAuthorizationIds])
+  const filtered = useMemo(() => selectAuthorizations(items, columnFilters, sort, columnTextFilters, inspectionTargetAuthorizationIds), [items, columnFilters, sort, columnTextFilters, inspectionTargetAuthorizationIds])
   const displayRows = useMemo(() => withAuthorizationAddRow(filtered, rowForm.authorization_no, sort), [filtered, rowForm.authorization_no, sort])
   const changeSort = (key: AuthorizationColumn) => setSort((current) => {
     if (!current || current.key !== key) return { key, direction: 'asc' }
@@ -640,9 +652,10 @@ export function AuthorizationManager({ workerId, isAdmin, onOpenInspections }: P
           </thead>
           <tbody>
             {displayRows.map((record) => record ? (
-              <tr className={`authorization-data-row ${inspectionTargetAuthorizationIds.has(record.id) ? 'authorization-inspection-target' : ''}`} title={inspectionTargetAuthorizationIds.has(record.id) ? '検査対象の米穀あり' : undefined} key={record.id} onClick={(event) => scheduleOpenInspections(record, event)}>
+              <tr className={`authorization-data-row ${inspectionTargetAuthorizationIds?.has(record.id) ? 'authorization-inspection-target' : ''}`} title={inspectionTargetAuthorizationIds?.has(record.id) ? '検査対象の米穀あり' : undefined} key={record.id} onClick={(event) => scheduleOpenInspections(record, event)}>
                 {editableCell(record, 'authorization_no', 'authorization-no')}
                 {editableCell(record, 'full_name', 'authorization-name')}
+                <td className="authorization-purchase-cell">{authorizationColumnValue(record, 'purchase_status', inspectionTargetAuthorizationIds)}</td>
                 <td className="flag-cell">
                   <ToggleSwitch
                     checked={record.seed_purchase_slip}
@@ -670,6 +683,7 @@ export function AuthorizationManager({ workerId, isAdmin, onOpenInspections }: P
             <tr className="authorization-new-row" key="new-authorization">
               <td className="authorization-no">{rowInput('authorization_no')}</td>
               <td className="authorization-name">{rowInput('full_name')}</td>
+              <td className="authorization-purchase-cell" />
               <td className="flag-cell">
                 <ToggleSwitch
                   checked={rowForm.seed_purchase_slip}
