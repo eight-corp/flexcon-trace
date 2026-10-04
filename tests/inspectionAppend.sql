@@ -29,8 +29,8 @@ begin
   perform set_config('request.headers', jsonb_build_object('x-business-session', v_token)::text, true);
   select count(*) into v_before from public.flexcon_inspection_flexcons where registration_id = v_registration;
   select count(*) into v_paper_before from public.flexcon_inspection_paper_bags where registration_id = v_registration;
-  select coalesce(max(flexcon_no), 0) + 1 into v_standard_no from public.flexcon_inspection_flexcons where authorization_id = v_authorization and record_kind = 'standard';
-  select coalesce(max(flexcon_no), 0) + 1 into v_bulk_no from public.flexcon_inspection_flexcons where authorization_id = v_authorization and record_kind = 'bulk';
+  select coalesce(max(flexcon_no), 0) + 1 into v_standard_no from public.flexcon_inspection_flexcons where authorization_id = v_authorization;
+  v_bulk_no := v_standard_no + 2;
   select coalesce((select weight_kg from public.flexcon_inspection_weights where weight_type = 'feed_rice'), 1000) into v_weight;
 
   perform public.flexcon_append_inspection_registration(v_worker, v_registration, 8, '2026-09-28', 'append-test', '2026-09-29', v_location, '飼料用玄米', 2, 3, 50);
