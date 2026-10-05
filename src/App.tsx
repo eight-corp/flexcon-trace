@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { ArrowLeft, Boxes, Camera, ClipboardList, FileSignature, History, House, List, LogOut, NotebookPen, Settings2, Truck, Wheat } from 'lucide-react'
-import { AuthorizationManager } from './components/AuthorizationManager'
+import { AuthorizationManager, type AuthorizationListState, type AuthorizationListScroll } from './components/AuthorizationManager'
 import { InspectionRecordManager, type InspectionRecordTarget, type InspectionSummaryState, type InspectionSummaryScroll } from './components/InspectionRecordManager'
 import { InspectionOptionManager } from './components/InspectionOptionManager'
 import { InventoryManager } from './components/InventoryManager'
@@ -39,6 +39,8 @@ function App() {
   const [inspectionReadOnly, setInspectionReadOnly] = useState(false)
   const [inspectionSummaryState, setInspectionSummaryState] = useState<InspectionSummaryState>({ view: 'list', sort: null, columnFilters: {}, textFilters: {}, calendarMode, period: { basis: 'inspection', start: '', end: '' } })
   const inspectionSummaryScroll = useRef<InspectionSummaryScroll>({ top: 0, left: 0, pageTop: 0, pageLeft: 0, mainTop: 0, mainLeft: 0 })
+  const [authorizationListState, setAuthorizationListState] = useState<AuthorizationListState>({ sort: null, columnFilters: {}, textFilters: {} })
+  const authorizationListScroll = useRef<AuthorizationListScroll>({ top: 0, left: 0, pageTop: 0, pageLeft: 0, mainTop: 0, mainLeft: 0 })
 
   useEffect(() => {
     document.title = statementApplication ? '(株)エイト 仕切書読込み' : '(株)エイト 米穀出荷管理'
@@ -196,6 +198,9 @@ function App() {
           <AuthorizationManager
             workerId={worker.worker_id}
             isAdmin={isAdmin}
+            listState={authorizationListState}
+            onListStateChange={setAuthorizationListState}
+            listScrollRef={authorizationListScroll}
             onOpenInspections={(authorizationId) => {
               setInspectionAuthorizationId(authorizationId)
               setInspectionRegistrationId(null)

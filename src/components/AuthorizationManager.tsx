@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type Dispatch, type RefObject, type SetStateAction } from 'react'
 import { ArrowDown, ArrowUp, FileUp, FilterX, Plus, Save, X } from 'lucide-react'
 import type { CellValue } from 'read-excel-file/browser'
 import { supabase } from '../lib/supabase'
@@ -11,8 +11,17 @@ import { TableColumnFilter } from './TableColumnFilter'
 type Props = {
   workerId: string
   isAdmin: boolean
+  listState: AuthorizationListState
+  onListStateChange: Dispatch<SetStateAction<AuthorizationListState>>
+  listScrollRef: RefObject<AuthorizationListScroll>
   onOpenInspections: (authorizationId: string) => void
 }
+export type AuthorizationListState = {
+  sort: AuthorizationSort
+  columnFilters: AuthorizationFilters
+  textFilters: Partial<Record<AuthorizationColumn, string>>
+}
+export type AuthorizationListScroll = { top: number; left: number; pageTop: number; pageLeft: number; mainTop: number; mainLeft: number }
 type Notice = { type: 'success' | 'error'; text: string } | null
 
 type ImportRecord = {
@@ -168,12 +177,10 @@ function AuthorizationColumnHeader({ column, sort, values, selectedValues, textV
   </th>
 }
 
-export function AuthorizationManager({ workerId, isAdmin, onOpenInspections }: Props) {
+export function AuthorizationManager({ workerId, isAdmin, listState, onListStateChange, listScrollRef, onOpenInspections }: Props) {
   const [items, setItems] = useState<AuthorizationRecord[]>([])
   const [inspectionTargetAuthorizationIds, setInspectionTargetAuthorizationIds] = useState<Set<string> | null>(null)
-  const [sort, setSort] = useState<AuthorizationSort>(null)
-  const [columnFilters, setColumnFilters] = useState<AuthorizationFilters>({})
-  const [columnTextFilters, setColumnTextFilters] = useState<Partial<Record<AuthorizationColumn, string>>>({})
+  const { sort, columnFilters, textFilters: columnTextFilters } = listState
   const hasColumnFilters = Object.keys(columnFilters).length > 0 || Object.values(columnTextFilters).some(Boolean)
   const [notice, setNotice] = useState<Notice>(null)
   const [version, setVersion] = useState(0)
@@ -188,6 +195,39 @@ export function AuthorizationManager({ workerId, isAdmin, onOpenInspections }: P
   const [importError, setImportError] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const openInspectionTimerRef = useRef<number | null>(null)
+  const tableWrapRef = useRef<HTMLDivElement>(null)
+  const [recordsLoaded, setRecordsLoaded] = useState(false)
+
+  // Wait for the filtered rows before restoring, so an empty table cannot clamp the position.
+  useLayoutEffect(() => {
+    if (!recordsLoaded) return
+    const wrap = tableWrapRef.current
+    if (!wrap) return
+    const saved = listScrollRef.current
+    wrap.scrollTop = saved.top
+    wrap.scrollLeft = saved.left
+    const main = wrap.closest('main')
+    if (main) { main.scrollTop = saved.mainTop; main.scrollLeft = saved.mainLeft }
+    window.scrollTo(saved.pageLeft, saved.pageTop)
+  }, [recordsLoaded, listScrollRef])
+
+  const rememberListPosition = useCallback(() => {
+    const wrap = tableWrapRef.current
+    if (!wrap || !recordsLoaded) return
+    const main = wrap.closest('main')
+    listScrollRef.current = { top: wrap.scrollTop, left: wrap.scrollLeft, pageTop: window.scrollY, pageLeft: window.scrollX, mainTop: main?.scrollTop ?? 0, mainLeft: main?.scrollLeft ?? 0 }
+  }, [recordsLoaded, listScrollRef])
+
+  useEffect(() => {
+    if (!recordsLoaded) return
+    const main = tableWrapRef.current?.closest('main')
+    window.addEventListener('scroll', rememberListPosition, { passive: true })
+    main?.addEventListener('scroll', rememberListPosition, { passive: true })
+    return () => {
+      window.removeEventListener('scroll', rememberListPosition)
+      main?.removeEventListener('scroll', rememberListPosition)
+    }
+  }, [recordsLoaded, rememberListPosition])
 
   useEffect(() => () => {
     if (openInspectionTimerRef.current !== null) window.clearTimeout(openInspectionTimerRef.current)
@@ -209,6 +249,7 @@ export function AuthorizationManager({ workerId, isAdmin, onOpenInspections }: P
       ))
       setItems(loadedItems)
       setRowForm({ ...EMPTY_FORM, authorization_no: nextAuthorizationNo(loadedItems) })
+      setRecordsLoaded(true)
 
       if (flexconResult.error || paperBagResult.error || !flexconResult.ids || !paperBagResult.ids) {
         setInspectionTargetAuthorizationIds(null)
@@ -228,22 +269,23 @@ export function AuthorizationManager({ workerId, isAdmin, onOpenInspections }: P
   ])) as Record<AuthorizationColumn, string[]>, [items, inspectionTargetAuthorizationIds])
   const filtered = useMemo(() => selectAuthorizations(items, columnFilters, sort, columnTextFilters, inspectionTargetAuthorizationIds), [items, columnFilters, sort, columnTextFilters, inspectionTargetAuthorizationIds])
   const displayRows = useMemo(() => withAuthorizationAddRow(filtered, rowForm.authorization_no, sort), [filtered, rowForm.authorization_no, sort])
-  const changeSort = (key: AuthorizationColumn) => setSort((current) => {
-    if (!current || current.key !== key) return { key, direction: 'asc' }
-    if (current.direction === 'asc') return { key, direction: 'desc' }
-    return null
+  const changeSort = (key: AuthorizationColumn) => onListStateChange((current) => {
+    const nextSort: AuthorizationSort = !current.sort || current.sort.key !== key
+      ? { key, direction: 'asc' }
+      : current.sort.direction === 'asc' ? { key, direction: 'desc' } : null
+    return { ...current, sort: nextSort }
   })
-  const changeColumnFilter = (key: AuthorizationColumn, values: string[] | undefined) => setColumnFilters((current) => {
-    const next = { ...current }
+  const changeColumnFilter = (key: AuthorizationColumn, values: string[] | undefined) => onListStateChange((current) => {
+    const next = { ...current.columnFilters }
     if (values === undefined) delete next[key]
     else next[key] = values
-    return next
+    return { ...current, columnFilters: next }
   })
-  const changeColumnTextFilter = (key: AuthorizationColumn, value: string) => setColumnTextFilters((current) => {
-    const next = { ...current }
+  const changeColumnTextFilter = (key: AuthorizationColumn, value: string) => onListStateChange((current) => {
+    const next = { ...current.textFilters }
     if (value) next[key] = value
     else delete next[key]
-    return next
+    return { ...current, textFilters: next }
   })
 
   const setText = (field: keyof FormState, value: string) => {
@@ -303,6 +345,7 @@ export function AuthorizationManager({ workerId, isAdmin, onOpenInspections }: P
     if ((event.target as HTMLElement).closest('button, input, select, textarea')) return
     if (openInspectionTimerRef.current !== null) window.clearTimeout(openInspectionTimerRef.current)
     openInspectionTimerRef.current = window.setTimeout(() => {
+      rememberListPosition()
       onOpenInspections(record.id)
       openInspectionTimerRef.current = null
     }, 240)
@@ -626,7 +669,7 @@ export function AuthorizationManager({ workerId, isAdmin, onOpenInspections }: P
       <div className="page-heading"><p>登録済みの委任状情報を確認・更新します。</p></div>
 
       <div className="authorization-actions-row">
-        <button className="secondary-button" type="button" title="一覧の絞り込みをクリア" disabled={!hasColumnFilters} onClick={() => { setColumnFilters({}); setColumnTextFilters({}) }}><FilterX size={16} />絞り込み解除</button>
+        <button className="secondary-button" type="button" title="一覧の絞り込みをクリア" disabled={!hasColumnFilters} onClick={() => onListStateChange((current) => ({ ...current, columnFilters: {}, textFilters: {} }))}><FilterX size={16} />絞り込み解除</button>
         {isAdmin && <input
           ref={fileInputRef}
           className="visually-hidden"
@@ -642,7 +685,7 @@ export function AuthorizationManager({ workerId, isAdmin, onOpenInspections }: P
       </div>
 
       {!modalOpen && notice?.type === 'error' && <div className="notice error" role="alert">{notice.text}</div>}
-      <div className="authorization-table-wrap">
+      <div className="authorization-table-wrap" ref={tableWrapRef} onScroll={rememberListPosition}>
         <table className="authorization-table">
           <thead>
             <tr>
