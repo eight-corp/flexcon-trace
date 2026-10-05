@@ -610,8 +610,30 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
     setVersion((value) => value + 1)
   }
 
-  const periodFlexcons = useMemo(() => flexcons.filter((item) => matchesInspectionPeriod(item, inspectionPeriod)), [flexcons, inspectionPeriod])
-  const periodPaperBags = useMemo(() => paperBags.filter((item) => matchesInspectionPeriod(item, inspectionPeriod)), [paperBags, inspectionPeriod])
+  const dateFilteredGroups = useMemo(() => {
+    const columns = ['purchaseDates', 'inspectionDates'] as const
+    if (!columns.some((key) => summaryColumnFilters[key] !== undefined || Boolean(summaryTextFilters[key]?.trim()))) return null
+    const groups = new Map<string, Set<string | null>>()
+    for (const row of summaryRows) {
+      if (!columns.every((key) => {
+        const selected = summaryColumnFilters[key]
+        const value = summaryDisplayValue(row, key)
+        return (selected === undefined || selected.includes(value)) && matchesFilterText(value, summaryTextFilters[key] ?? '')
+      })) continue
+      const dates = groups.get(row.registrationId) ?? new Set<string | null>()
+      dates.add(row.inspectionDate)
+      groups.set(row.registrationId, dates)
+    }
+    return groups
+  }, [summaryRows, summaryColumnFilters, summaryTextFilters])
+  const periodFlexcons = useMemo(() => flexcons.filter((item) => (
+    (!dateFilteredGroups || dateFilteredGroups.get(item.registration_id)?.has(item.inspection_date || null))
+    && matchesInspectionPeriod(item, inspectionPeriod)
+  )), [flexcons, dateFilteredGroups, inspectionPeriod])
+  const periodPaperBags = useMemo(() => paperBags.filter((item) => (
+    (!dateFilteredGroups || dateFilteredGroups.get(item.registration_id)?.has(item.inspection_date || null))
+    && matchesInspectionPeriod(item, inspectionPeriod)
+  )), [paperBags, dateFilteredGroups, inspectionPeriod])
   const inspectionProgressRows = useMemo(() => {
     const authorizationById = new Map(authorizations.map((authorization) => [authorization.id, authorization]))
     const grouped = new Map<string, InspectionProgressRow>()
