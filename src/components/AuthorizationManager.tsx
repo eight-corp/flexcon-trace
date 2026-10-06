@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { ArrowDown, ArrowUp, FileUp, FilterX, Plus, Save, Trash2, X } from 'lucide-react'
 import type { CellValue } from 'read-excel-file/browser'
 import { supabase } from '../lib/supabase'
-import { authorizationAddError, normalizeName } from '../lib/authorizationValidation'
+import { authorizationAddError, sameAuthorizationPerson } from '../lib/authorizationValidation'
 import { AUTHORIZATION_COLUMNS, AUTHORIZATION_NO_COLLATOR, authorizationColumnValue, selectAuthorizations, withAuthorizationAddRow, type AuthorizationColumn, type AuthorizationFilters, type AuthorizationSort } from '../lib/authorizationTable'
 import type { AuthorizationRecord } from '../types'
 import { ToggleSwitch } from './ToggleSwitch'
@@ -385,12 +385,12 @@ export function AuthorizationManager({ workerId, isAdmin, listState, onListState
       [editingCell.field]: value || null,
     }
 
-    if (editingCell.field === 'full_name') {
+    if ((editingCell.field === 'full_name' || editingCell.field === 'address') && !sameAuthorizationPerson(record, updatedRecord)) {
       const duplicate = items.some((item) => (
-        item.id !== record.id && normalizeName(item.full_name) === normalizeName(value)
+        item.id !== record.id && sameAuthorizationPerson(item, updatedRecord)
       ))
       if (duplicate) {
-        setNotice({ type: 'error', text: `氏名「${value}」はすでに登録されています。` })
+        setNotice({ type: 'error', text: `氏名「${updatedRecord.full_name}」と住所が同じ委任状はすでに登録されています。` })
         return
       }
     }
@@ -610,20 +610,17 @@ export function AuthorizationManager({ workerId, isAdmin, listState, onListState
         throw new Error(`同じ№が複数あります: ${[...new Set(duplicateNos)].slice(0, 10).join(', ')}`)
       }
 
-      const duplicateNames = parsed
-        .map((record) => normalizeName(record.full_name))
-        .filter((value, index, all) => all.indexOf(value) !== index)
-      if (duplicateNames.length > 0) {
-        const duplicateName = parsed.find((record) => normalizeName(record.full_name) === duplicateNames[0])?.full_name
-        throw new Error(`氏名「${duplicateName}」がExcel内に複数あります。`)
+      const duplicatePerson = parsed.find((record, index) => parsed.slice(0, index).some((previous) => sameAuthorizationPerson(previous, record)))
+      if (duplicatePerson) {
+        throw new Error(`氏名「${duplicatePerson.full_name}」と住所が同じ委任状がExcel内に複数あります。`)
       }
 
       const existingNameConflict = parsed.find((record) => items.some((item) => (
         item.authorization_no !== record.authorization_no
-        && normalizeName(item.full_name) === normalizeName(record.full_name)
+        && sameAuthorizationPerson(item, record)
       )))
       if (existingNameConflict) {
-        throw new Error(`氏名「${existingNameConflict.full_name}」は別の№で登録済みです。`)
+        throw new Error(`氏名「${existingNameConflict.full_name}」と住所が同じ委任状は別の№で登録済みです。`)
       }
       if (parsed.length === 0) throw new Error('取込可能な委任状情報がありません。')
 
