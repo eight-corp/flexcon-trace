@@ -6,6 +6,7 @@ import { useCalendarMode } from '../lib/calendarMode'
 import { matchesFilterText } from '../lib/tableFilters'
 import { JapaneseDateInput, JapaneseFiscalYearInput } from './JapaneseDateInput'
 import { TableColumnFilter } from './TableColumnFilter'
+import { ToggleSwitch } from './ToggleSwitch'
 import { formatPrefectureName } from '../lib/prefecture'
 import { selectedInspectionGrade } from '../lib/inspectionGrade'
 import { findWarehouseForInspectionLocation } from '../lib/inspectionWarehouse'
@@ -379,6 +380,7 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
   const [certificateDialogOpen, setCertificateDialogOpen] = useState(false)
   const [certificateKind, setCertificateKind] = useState<CertificateKind>('standard')
   const [certificateRange, setCertificateRange] = useState({ start: '', count: '' })
+  const [certificateManagementQr, setCertificateManagementQr] = useState(false)
   const [certificateBusy, setCertificateBusy] = useState(false)
   const [certificateError, setCertificateError] = useState('')
   const [generatedCertificate, setGeneratedCertificate] = useState<GeneratedCertificate | null>(null)
@@ -1122,6 +1124,7 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
     setCertificateError('')
     setCertificateKind(kind)
     setCertificateRange(certificateDefaultRange(candidates))
+    setCertificateManagementQr(false)
     setCertificateDialogOpen(true)
   }
   const closeCertificateDialog = () => {
@@ -1166,7 +1169,7 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
     try {
       const { generateInspectionCertificatePdf } = await import('../lib/certificatePdf')
       const blob = await generateInspectionCertificatePdf({
-        includeManagementQr: isAdmin,
+        includeManagementQr: isAdmin && certificateManagementQr,
         authorization: {
           authorizationNo: selectedAuthorization.authorization_no,
           fullName: selectedAuthorization.full_name,
@@ -1574,6 +1577,7 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
           <span aria-hidden="true">から</span>
           <label>枚数<input type="number" min="1" step="1" value={certificateRange.count} onChange={(event) => setCertificateRange((current) => ({ ...current, count: event.target.value }))} required /></label>
         </div>
+        {isAdmin && <div className="switch-field"><span>QRコードを付ける</span><ToggleSwitch checked={certificateManagementQr} label="QRコードを付ける" onChange={() => setCertificateManagementQr((current) => !current)} disabled={certificateBusy} /></div>}
         <div className="certificate-range-summary">{!certificateRange.start && !certificateRange.count && certificateFlexconsFor(certificateKind).every((item) => (item.certificate_print_count ?? 0) > 0) ? 'すべて印刷済み' : <>対象 {certificateTargets().length}本　印刷済み {certificateTargets().filter((item) => (item.certificate_print_count ?? 0) > 0).length}本</>}</div>
         {certificateError && <div className="inline-error">{certificateError}</div>}
         <div className="modal-actions"><button className="primary-button" type="submit" disabled={certificateBusy}><FileText size={18} />{certificateBusy ? 'PDF作成中...' : 'PDFを作成'}</button><button className="secondary-button" type="button" onClick={closeCertificateDialog} disabled={certificateBusy}>取り消し</button></div>
