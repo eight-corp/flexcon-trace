@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type Dispatch, type RefObject, type SetStateAction } from 'react'
-import { ArrowDown, ArrowUp, FileUp, FilterX, Plus, Save, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, FileUp, FilterX, Plus, Save, Trash2, X } from 'lucide-react'
 import type { CellValue } from 'read-excel-file/browser'
 import { supabase } from '../lib/supabase'
 import { authorizationAddError, normalizeName } from '../lib/authorizationValidation'
@@ -98,7 +98,7 @@ const REQUIRED_IMPORT_HEADERS = [
   [36, '備考'],
 ] as const
 
-async function loadInspectionAuthorizationIds(table: 'flexcon_inspection_flexcons' | 'flexcon_inspection_paper_bags') {
+async function loadInspectionAuthorizationIds(table: 'flexcon_inspection_flexcons' | 'flexcon_inspection_paper_bags' | 'flexcon_inspection_registrations') {
   const ids = new Set<string>()
   const pageSize = 1000
   for (let start = 0; ; start += pageSize) {
@@ -180,6 +180,7 @@ function AuthorizationColumnHeader({ column, sort, values, selectedValues, textV
 export function AuthorizationManager({ workerId, isAdmin, listState, onListStateChange, listScrollRef, onOpenInspections }: Props) {
   const [items, setItems] = useState<AuthorizationRecord[]>([])
   const [inspectionTargetAuthorizationIds, setInspectionTargetAuthorizationIds] = useState<Set<string> | null>(null)
+  const [deleteProtectedAuthorizationIds, setDeleteProtectedAuthorizationIds] = useState<Set<string> | null>(null)
   const { sort, columnFilters, textFilters: columnTextFilters } = listState
   const hasColumnFilters = Object.keys(columnFilters).length > 0 || Object.values(columnTextFilters).some(Boolean)
   const [notice, setNotice] = useState<Notice>(null)
@@ -197,6 +198,7 @@ export function AuthorizationManager({ workerId, isAdmin, listState, onListState
   const openInspectionTimerRef = useRef<number | null>(null)
   const tableWrapRef = useRef<HTMLDivElement>(null)
   const [recordsLoaded, setRecordsLoaded] = useState(false)
+  const deletingRef = useRef(false)
 
   // Wait for the filtered rows before restoring, so an empty table cannot clamp the position.
   useLayoutEffect(() => {
@@ -238,8 +240,10 @@ export function AuthorizationManager({ workerId, isAdmin, listState, onListState
       supabase.from('flexcon_authorizations').select('*').order('authorization_no'),
       loadInspectionAuthorizationIds('flexcon_inspection_flexcons'),
       loadInspectionAuthorizationIds('flexcon_inspection_paper_bags'),
-    ]).then(([authorizationResult, flexconResult, paperBagResult]) => {
+      loadInspectionAuthorizationIds('flexcon_inspection_registrations'),
+    ]).then(([authorizationResult, flexconResult, paperBagResult, registrationResult]) => {
       if (authorizationResult.error) {
+        setDeleteProtectedAuthorizationIds(null)
         setNotice({ type: 'error', text: authorizationResult.error.message })
         return
       }
@@ -252,6 +256,7 @@ export function AuthorizationManager({ workerId, isAdmin, listState, onListState
       setRecordsLoaded(true)
 
       if (flexconResult.error || paperBagResult.error || !flexconResult.ids || !paperBagResult.ids) {
+        setDeleteProtectedAuthorizationIds(null)
         setInspectionTargetAuthorizationIds(null)
         setNotice({ type: 'error', text: '仕入れ情報を取得できません。時間をおいて再読み込みしてください。' })
         return
@@ -259,6 +264,16 @@ export function AuthorizationManager({ workerId, isAdmin, listState, onListState
       setInspectionTargetAuthorizationIds(new Set([
         ...flexconResult.ids,
         ...paperBagResult.ids,
+      ]))
+      if (registrationResult.error || !registrationResult.ids) {
+        setDeleteProtectedAuthorizationIds(null)
+        setNotice({ type: 'error', text: '検査記録を確認できないため委任状を削除できません。再読み込みしてください。' })
+        return
+      }
+      setDeleteProtectedAuthorizationIds(new Set([
+        ...flexconResult.ids,
+        ...paperBagResult.ids,
+        ...registrationResult.ids,
       ]))
     })
   }, [version])
@@ -420,6 +435,36 @@ export function AuthorizationManager({ workerId, isAdmin, listState, onListState
       setVersion((value) => value + 1)
     }
     setBusy(false)
+  }
+
+  const deleteAuthorization = async (record: AuthorizationRecord) => {
+    if (busy || deletingRef.current || !deleteProtectedAuthorizationIds || deleteProtectedAuthorizationIds.has(record.id)) return
+    if (openInspectionTimerRef.current !== null) {
+      window.clearTimeout(openInspectionTimerRef.current)
+      openInspectionTimerRef.current = null
+    }
+    if (!window.confirm(`委任状№${record.authorization_no}「${record.full_name}」を削除しますか？\n\nこの操作は元に戻せません。`)) return
+    deletingRef.current = true
+    setBusy(true)
+    setNotice(null)
+    setEditingCell(null)
+    try {
+      const { error } = await supabase.rpc('flexcon_delete_authorization', {
+        p_worker_id: workerId,
+        p_authorization_id: record.id,
+      })
+      if (error) throw error
+      rememberListPosition()
+      setItems((current) => current.filter((item) => item.id !== record.id))
+      setNotice({ type: 'success', text: `委任状№${record.authorization_no}「${record.full_name}」を削除しました。` })
+    } catch (error) {
+      setNotice({ type: 'error', text: error && typeof error === 'object' && 'message' in error ? String(error.message) : '削除できませんでした。通信状態を確認して再試行してください。' })
+    } finally {
+      setDeleteProtectedAuthorizationIds(null)
+      setVersion((value) => value + 1)
+      setBusy(false)
+      deletingRef.current = false
+    }
   }
 
   const save = async (event: React.FormEvent) => {
@@ -690,7 +735,7 @@ export function AuthorizationManager({ workerId, isAdmin, listState, onListState
           <thead>
             <tr>
               {AUTHORIZATION_COLUMNS.map((column) => <AuthorizationColumnHeader key={column.key} column={column} sort={sort} values={filterValues[column.key]} selectedValues={columnFilters[column.key]} textValue={columnTextFilters[column.key] ?? ''} onSort={changeSort} onFilterChange={changeColumnFilter} onTextChange={changeColumnTextFilter} />)}
-              <th className="authorization-register-header">登録</th>
+              <th className="authorization-register-header">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -720,7 +765,15 @@ export function AuthorizationManager({ workerId, isAdmin, listState, onListState
                 {editableCell(record, 'crop_type')}
                 {editableCell(record, 'feed_rice_variety')}
                 {editableCell(record, 'notes')}
-                <td className="authorization-register-cell" />
+                <td className="authorization-register-cell">
+                  <button className="icon-button" type="button"
+                    title={!deleteProtectedAuthorizationIds ? '検査記録を確認中のため削除できません' : deleteProtectedAuthorizationIds.has(record.id) ? '検査記録があるため削除できません' : `委任状№${record.authorization_no}を削除`}
+                    aria-label={`委任状№${record.authorization_no}を削除`}
+                    disabled={busy || !deleteProtectedAuthorizationIds || deleteProtectedAuthorizationIds.has(record.id)}
+                    onClick={(event) => { event.stopPropagation(); void deleteAuthorization(record) }}>
+                    <Trash2 size={18} />
+                  </button>
+                </td>
               </tr>
             ) : (
             <tr className="authorization-new-row" key="new-authorization">

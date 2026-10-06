@@ -26,6 +26,10 @@ try {
   for (const width of [1440, 390]) {
     const context = await browser.newContext({ viewport: { width, height: 900 }, serviceWorkers: 'block' })
     const errors = []
+    const currentRecords = [...records]
+    const protectedIds = new Set(purchased.map(record => record.id))
+    const registrationIds = new Set([records[2].id])
+    let deletionCalls = 0
     try {
       await context.addInitScript(() => localStorage.setItem('business.session.v1', 'mock-session'))
       await context.route('**/*', route => route.abort())
@@ -44,9 +48,27 @@ try {
           body = { ok: true, workerId: 'tester', workerName: 'Tester', permissions: { rice_shipping: 'admin' } }
         } else if (resource === 'flexcon_authorizations') {
           await new Promise(resolve => setTimeout(resolve, 80))
-          body = records
+          body = currentRecords
         } else if (resource === 'flexcon_inspection_flexcons' && url.searchParams.get('select') === 'authorization_id') {
-          body = purchased.map(record => ({ authorization_id: record.id }))
+          body = [...protectedIds].map(id => ({ authorization_id: id }))
+        } else if (resource === 'flexcon_inspection_registrations') {
+          body = [...registrationIds].map(id => ({ authorization_id: id }))
+        } else if (resource === 'rpc/flexcon_delete_authorization') {
+          deletionCalls++
+          const args = route.request().postDataJSON()
+          assert.equal(args.p_worker_id, 'tester')
+          const index = currentRecords.findIndex(record => record.id === args.p_authorization_id)
+          assert.ok(index >= 0)
+          if (args.p_authorization_id === records[4].id) {
+            protectedIds.add(args.p_authorization_id)
+            return route.fulfill({ status: 400, contentType: 'application/json', body: JSON.stringify({ message: '検査記録がある委任状は削除できません。' }) })
+          }
+          if (args.p_authorization_id === records[6].id) {
+            return route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ message: '通信エラー' }) })
+          }
+          assert.equal(protectedIds.has(args.p_authorization_id) || registrationIds.has(args.p_authorization_id), false)
+          currentRecords.splice(index, 1)
+          body = null
         } else if (resource.startsWith('rpc/') && resource !== 'rpc/flexcon_list_memos') {
           errors.push(`Unexpected RPC: ${resource}`)
         }
@@ -124,12 +146,42 @@ try {
       await dataRows.first().waitFor()
       assert.deepEqual(await wrap.evaluate(position), beforeTabSwitch)
       assert.equal(await table.locator('thead th').first().getAttribute('aria-sort'), 'descending')
+      const deleteButton = number => page.getByRole('button', { name: `委任状№${number}を削除`, exact: true })
+      await deleteButton(1).waitFor()
+      assert.equal(await deleteButton(2).isDisabled(), true)
+      assert.equal(await deleteButton(3).isDisabled(), true)
+      assert.equal(await deleteButton(2).getAttribute('title'), '検査記録があるため削除できません')
+      page.once('dialog', async dialog => {
+        assert.match(dialog.message(), /委任状№1「Producer 1」/)
+        await dialog.dismiss()
+      })
+      await deleteButton(1).click()
+      assert.equal(deletionCalls, 0)
+      assert.equal(await dataRows.count(), records.length)
+      assert.equal(await page.locator('.producer-inspection-page').count(), 0)
+      page.once('dialog', dialog => dialog.accept())
+      await deleteButton(1).click()
+      await deleteButton(1).waitFor({ state: 'detached' })
+      assert.equal((await page.locator('.operation-log.success').textContent()).trim(), '委任状№1「Producer 1」を削除しました。')
+      assert.equal(await dataRows.count(), records.length - 1)
+      assert.equal(deletionCalls, 1)
+      assert.equal(await table.locator('thead th').first().getAttribute('aria-sort'), 'descending')
+      await page.waitForFunction(() => !document.querySelector('button[aria-label="委任状№5を削除"]').disabled)
+      page.once('dialog', dialog => dialog.accept())
+      await deleteButton(5).click()
+      await page.getByRole('alert').filter({ hasText: '検査記録がある委任状は削除できません。' }).waitFor()
+      await page.waitForFunction(() => document.querySelector('button[aria-label="委任状№5を削除"]').disabled)
+      assert.equal(await dataRows.count(), records.length - 1)
+      page.once('dialog', dialog => dialog.accept())
+      await deleteButton(7).click()
+      await page.getByRole('alert').filter({ hasText: '通信エラー' }).waitFor()
+      assert.equal(await dataRows.count(), records.length - 1)
       assert.deepEqual(errors, [])
       if (process.env.QA_ARTIFACTS) {
         fs.mkdirSync(process.env.QA_ARTIFACTS, { recursive: true })
         await page.screenshot({ path: path.join(process.env.QA_ARTIFACTS, `authorization-navigation-${width}.png`) })
       }
-      console.log(`Authorization navigation preserved filters, sorting and scroll at ${width}px`)
+      console.log(`Authorization navigation and safe deletion passed at ${width}px`)
     } finally {
       await context.close()
     }
