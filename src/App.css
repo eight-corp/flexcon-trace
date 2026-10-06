@@ -745,6 +745,8 @@
 .inspection-progress-totals strong { margin-left: 4px; font-size: 16px; }
 .inspection-progress-totals span:first-child strong, .inspection-progress-inspected { color: var(--green-dark); }
 .inspection-progress-totals span:last-child strong, .inspection-progress-uninspected { color: #a44134; }
+.inspection-aggregate-kind { min-width: 0; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--line); }
+.inspection-aggregate-kind h3 { margin: 0; font-size: 15px; }
 .inspection-progress-table-wrap { max-height: 220px; overflow: auto; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
 .inspection-progress-table { width: max-content; min-width: 0; border-collapse: separate; border-spacing: 0; font-size: 13px; }
 .inspection-progress-table th, .inspection-progress-table td { height: 34px; padding: 4px 8px; border-right: 1px solid #e5e8e5; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }

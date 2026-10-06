@@ -89,6 +89,7 @@ type GradingNoticeFailure = {
   reasons: string[]
 }
 type InspectionProgressRow = {
+  kind: 'flexcon' | 'paper'
   fiscalYear: number
   origin: string
   brand: string
@@ -639,12 +640,13 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
   const inspectionProgressRows = useMemo(() => {
     const authorizationById = new Map(authorizations.map((authorization) => [authorization.id, authorization]))
     const grouped = new Map<string, InspectionProgressRow>()
-    const addRecord = (item: FlexconInspection | PaperBagInspection, quantity: number) => {
+    const addRecord = (item: FlexconInspection | PaperBagInspection, quantity: number, kind: InspectionProgressRow['kind']) => {
       const authorization = authorizationById.get(item.authorization_id)
       const origin = formatPrefectureName(authorization?.prefecture) || '産地未登録'
       const brand = item.brand?.trim() || '銘柄未登録'
-      const key = JSON.stringify([item.fiscal_year, origin, brand])
+      const key = JSON.stringify([kind, item.fiscal_year, origin, brand])
       const row = grouped.get(key) ?? {
+        kind,
         fiscalYear: item.fiscal_year,
         origin,
         brand,
@@ -661,8 +663,8 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
       }
       grouped.set(key, row)
     }
-    periodFlexcons.forEach((item) => addRecord(item, item.quantity_kg))
-    periodPaperBags.forEach((item) => addRecord(item, item.bag_count * 30))
+    periodFlexcons.forEach((item) => addRecord(item, item.quantity_kg, 'flexcon'))
+    periodPaperBags.forEach((item) => addRecord(item, item.bag_count * 30, 'paper'))
     return [...grouped.values()].sort((left, right) => (
       right.fiscalYear - left.fiscalYear
       || left.origin.localeCompare(right.origin, 'ja', { numeric: true })
@@ -732,8 +734,6 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
       || left.purchaseDate.localeCompare(right.purchaseDate)
     ))
   }, [authorizations, periodFlexcons, periodPaperBags])
-  const inspectedDetailRows = inspectionDetailRows.filter((row) => row.complete)
-  const uninspectedDetailRows = inspectionDetailRows.filter((row) => !row.complete)
 
   const locationOptions = inspectionOptions.filter((item) => item.active && item.option_type === 'location')
   const inspectorOptions = inspectionOptions.filter((item) => item.active && item.option_type === 'inspector')
@@ -1425,6 +1425,31 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
       </table></div>
     </details>
   }
+  const renderInspectionAggregate = (kind: InspectionProgressRow['kind'], title: string) => {
+    const rows = inspectionProgressRows.filter((row) => row.kind === kind)
+    const details = inspectionDetailRows.filter((row) => row.kind === kind)
+    const totals = rows.reduce((total, row) => ({
+      inspected: total.inspected + row.inspectedQuantity,
+      uninspected: total.uninspected + row.uninspectedQuantity,
+    }), { inspected: 0, uninspected: 0 })
+    return <section className="inspection-aggregate-kind" data-kind={kind} aria-label={`${title}の集計`}>
+      <div className="section-title">
+        <div><h3>{title}</h3>{kind === 'flexcon' && <span>推フレ・バラ</span>}</div>
+        <div className="inspection-progress-totals"><span>検査済み <strong>{totals.inspected.toLocaleString()}kg</strong></span><span>未検査 <strong>{totals.uninspected.toLocaleString()}kg</strong></span></div>
+      </div>
+      <div className="inspection-progress-table-wrap"><table className="inspection-progress-table">
+        <thead><tr><th>産年</th><th>産地</th><th>銘柄</th>{inspectionAggregateGrades.map((grade) => <th className="numeric-cell" key={grade}>{grade}</th>)}<th className="numeric-cell">検査済み合計</th><th className="numeric-cell">未検査数量</th></tr></thead>
+        <tbody>{rows.map((row) => <tr key={JSON.stringify([row.fiscalYear, row.origin, row.brand])}>
+          <td>{displayCropYear(row.fiscalYear)}</td><td>{row.origin}</td><td>{row.brand}</td>{inspectionAggregateGrades.map((grade) => <td className="inspection-progress-grade numeric-cell" key={grade}>{row.inspectedByGrade[grade] ? `${row.inspectedByGrade[grade].toLocaleString()}kg` : ''}</td>)}<td className="inspection-progress-inspected numeric-cell">{row.inspectedQuantity.toLocaleString()}kg</td><td className="inspection-progress-uninspected numeric-cell">{row.uninspectedQuantity.toLocaleString()}kg</td>
+        </tr>)}
+        {rows.length === 0 && <tr><td colSpan={inspectionAggregateGrades.length + 5} className="empty-state">該当する検査記録はありません</td></tr>}</tbody>
+      </table></div>
+      <div className="inspection-record-detail-lists">
+        {renderInspectionDetailList('検査済み詳細一覧', details.filter((row) => row.complete), 'inspected')}
+        {renderInspectionDetailList('未検査詳細一覧', details.filter((row) => !row.complete), 'uninspected')}
+      </div>
+    </section>
+  }
   const openDetailAddition = (kind: DetailAdditionKind) => {
     if (!selectedRegistration || !selectedAuthorization) return
     const base = [...selectedStandardFlexcons, ...selectedBulkFlexcons, ...selectedPaperBags][0]
@@ -1511,17 +1536,8 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
           <div className="inspection-progress-totals"><span>検査済み <strong>{inspectionProgressTotals.inspected.toLocaleString()}kg</strong></span><span>未検査 <strong>{inspectionProgressTotals.uninspected.toLocaleString()}kg</strong></span></div>
         </div>
         {invalidInspectionPeriod && <div className="inline-error" role="alert">開始日は終了日以前にしてください。</div>}
-        <div className="inspection-progress-table-wrap"><table className="inspection-progress-table">
-          <thead><tr><th>産年</th><th>産地</th><th>銘柄</th>{inspectionAggregateGrades.map((grade) => <th className="numeric-cell" key={grade}>{grade}</th>)}<th className="numeric-cell">検査済み合計</th><th className="numeric-cell">未検査数量</th></tr></thead>
-          <tbody>{inspectionProgressRows.map((row) => <tr key={`${row.fiscalYear}-${row.origin}-${row.brand}`}>
-            <td>{displayCropYear(row.fiscalYear)}</td><td>{row.origin}</td><td>{row.brand}</td>{inspectionAggregateGrades.map((grade) => <td className="inspection-progress-grade numeric-cell" key={grade}>{row.inspectedByGrade[grade] ? `${row.inspectedByGrade[grade].toLocaleString()}kg` : ''}</td>)}<td className="inspection-progress-inspected numeric-cell">{row.inspectedQuantity.toLocaleString()}kg</td><td className="inspection-progress-uninspected numeric-cell">{row.uninspectedQuantity.toLocaleString()}kg</td>
-          </tr>)}
-          {inspectionProgressRows.length === 0 && <tr><td colSpan={inspectionAggregateGrades.length + 5} className="empty-state">検査記録は登録されていません</td></tr>}</tbody>
-        </table></div>
-        <div className="inspection-record-detail-lists">
-          {renderInspectionDetailList('検査済み詳細一覧', inspectedDetailRows, 'inspected')}
-          {renderInspectionDetailList('未検査詳細一覧', uninspectedDetailRows, 'uninspected')}
-        </div>
+        {renderInspectionAggregate('flexcon', 'フレコン')}
+        {renderInspectionAggregate('paper', '紙袋')}
       </section>}
       {summaryView === 'list' && <div className="inspection-summary-wrap" ref={summaryWrapRef} onScroll={rememberSummaryPosition}><table className="inspection-summary-table">
         <thead><tr>{SUMMARY_COLUMNS.map((column) => <InspectionSummaryColumnHeader key={column.key} column={column} sort={summarySort} values={summaryFilterValues[column.key]} selectedValues={summaryColumnFilters[column.key]} textValue={summaryTextFilters[column.key] ?? ''} onSort={changeSummarySort} onFilterChange={changeSummaryColumnFilter} onTextChange={changeSummaryTextFilter} />)}{!readOnly && <th className="inspection-summary-actions-heading">操作</th>}</tr></thead>
