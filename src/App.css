@@ -207,6 +207,11 @@
 .purchase-statement-overview tbody.statement-even td { background: #eef0ef; }
 .purchase-statement-overview tbody.statement-odd td { background: #fff; }
 .purchase-statement-overview .number-cell { text-align: right; font-variant-numeric: tabular-nums; }
+.purchase-statement-pending-rows tr { cursor: pointer; }
+.purchase-statement-pending-rows td { padding-block: 9px; }
+.purchase-statement-pending-rows tr:hover td { background: #e7f2eb; }
+.purchase-statement-reader-info { margin: 0; color: var(--muted); overflow-wrap: anywhere; }
+.purchase-statement-retry { display: flex; justify-content: flex-end; }
 .purchase-statement-number-link { min-height: 0; padding: 0; border: 0; background: transparent; color: #066ee8; font: inherit; text-decoration: underline; text-underline-offset: 2px; white-space: nowrap; }
 .purchase-statement-number-link:hover { color: #004fae; }
 .purchase-statement-detail-screen { min-width: 0; display: grid; gap: 14px; padding: 18px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
-import { ArrowLeft, Boxes, Camera, ClipboardList, FileSignature, History, House, List, LogOut, NotebookPen, Settings2, Truck, Wheat } from 'lucide-react'
+import { ArrowLeft, Boxes, Camera, ClipboardCheck, ClipboardList, FileSignature, History, House, List, LogOut, NotebookPen, Settings2, Truck, Wheat } from 'lucide-react'
 import { AuthorizationManager, type AuthorizationListState, type AuthorizationListScroll } from './components/AuthorizationManager'
 import { InspectionRecordManager, type InspectionRecordTarget, type InspectionSummaryState, type InspectionSummaryScroll } from './components/InspectionRecordManager'
 import { InspectionOptionManager } from './components/InspectionOptionManager'
@@ -14,7 +14,7 @@ import { useCalendarMode } from './lib/calendarMode'
 import type { Worker } from './types'
 import './App.css'
 
-type Tab = 'scan' | 'shipping-record' | 'history' | 'inventory-history' | 'inventory' | 'statement-reader' | 'statement-list' | 'statement-master' | 'authorizations' | 'memos' | 'inspections' | 'master'
+type Tab = 'scan' | 'shipping-record' | 'history' | 'inventory-history' | 'inventory' | 'statement-reader' | 'statement-pending' | 'statement-list' | 'statement-master' | 'authorizations' | 'memos' | 'inspections' | 'master'
 
 function isStatementApplication() {
   const params = new URLSearchParams(window.location.search)
@@ -140,7 +140,7 @@ function App() {
   const canOperate = worker.role !== 'viewer'
   const isAdmin = worker.role === 'admin'
   const roleName = isAdmin ? '管理者' : canOperate ? '作業者' : '閲覧者'
-  const navStyle = { '--nav-count': statementApplication ? (isAdmin ? 3 : canOperate ? 2 : 1) : isAdmin ? 8 : canOperate ? 7 : 3 } as CSSProperties
+  const navStyle = { '--nav-count': statementApplication ? (isAdmin ? 4 : canOperate ? 3 : 2) : isAdmin ? 8 : canOperate ? 7 : 3 } as CSSProperties
 
   return (
     <div className="app-shell">
@@ -192,6 +192,7 @@ function App() {
         {!statementApplication && tab === 'inventory-history' && <InventoryManager view="history" workerId={worker.worker_id} workerName={worker.worker_name} canOperate={canOperate} isAdmin={isAdmin} />}
         {!statementApplication && tab === 'inventory' && <InventoryManager view="balance" workerId={worker.worker_id} workerName={worker.worker_name} canOperate={canOperate} isAdmin={isAdmin} />}
         {statementApplication && tab === 'statement-reader' && canOperate && <PurchaseStatementManager mode="reader" workerId={worker.worker_id} canOperate={canOperate} isAdmin={isAdmin} />}
+        {statementApplication && tab === 'statement-pending' && <PurchaseStatementManager mode="pending" workerId={worker.worker_id} canOperate={canOperate} isAdmin={isAdmin} />}
         {statementApplication && tab === 'statement-list' && <PurchaseStatementManager mode="list" workerId={worker.worker_id} canOperate={canOperate} isAdmin={isAdmin} />}
         {statementApplication && tab === 'statement-master' && isAdmin && <PurchaseStatementManager mode="master" workerId={worker.worker_id} canOperate={canOperate} isAdmin={isAdmin} />}
         {!statementApplication && tab === 'authorizations' && canOperate && (
@@ -246,6 +247,9 @@ function App() {
           {canOperate && <button className={tab === 'statement-reader' ? 'active' : ''} onClick={() => setTab('statement-reader')}>
             <Camera size={22} /><span>仕切書読込</span>
           </button>}
+          <button className={tab === 'statement-pending' ? 'active' : ''} onClick={() => setTab('statement-pending')}>
+            <ClipboardCheck size={22} /><span>確認待ち</span>
+          </button>
           <button className={tab === 'statement-list' ? 'active' : ''} onClick={() => setTab('statement-list')}>
             <List size={22} /><span>仕切書一覧</span>
           </button>

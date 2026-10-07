@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, Camera, ChevronDown, ChevronUp, FileImage, Keyboard, Pencil, Plus, RefreshCw, Save, Search, Trash2, X } from 'lucide-react'
+import { ArrowLeft, Camera, Check, ChevronDown, ChevronUp, FileImage, Keyboard, Pencil, Plus, RefreshCw, Save, Search, Trash2, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useCalendarMode } from '../lib/calendarMode'
 import { JapaneseCropYearInput, JapaneseDateInput } from './JapaneseDateInput'
 
-type Mode = 'reader' | 'list' | 'master'
+type Mode = 'reader' | 'pending' | 'list' | 'master'
 type Props = { mode: Mode; workerId: string; canOperate: boolean; isAdmin: boolean }
 type SourceType = 'camera' | 'manual'
 type TaxTreatment = '' | 'exclusive' | 'inclusive'
@@ -30,7 +30,7 @@ type ItemForm = {
   unitPrice: string
   amount: string
 }
-type Editor = { id: string | null; sourceType: SourceType; header: HeaderForm; items: ItemForm[]; previewUrl: string; imageBase64: string; warnings: string[] }
+type Editor = { id: string | null; submissionId: string; pending: boolean; readerName: string; sourceType: SourceType; header: HeaderForm; items: ItemForm[]; previewUrl: string; imageBase64: string; warnings: string[] }
 type StoredItem = {
   id: string
   line_no: number
@@ -61,6 +61,9 @@ type StoredStatement = {
   created_at: string
   updated_at: string
   items: StoredItem[]
+  pending?: boolean
+  created_by_worker_id?: string
+  warnings?: string[]
 }
 type MasterType = 'recipient' | 'origin' | 'product' | 'category' | 'storage_location' | 'customer'
 type MasterValue = {
@@ -165,6 +168,24 @@ function taxExemptAmount(value: unknown) {
 
 function nullableNumber(value: string) {
   return value.trim() === '' ? null : Number(value)
+}
+
+function statementPayload(editor: Editor) {
+  return {
+    header: {
+      statement_date: editor.header.statementDate, document_number: editor.header.documentNumber.trim(),
+      recipient: editor.header.recipient.trim(), issuer: editor.header.issuer.trim(),
+      payment_method: editor.header.paymentMethod, tax_treatment: editor.header.taxTreatment,
+      tax_rate: nullableNumber(editor.header.taxRate), tax_amount: nullableNumber(editor.header.taxAmount),
+      total_amount: editor.sourceType === 'manual' ? calculatedTotal(editor.items, editor.header.taxAmount, editor.header.taxTreatment) : nullableNumber(editor.header.totalAmount),
+      invoice_number: editor.header.invoiceNumber.trim(),
+    },
+    items: editor.items.map((item) => ({
+      crop_year: item.cropYear.trim() || null, origin: item.origin.trim(), product_name: item.productName.trim(),
+      package_type: item.packageType.trim(), quantity: nullableNumber(item.quantity), unit: item.unit.trim(),
+      unit_price: nullableNumber(item.unitPrice), amount: nullableNumber(item.amount),
+    })),
+  }
 }
 
 function formatMoney(value: number | null) {
@@ -275,17 +296,19 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin }
   const [duplicateStatement, setDuplicateStatement] = useState<DuplicateStatement | null>(null)
   const [search, setSearch] = useState('')
   const [busy, setBusy] = useState(false)
-  const [loadingStatements, setLoadingStatements] = useState(mode === 'list')
+  const [loadingStatements, setLoadingStatements] = useState(mode === 'list' || mode === 'pending')
+  const [captureRetry, setCaptureRetry] = useState<Editor | null>(null)
+  const [captureCount, setCaptureCount] = useState(0)
   const [notice, setNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [viewingImageUrl, setViewingImageUrl] = useState('')
 
   const loadStatements = useCallback(async () => {
     setLoadingStatements(true)
-    const { data, error } = await supabase.rpc('flexcon_list_purchase_statements', { p_worker_id: workerId })
+    const { data, error } = await supabase.rpc(mode === 'pending' ? 'flexcon_list_pending_purchase_statements' : 'flexcon_list_purchase_statements', { p_worker_id: workerId })
     setLoadingStatements(false)
     if (error) return setNotice({ type: 'error', text: error.message })
     setStatements((data ?? []) as StoredStatement[])
-  }, [workerId])
+  }, [mode, workerId])
 
   const loadMasters = useCallback(async () => {
     const [masterResult, purchaseInventoryResult] = await Promise.all([
@@ -313,7 +336,7 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin }
 
   useEffect(() => {
     // oxlint-disable-next-line react/set-state-in-effect -- RPC results synchronize this view with Supabase.
-    if (mode === 'list') void loadStatements()
+    if (mode === 'list' || mode === 'pending') void loadStatements()
     void loadMasters()
   }, [loadMasters, loadStatements, mode])
 
@@ -323,16 +346,45 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin }
     const filtered = term
       ? statements.filter((statement) => [statement.statement_date, statement.document_number, statement.recipient, statement.issuer, statement.invoice_number, ...statement.items.flatMap((item) => [item.origin, item.product_name, item.package_type])].some((value) => String(value ?? '').toLowerCase().includes(term)))
       : statements
-    return [...filtered].sort((left, right) =>
+    return [...filtered].sort((left, right) => mode === 'pending'
+      ? right.created_at.localeCompare(left.created_at) || right.id.localeCompare(left.id)
+      :
       right.statement_date.localeCompare(left.statement_date)
       || (right.created_at ?? '').localeCompare(left.created_at ?? '')
       || right.document_number.localeCompare(left.document_number, 'ja', { numeric: true }),
     )
-  }, [search, statements])
+  }, [mode, search, statements])
 
   const startManual = () => {
     setNotice(null)
-    setEditor({ id: null, sourceType: 'manual', header: emptyHeader(), items: [emptyItem()], previewUrl: '', imageBase64: '', warnings: [] })
+    setEditor({ id: null, submissionId: crypto.randomUUID(), pending: false, readerName: '', sourceType: 'manual', header: emptyHeader(), items: [emptyItem()], previewUrl: '', imageBase64: '', warnings: [] })
+  }
+
+  const submitDraft = async (capture: Editor) => {
+    const payload = statementPayload(capture)
+    const { error } = await supabase.rpc('flexcon_submit_purchase_statement', {
+      p_worker_id: workerId, p_draft_id: capture.submissionId, p_source_type: capture.sourceType,
+      p_header: payload.header, p_items: payload.items, p_warnings: capture.warnings,
+    })
+    if (error) throw error
+    if (capture.imageBase64) {
+      const { data, error: imageError } = await supabase.functions.invoke('purchase-statement-image', {
+        body: { action: 'upload', statementId: capture.submissionId, imageBase64: capture.imageBase64, mimeType: 'image/jpeg' },
+      })
+      if (imageError || !(data as { imagePath?: string } | null)?.imagePath) throw imageError ?? new Error('読取画像を保存できませんでした。')
+    }
+    setCaptureRetry(null)
+    setEditor(null)
+    setCaptureCount((count) => count + 1)
+    setNotice({ type: 'success', text: capture.sourceType === 'camera' ? '読み取り成功。確認を依頼してください。' : '確認待ちに保存しました。別の担当者に確認を依頼してください。' })
+  }
+
+  const retryCapture = async () => {
+    if (!captureRetry || busy) return
+    setBusy(true)
+    try { await submitDraft(captureRetry) } catch (error) {
+      setNotice({ type: 'error', text: `保存を完了できませんでした。再試行してください。${error instanceof Error ? error.message : ''}` })
+    } finally { setBusy(false) }
   }
 
   const preparePhoto = async (file: File) => {
@@ -378,8 +430,9 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin }
           amount: line.product_name?.trim() === '免税' ? taxExemptAmount(line.amount) : inputNumber(line.amount),
         }
       })
-      setEditor({
+      const capture: Editor = {
         id: null,
+        submissionId: crypto.randomUUID(), pending: false, readerName: '',
         sourceType: 'camera',
         previewUrl: image.previewUrl,
         imageBase64: image.imageBase64,
@@ -397,9 +450,11 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin }
           invoiceNumber: statement.invoice_number?.trim() ?? '',
         },
         items,
-      })
+      }
+      setCaptureRetry(capture)
+      await submitDraft(capture)
     } catch (error) {
-      setNotice({ type: 'error', text: error instanceof Error ? error.message : '仕切書画像を解析できませんでした。' })
+      setNotice({ type: 'error', text: error && typeof error === 'object' && 'message' in error ? String(error.message) : '仕切書画像の読取・保存を完了できませんでした。' })
     } finally {
       setBusy(false)
       if (cameraRef.current) cameraRef.current.value = ''
@@ -410,10 +465,11 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin }
     setNotice(null)
     setEditor({
       id: statement.id,
+      submissionId: statement.id, pending: Boolean(statement.pending), readerName: statement.created_by_worker_name,
       sourceType: statement.source_type,
       previewUrl: '',
       imageBase64: '',
-      warnings: [],
+      warnings: statement.warnings ?? [],
       header: {
         statementDate: statement.statement_date,
         documentNumber: statement.document_number,
@@ -447,39 +503,23 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin }
   const persistStatement = async (statementId: string | null) => {
     if (!editor || busy) return
     setDuplicateStatement(null)
+    setNotice(null)
     setBusy(true)
-    const { data: savedStatementId, error } = await supabase.rpc('flexcon_save_purchase_statement', {
-      p_worker_id: workerId,
-      p_statement_id: statementId,
-      p_source_type: editor.sourceType,
-      p_header: {
-        statement_date: editor.header.statementDate,
-        document_number: editor.header.documentNumber.trim(),
-        recipient: editor.header.recipient.trim(),
-        issuer: editor.header.issuer.trim(),
-        payment_method: editor.header.paymentMethod,
-        tax_treatment: editor.header.taxTreatment,
-        tax_rate: nullableNumber(editor.header.taxRate),
-        tax_amount: nullableNumber(editor.header.taxAmount),
-        total_amount: editor.sourceType === 'manual' ? calculatedTotal(editor.items, editor.header.taxAmount, editor.header.taxTreatment) : nullableNumber(editor.header.totalAmount),
-        invoice_number: editor.header.invoiceNumber.trim(),
-      },
-      p_items: editor.items.map((item) => ({
-        crop_year: item.cropYear.trim() || null,
-        origin: item.origin.trim(),
-        product_name: item.productName.trim(),
-        package_type: item.packageType.trim(),
-        quantity: item.productName.trim() === '免税' ? nullableNumber(item.quantity) : Number(item.quantity),
-        unit: item.unit.trim(),
-        unit_price: nullableNumber(item.unitPrice),
-        amount: nullableNumber(item.amount),
-      })),
-    })
+    const payload = statementPayload(editor)
+    const { data: savedStatementId, error } = editor.pending
+      ? await supabase.rpc('flexcon_confirm_purchase_statement', {
+        p_worker_id: workerId, p_draft_id: editor.id, p_header: payload.header, p_items: payload.items,
+        p_replace_statement_id: statementId === editor.id ? null : statementId,
+      })
+      : await supabase.rpc('flexcon_save_purchase_statement', {
+        p_worker_id: workerId, p_statement_id: statementId, p_source_type: editor.sourceType,
+        p_header: payload.header, p_items: payload.items,
+      })
     if (error) {
       setBusy(false)
       return setNotice({ type: 'error', text: error.message })
     }
-    if (editor.imageBase64) {
+    if (!editor.pending && editor.imageBase64) {
       const { data: imageData, error: imageError } = await supabase.functions.invoke('purchase-statement-image', {
         body: { action: 'upload', statementId: savedStatementId, imageBase64: editor.imageBase64, mimeType: 'image/jpeg' },
       })
@@ -495,13 +535,21 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin }
     setBusy(false)
     setEditor(null)
     setSelectedStatement(null)
-    setNotice({ type: 'success', text: statementId && statementId !== editor.id ? '同じ仕切書№の登録を上書きしました。' : '仕切書を保存しました。' })
-    if (mode === 'list') await loadStatements()
+    setNotice({ type: 'success', text: editor.pending ? '仕切書を確認し、確定しました。' : statementId && statementId !== editor.id ? '同じ仕切書№の登録を上書きしました。' : '仕切書を保存しました。' })
+    if (mode === 'list' || mode === 'pending') await loadStatements()
   }
 
   const saveStatement = async (event: React.FormEvent) => {
     event.preventDefault()
     if (!editor || busy) return
+    if (mode === 'reader' && !editor.id) {
+      setBusy(true)
+      setCaptureRetry(editor)
+      try { await submitDraft(editor) } catch (error) {
+        setNotice({ type: 'error', text: error && typeof error === 'object' && 'message' in error ? String(error.message) : '確認待ちに保存できませんでした。' })
+      } finally { setBusy(false) }
+      return
+    }
     if (!editor.header.statementDate) return setNotice({ type: 'error', text: '日付を入力してください。' })
     if (!editor.header.documentNumber.trim()) return setNotice({ type: 'error', text: '仕切書№を入力してください。' })
     if (!editor.header.taxTreatment) return setNotice({ type: 'error', text: '右上の「金額（税抜・税込）」の丸印を確認し、消費税区分を選択してください。' })
@@ -517,7 +565,7 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin }
     const { data, error } = await supabase.rpc('flexcon_find_purchase_statement_by_number', {
       p_worker_id: workerId,
       p_document_number: editor.header.documentNumber.trim(),
-      p_exclude_statement_id: editor.id,
+      p_exclude_statement_id: editor.pending ? null : editor.id,
     })
     setBusy(false)
     if (error) {
@@ -547,10 +595,32 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin }
     setViewingImageUrl(signedUrl)
   }
 
+  const openPendingStatement = async (statement: StoredStatement) => {
+    if (busy) return
+    setSelectedStatement(statement)
+    setNotice(null)
+    if (!canOperate || statement.created_by_worker_id === workerId) return
+    editStatement(statement)
+    if (!statement.image_path) return
+    setBusy(true)
+    try {
+      const { data, error } = await supabase.functions.invoke('purchase-statement-image', { body: { action: 'signed-url', statementId: statement.id } })
+      if (error) throw error
+      const url = (data as { signedUrl?: string } | null)?.signedUrl
+      if (!url) throw new Error('読取画像を開けませんでした。')
+      setEditor((current) => current?.id === statement.id ? { ...current, previewUrl: url } : current)
+    } catch {
+      setNotice({ type: 'error', text: '読取画像を開けませんでした。一覧に戻って再度開いてください。' })
+      setEditor(null)
+    } finally { setBusy(false) }
+  }
+
   const deleteStatement = async (statement: StoredStatement) => {
     if (!isAdmin || busy || !window.confirm(`仕切書№「${statement.document_number}」を削除しますか？\n\nこの操作は元に戻せません。`)) return
     setBusy(true)
-    const { error } = await supabase.rpc('flexcon_delete_purchase_statement', { p_worker_id: workerId, p_statement_id: statement.id })
+    const { error } = statement.pending
+      ? await supabase.rpc('flexcon_delete_pending_purchase_statement', { p_worker_id: workerId, p_draft_id: statement.id })
+      : await supabase.rpc('flexcon_delete_purchase_statement', { p_worker_id: workerId, p_statement_id: statement.id })
     if (error) {
       setBusy(false)
       return setNotice({ type: 'error', text: error.message })
@@ -715,8 +785,9 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin }
   const standardMasterTypes: MasterType[] = ['recipient', 'origin', 'category', 'storage_location', 'customer']
 
   const editorForm = editor && <form className="purchase-statement-editor" noValidate onSubmit={(event) => void saveStatement(event)}>
-    <div className="purchase-statement-editor-heading"><div><h2>{editor.id ? '仕切書を編集' : editor.sourceType === 'camera' ? '読取結果を確認' : '仕切書を手入力'}</h2><p>画像からの読取結果も、保存前に必ず確認・修正してください。</p></div><button className="icon-button" type="button" title="入力を閉じる" aria-label="入力を閉じる" onClick={() => setEditor(null)} disabled={busy}><X size={20} /></button></div>
-    {editor.previewUrl && <img className="purchase-statement-preview" src={editor.previewUrl} alt="撮影した仕切書" />}
+    <div className="purchase-statement-editor-heading"><div><h2>{editor.pending ? '仕切書を確認' : editor.id ? '仕切書を編集' : '仕切書を手入力'}</h2>{editor.pending && <p>読取者：{editor.readerName}</p>}</div><button className="icon-button" type="button" title="入力を閉じる" aria-label="入力を閉じる" onClick={() => { setEditor(null); setSelectedStatement(null) }} disabled={busy}><X size={20} /></button></div>
+    {mode !== 'reader' && notice?.type === 'error' && <div className="notice error" role="alert">{notice.text}</div>}
+    {editor.previewUrl && <img className="purchase-statement-preview" src={editor.previewUrl} alt="撮影した仕切書" onError={() => { setNotice({ type: 'error', text: '読取画像を表示できませんでした。再度開いてください。' }); if (editor.pending) setEditor((current) => current ? { ...current, previewUrl: '' } : current) }} />}
     {editor.warnings.length > 0 && <div className="notice warning"><strong>確認が必要な項目</strong>{editor.warnings.map((warning) => <span key={warning}>{warning}</span>)}</div>}
     <section className="purchase-statement-common"><h3>共通項目</h3><div className="purchase-statement-common-grid">
       <label>日付<JapaneseDateInput value={editor.header.statementDate} onChange={(value) => updateHeader('statementDate', value)} required /></label>
@@ -744,44 +815,48 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin }
         <td><button className="icon-button delete-icon" type="button" title="明細を削除" aria-label={`${index + 1}行目を削除`} onClick={() => removeItem(index)} disabled={busy || editor.items.length === 1}><Trash2 size={17} /></button></td>
       </tr>)}</tbody></table></div>
     </section>
-    <div className="modal-actions"><button className="secondary-button" type="button" onClick={() => setEditor(null)} disabled={busy}>取消</button><button className="primary-button" type="submit" disabled={busy}><Save size={18} />{busy ? '保存中...' : '仕切書を保存'}</button></div>
+    <div className="modal-actions"><button className="secondary-button" type="button" onClick={() => { setEditor(null); setSelectedStatement(null) }} disabled={busy}>取消</button><button className="primary-button" type="submit" disabled={busy || (editor.pending && editor.sourceType === 'camera' && !editor.previewUrl)}>{editor.pending ? <Check size={18} /> : <Save size={18} />}{busy ? '保存中...' : editor.pending ? '確認して確定' : editor.id ? '仕切書を保存' : '確認待ちに保存'}</button></div>
     <datalist id="statement-recipient-list">{suggestions('recipient').map((value) => <option value={value} key={value} />)}</datalist>
     <datalist id="statement-origin-list">{suggestions('origin').map((value) => <option value={value} key={value} />)}</datalist>
     <datalist id="statement-product-list">{suggestions('product').map((value) => <option value={value} key={value} />)}</datalist>
   </form>
 
   const statementDetail = selectedStatement && <section className="purchase-statement-detail-screen">
+    {selectedStatement.pending && <div className="notice warning" role="status">{selectedStatement.created_by_worker_id === workerId ? '読取者本人は確認できません。別の担当者に確認を依頼してください。' : '確認待ち'}</div>}
+    {selectedStatement.pending && <p className="purchase-statement-reader-info">読取者：{selectedStatement.created_by_worker_name}　読取日時：{new Date(selectedStatement.created_at).toLocaleString('ja-JP')}</p>}
     <div className="purchase-statement-detail-heading"><button className="secondary-button" type="button" onClick={() => setSelectedStatement(null)}><ArrowLeft size={18} />一覧に戻る</button><div><h2>仕切書№ {selectedStatement.document_number}</h2><p>{formatJapaneseDate(selectedStatement.statement_date)}　{selectedStatement.issuer || '仕入先未入力'}</p></div></div>
     <dl className="purchase-statement-detail-summary"><div><dt>日付</dt><dd>{formatJapaneseDate(selectedStatement.statement_date)}</dd></div><div><dt>担当者</dt><dd>{selectedStatement.recipient || '―'}</dd></div><div><dt>仕入先</dt><dd>{selectedStatement.issuer || '―'}</dd></div><div><dt>支払方法</dt><dd>{paymentMethodLabel(selectedStatement.payment_method)}</dd></div><div><dt>消費税区分</dt><dd>{taxTreatmentLabel(selectedStatement.tax_treatment)}</dd></div><div><dt>税率</dt><dd>{selectedStatement.tax_rate == null ? '―' : `${selectedStatement.tax_rate}%`}</dd></div><div><dt>消費税額</dt><dd>{formatMoney(selectedStatement.tax_amount) || '―'}</dd></div><div><dt>金額（税込）</dt><dd>{formatMoney(selectedStatement.total_amount) || '―'}</dd></div><div><dt>登録番号</dt><dd>{selectedStatement.invoice_number || '―'}</dd></div></dl>
     <div className="purchase-statement-table-wrap"><table><thead><tr><th>産年</th><th>産地</th><th>品名</th><th>荷姿</th><th>数量</th><th>単価</th><th>金額</th></tr></thead><tbody>{selectedStatement.items.map((item) => <tr key={item.id}><td>{formatJapaneseCropYear(item.crop_year)}</td><td>{item.origin}</td><td>{item.product_name}</td><td>{item.package_type}</td><td>{item.quantity == null ? '' : Number(item.quantity).toLocaleString('ja-JP')}{item.unit}</td><td>{formatMoney(item.unit_price)}</td><td>{formatMoney(item.amount)}</td></tr>)}</tbody></table></div>
-    <div className="purchase-statement-detail-actions">{selectedStatement.image_path && <button className="secondary-button" type="button" onClick={() => void openStatementImage(selectedStatement)} disabled={busy}><FileImage size={17} />元画像を表示</button>}{canOperate && <button className="secondary-button" type="button" onClick={() => editStatement(selectedStatement)} disabled={busy}><Pencil size={17} />編集</button>}{isAdmin && <button className="danger-button" type="button" onClick={() => void deleteStatement(selectedStatement)} disabled={busy}><Trash2 size={17} />削除</button>}</div>
+    <div className="purchase-statement-detail-actions">{selectedStatement.image_path && <button className="secondary-button" type="button" onClick={() => void openStatementImage(selectedStatement)} disabled={busy}><FileImage size={17} />元画像を表示</button>}{canOperate && (!selectedStatement.pending || selectedStatement.created_by_worker_id !== workerId) && <button className="secondary-button" type="button" onClick={() => selectedStatement.pending ? void openPendingStatement(selectedStatement) : editStatement(selectedStatement)} disabled={busy}><Pencil size={17} />{selectedStatement.pending ? '確認・修正' : '編集'}</button>}{isAdmin && <button className="danger-button" type="button" onClick={() => void deleteStatement(selectedStatement)} disabled={busy}><Trash2 size={17} />削除</button>}</div>
   </section>
 
   return <div className="purchase-statement-page">
-    <div className="page-heading"><p>{mode === 'reader' ? '仕切書を撮影して読み取るか、すべての項目を手入力します。' : mode === 'list' ? '登録済みの仕切書と明細を確認します。' : '仕切書の入力候補と在庫管理に使用する項目を管理します。'}</p></div>
+    <div className="page-heading"><p>{mode === 'reader' ? '仕切書読込み' : mode === 'pending' ? '確認待ちの仕切書' : mode === 'list' ? '確認済みの仕切書' : '仕切書の入力候補と在庫管理に使用する項目を管理します。'}</p></div>
     {notice && <div className={`notice ${notice.type}`} role={notice.type === 'error' ? 'alert' : 'status'}>{notice.text}</div>}
     {mode === 'reader' && canOperate && <>
       <input ref={cameraRef} className="visually-hidden" type="file" accept="image/*" capture="environment" onChange={(event) => { const file = event.target.files?.[0]; if (file) void preparePhoto(file) }} />
-      <section className="section-band purchase-statement-actions"><div><h2>仕切書を登録</h2><p>撮影画像の読取り後も、全項目を手動で修正できます。</p></div><div><button className="primary-button" type="button" onClick={() => cameraRef.current?.click()} disabled={busy}><Camera size={20} />{busy ? '読取中...' : '撮影・画像を選択'}</button><button className="secondary-button" type="button" onClick={startManual} disabled={busy}><Keyboard size={20} />手入力</button></div></section>
+      <section className="section-band purchase-statement-actions"><div><h2>仕切書読込み</h2>{captureCount > 0 && <p>今回の登録：{captureCount}件</p>}</div><div><button className="primary-button" type="button" onClick={() => cameraRef.current?.click()} disabled={busy || Boolean(captureRetry)}><Camera size={20} />{busy ? '読取・保存中...' : captureCount > 0 ? '次の仕切書を読み取る' : '撮影・画像を選択'}</button><button className="secondary-button" type="button" onClick={startManual} disabled={busy || Boolean(captureRetry)}><Keyboard size={20} />手入力</button></div></section>
+      {captureRetry && !busy && <div className="purchase-statement-retry"><button className="secondary-button" type="button" onClick={() => void retryCapture()}><RefreshCw size={18} />保存を再試行</button></div>}
       {editorForm}
     </>}
-    {mode === 'list' && <>
+    {(mode === 'list' || mode === 'pending') && <>
       {selectedStatement ? statementDetail : <>
         <div className="search-row"><div className="search-input-wrap"><Search size={18} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="日付・仕切書№・担当者・仕入先・産地・品名を検索" /></div><button className="secondary-button" type="button" onClick={() => void loadStatements()} disabled={loadingStatements}><RefreshCw size={17} />{loadingStatements ? '読込中' : '再読込'}</button></div>
         <div className="purchase-statement-list-count">{loadingStatements ? '一覧を読み込んでいます' : `${displayedStatements.length}仕切書・${displayedStatements.reduce((sum, statement) => sum + statement.items.length, 0)}明細`}</div>
-        <div className="purchase-statement-overview-wrap"><table className="purchase-statement-overview"><thead><tr><th>仕切書№</th><th>内容</th><th>数量</th><th>単価</th><th>日付</th><th>担当者</th><th>金額（税込）</th><th>仕入先</th></tr></thead>
+        <div className="purchase-statement-overview-wrap"><table className="purchase-statement-overview"><thead><tr>{mode === 'pending' && <><th>読取者</th><th>読取日時</th><th>画像</th></>}<th>仕切書№</th><th>内容</th><th>数量</th><th>単価</th><th>日付</th><th>担当者</th><th>金額（税込）</th><th>仕入先</th></tr></thead>
           {displayedStatements.map((statement, statementIndex) => {
             const rows: Array<StoredItem | null> = statement.items.length > 0 ? statement.items : [null]
-            return <tbody className={statementIndex % 2 === 0 ? 'statement-even' : 'statement-odd'} key={statement.id}>{rows.map((item, itemIndex) => <tr key={item?.id ?? statement.id}>
-              {itemIndex === 0 && <td rowSpan={rows.length}><button className="purchase-statement-number-link" type="button" onClick={() => setSelectedStatement(statement)}>{statement.document_number}</button></td>}
+            return <tbody className={`${statementIndex % 2 === 0 ? 'statement-even' : 'statement-odd'} ${mode === 'pending' ? 'purchase-statement-pending-rows' : ''}`} key={statement.id}>{rows.map((item, itemIndex) => <tr key={item?.id ?? statement.id} onClick={mode === 'pending' ? () => void openPendingStatement(statement) : undefined}>
+              {itemIndex === 0 && mode === 'pending' && <><td rowSpan={rows.length}>{statement.created_by_worker_name}</td><td rowSpan={rows.length}>{new Date(statement.created_at).toLocaleString('ja-JP')}</td><td rowSpan={rows.length}>{statement.source_type === 'manual' ? '手入力' : statement.image_path ? '保存済み' : '保存未完了'}</td></>}
+              {itemIndex === 0 && <td rowSpan={rows.length}><button className="purchase-statement-number-link" type="button" onClick={(event) => { event.stopPropagation(); if (mode === 'pending') void openPendingStatement(statement); else setSelectedStatement(statement) }}>{statement.document_number || '№未読取'}</button></td>}
               <td>{item ? [formatJapaneseCropYear(item.crop_year), item.origin, item.product_name].filter(Boolean).join(' ') : ''}</td><td className="number-cell">{item?.quantity == null ? '' : `${Number(item.quantity).toLocaleString('ja-JP')}${item.unit ? ` ${item.unit}` : ''}`}</td><td className="number-cell">{item?.unit_price == null ? '' : Number(item.unit_price).toLocaleString('ja-JP')}</td>
-              {itemIndex === 0 && <><td rowSpan={rows.length}>{formatJapaneseDate(statement.statement_date)}</td><td rowSpan={rows.length}>{statement.recipient || '―'}</td><td className="number-cell" rowSpan={rows.length}>{statement.total_amount == null ? '―' : Number(statement.total_amount).toLocaleString('ja-JP')}</td><td rowSpan={rows.length}>{statement.issuer || '―'}</td></>}
+              {itemIndex === 0 && <><td rowSpan={rows.length}>{statement.statement_date ? formatJapaneseDate(statement.statement_date) : '未読取'}</td><td rowSpan={rows.length}>{statement.recipient || '―'}</td><td className="number-cell" rowSpan={rows.length}>{statement.total_amount == null ? '―' : Number(statement.total_amount).toLocaleString('ja-JP')}</td><td rowSpan={rows.length}>{statement.issuer || '―'}</td></>}
             </tr>)}</tbody>
           })}
         </table></div>
-        {!loadingStatements && displayedStatements.length === 0 && <div className="empty-state">登録された仕切書はありません</div>}
+        {!loadingStatements && displayedStatements.length === 0 && <div className="empty-state">{mode === 'pending' ? '確認待ちの仕切書はありません' : '登録された仕切書はありません'}</div>}
       </>}
-      {editor && <div className="modal-backdrop purchase-statement-edit-backdrop" role="presentation"><section className="registration-modal purchase-statement-edit-modal" role="dialog" aria-modal="true" aria-label="仕切書を編集">{editorForm}</section></div>}
+      {editor && <div className="modal-backdrop purchase-statement-edit-backdrop" role="presentation"><section className="registration-modal purchase-statement-edit-modal" role="dialog" aria-modal="true" aria-label={editor.pending ? '仕切書を確認' : '仕切書を編集'}>{editorForm}</section></div>}
     </>}
     {mode === 'master' && isAdmin && <div className="purchase-statement-master-grid">
       {standardMasterTypes.map((type) => {

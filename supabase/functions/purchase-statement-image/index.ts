@@ -57,15 +57,19 @@ function serviceHeaders(contentType = 'application/json') {
   return { apikey: serviceKey, authorization: `Bearer ${serviceKey}`, 'Content-Type': contentType }
 }
 
-async function statementImagePath(statementId: string) {
+async function statementImageRecord(statementId: string) {
   const supabaseUrl = Deno.env.get('SUPABASE_URL')
   if (!supabaseUrl) throw new Error('Supabaseの設定がありません。')
   const response = await fetch(`${supabaseUrl}/rest/v1/flexcon_purchase_statements?id=eq.${encodeURIComponent(statementId)}&select=image_path`, {
     headers: serviceHeaders(),
   })
   const rows = await response.json() as Array<{ image_path?: string }>
-  if (!response.ok || rows.length !== 1) throw new Error('仕切書が見つかりません。')
-  return rows[0].image_path ?? ''
+  if (!response.ok) throw new Error('仕切書を確認できませんでした。')
+  if (rows.length === 1) return { imagePath: rows[0].image_path ?? '', table: 'flexcon_purchase_statements', readerId: '', confirmed: true }
+  const pendingResponse = await fetch(`${supabaseUrl}/rest/v1/flexcon_purchase_statement_drafts?id=eq.${encodeURIComponent(statementId)}&select=image_path,created_by_worker_id,confirmed_at`, { headers: serviceHeaders() })
+  const drafts = await pendingResponse.json() as Array<{ image_path?: string; created_by_worker_id: string; confirmed_at?: string }>
+  if (!pendingResponse.ok || drafts.length !== 1) throw new Error('仕切書が見つかりません。')
+  return { imagePath: drafts[0].image_path ?? '', table: 'flexcon_purchase_statement_drafts', readerId: drafts[0].created_by_worker_id, confirmed: Boolean(drafts[0].confirmed_at) }
 }
 
 Deno.serve(async (request) => {
@@ -79,29 +83,34 @@ Deno.serve(async (request) => {
     if (!supabaseUrl) throw new Error('Supabaseの設定がありません。')
 
     if (action === 'upload') {
-      await requirePurchaseStatementUser(request, ['admin', 'operator'])
+      const user = await requirePurchaseStatementUser(request, ['admin', 'operator'])
       const statementId = body.statementId ?? ''
       const imageBase64 = body.imageBase64 ?? ''
       if (!uuidPattern.test(statementId)) throw new Error('仕切書IDが不正です。')
       if (body.mimeType !== 'image/jpeg') throw new Error('保存できる画像形式はJPEGです。')
       if (!imageBase64 || imageBase64.length > 12_000_000) throw new Error('画像が大きすぎます。')
-      await statementImagePath(statementId)
+      const record = await statementImageRecord(statementId)
+      const pending = record.table === 'flexcon_purchase_statement_drafts'
+      if (pending && (record.readerId !== user.workerId || record.confirmed)) throw new Error('この確認待ち画像は変更できません。')
+      if (pending && record.imagePath) return jsonResponse(request, { imagePath: record.imagePath })
 
       const imagePath = `${statementId}/original.jpg`
       const bytes = Uint8Array.from(atob(imageBase64), (character) => character.charCodeAt(0))
       const upload = await fetch(`${supabaseUrl}/storage/v1/object/${bucketName}/${imagePath}`, {
         method: 'POST',
-        headers: { ...serviceHeaders('image/jpeg'), 'x-upsert': 'true', 'cache-control': '3600' },
+        headers: { ...serviceHeaders('image/jpeg'), 'x-upsert': pending ? 'false' : 'true', 'cache-control': '3600' },
         body: bytes,
       })
-      if (!upload.ok) throw new Error('仕切書画像をStorageへ保存できませんでした。')
+      if (!upload.ok && !(pending && upload.status === 409)) throw new Error('仕切書画像をStorageへ保存できませんでした。')
 
-      const update = await fetch(`${supabaseUrl}/rest/v1/flexcon_purchase_statements?id=eq.${encodeURIComponent(statementId)}`, {
+      const update = await fetch(`${supabaseUrl}/rest/v1/${record.table}?id=eq.${encodeURIComponent(statementId)}${pending ? '&confirmed_at=is.null' : ''}`, {
         method: 'PATCH',
-        headers: { ...serviceHeaders(), Prefer: 'return=minimal' },
+        headers: { ...serviceHeaders(), Prefer: 'return=representation' },
         body: JSON.stringify({ image_path: imagePath, updated_at: new Date().toISOString() }),
       })
       if (!update.ok) throw new Error('仕切書と画像を紐付けできませんでした。')
+      const updated = await update.json() as unknown[]
+      if (updated.length !== 1) throw new Error('仕切書の状態が変更されています。確認待ち一覧を再読込してください。')
       return jsonResponse(request, { imagePath })
     }
 
@@ -109,7 +118,7 @@ Deno.serve(async (request) => {
       await requirePurchaseStatementUser(request, ['admin', 'operator', 'viewer'])
       const statementId = body.statementId ?? ''
       if (!uuidPattern.test(statementId)) throw new Error('仕切書IDが不正です。')
-      const imagePath = await statementImagePath(statementId)
+      const imagePath = (await statementImageRecord(statementId)).imagePath
       if (!imagePath) throw new Error('保存された画像がありません。')
       const signed = await fetch(`${supabaseUrl}/storage/v1/object/sign/${bucketName}/${imagePath}`, {
         method: 'POST',
