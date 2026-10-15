@@ -126,6 +126,8 @@ type InspectionRegistrationSummaryRow = {
   purchaseDates: string
   inspectionDates: string
   inspectionDate: string | null
+  flexconIds: string[]
+  paperBagIds: string[]
   fullName: string
   origin: string
   municipality: string
@@ -538,6 +540,8 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
           authorizationId: authorization.id,
           purchaseDates: joinDistinct(records.map((item) => item.purchase_date), (value) => formatDisplayDate(value, calendarMode)),
           inspectionDate,
+          flexconIds: dateFlexcons.map((item) => item.id),
+          paperBagIds: datePaperBags.map((item) => item.id),
           inspectionDates: inspectionDate ? formatDisplayDate(inspectionDate, calendarMode) : '',
           fullName: authorization.full_name,
           origin: formatPrefectureName(authorization.prefecture),
@@ -592,24 +596,28 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
   }
 
   const deleteInspectionRegistration = async (row: InspectionRegistrationSummaryRow) => {
-    const registrationRows = summaryRows.filter((item) => item.registrationId === row.registrationId)
+    if (busy) return
+    const inspectionDateLabel = row.inspectionDate ? formatDisplayDate(row.inspectionDate, calendarMode) : '検査日未設定'
     const details = [
-      `推フレ ${registrationRows.reduce((total, item) => total + item.flexconCount, 0)}本`,
-      `紙袋 ${registrationRows.reduce((total, item) => total + item.paperBagCount, 0)}袋`,
-      `バラ ${registrationRows.reduce((total, item) => total + item.bulkQuantity, 0).toLocaleString()}kg`,
+      `推フレ ${row.flexconCount}本`,
+      `紙袋 ${row.paperBagCount}袋`,
+      `バラ ${row.bulkQuantity.toLocaleString()}kg`,
     ].join('、')
-    if (!window.confirm(`登録No. ${row.registrationNo}（${row.fullName}）のすべての検査日の明細を削除しますか？\n${details}\n\n選択した検査日の行だけではなく、この登録全体が対象です。この操作は取り消せません。`)) return
+    if (!window.confirm(`${row.fullName}（委任状№ ${row.authorizationNo}）の${inspectionDateLabel}の行を削除しますか？\n${details}\n\nこの行の明細だけを削除します。他の検査日の記録は削除しません。`)) return
 
     setBusy(true)
     setNotice(null)
-    const { error } = await supabase.rpc('flexcon_delete_inspection_registration', {
+    const { error } = await supabase.rpc('flexcon_delete_inspection_registration_date', {
       p_worker_id: workerId,
       p_registration_id: row.registrationId,
+      p_inspection_date: row.inspectionDate,
+      p_flexcon_ids: row.flexconIds,
+      p_paper_bag_ids: row.paperBagIds,
     })
     setBusy(false)
     if (error) return setNotice({ type: 'error', text: error.message })
 
-    setNotice({ type: 'success', text: `登録No. ${row.registrationNo}を削除しました。` })
+    setNotice({ type: 'success', text: `${row.fullName}の${inspectionDateLabel}の行を削除しました。` })
     setVersion((value) => value + 1)
   }
 
@@ -1544,7 +1552,7 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
         <tbody>{displayedSummary.map((row, index) => <tr className={index > 0 && displayedSummary[index - 1].registrationId !== row.registrationId ? 'inspection-summary-registration-start' : undefined} key={JSON.stringify([row.registrationId, row.inspectionDate])} tabIndex={0} onClick={() => openSummaryRecord(row)} onKeyDown={(event) => { if (event.key === 'Enter' && event.target === event.currentTarget) openSummaryRecord(row) }}>
           <td><span className={`inspection-completion-status ${row.inspectionStatus === '完了' ? 'complete' : 'incomplete'}`}>{row.inspectionStatus === '完了' ? <CircleCheck size={15} aria-hidden="true" /> : <CircleAlert size={15} aria-hidden="true" />}{row.inspectionStatus}</span></td>
           <td className="numeric-cell">{row.authorizationNo}</td><td>{row.settlementNo}</td><td>{row.purchaseDates}</td><td>{row.inspectionDates}</td><td><strong>{row.fullName}</strong></td><td>{row.origin}</td><td>{row.municipality}</td><td>{row.inspectionLocations}</td><td>{row.brands}</td><td>{row.grade}</td><td className="numeric-cell">{row.flexconCount}本</td><td className="numeric-cell">{row.paperBagCount}袋</td><td className="numeric-cell">{row.bulkQuantity.toLocaleString()}kg</td><td className="inspection-progress-inspected numeric-cell">{row.inspectedQuantity.toLocaleString()}kg</td><td className="inspection-progress-uninspected numeric-cell">{row.uninspectedQuantity.toLocaleString()}kg</td>
-          {!readOnly && <td className="inspection-summary-actions"><button className="icon-button delete-icon" type="button" title="この登録の全検査日の明細を削除" aria-label={`登録No. ${row.registrationNo}の全検査日の明細を削除`} disabled={busy} onClick={(event) => { event.stopPropagation(); void deleteInspectionRegistration(row) }}><Trash2 size={17} /></button></td>}
+          {!readOnly && <td className="inspection-summary-actions"><button className="icon-button delete-icon" type="button" title="この行だけを削除" aria-label={`${row.fullName}・${row.inspectionDates || '検査日未設定'}の行を削除`} disabled={busy} onClick={(event) => { event.stopPropagation(); void deleteInspectionRegistration(row) }}><Trash2 size={17} /></button></td>}
         </tr>)}
         {displayedSummary.length === 0 && <tr><td colSpan={SUMMARY_COLUMNS.length + (readOnly ? 0 : 1)} className="empty-state">該当する検査記録はありません</td></tr>}</tbody>
       </table></div>}
