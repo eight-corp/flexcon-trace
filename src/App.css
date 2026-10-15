@@ -798,6 +798,7 @@
 .inspection-batch-metadata-form label { display: flex; flex: none; align-items: center; gap: 4px; margin: 0; font-size: 12px; white-space: nowrap; }
 .inspection-batch-metadata-form input, .inspection-batch-metadata-form select { width: 105px; min-width: 0; height: 34px; min-height: 34px; }
 .inspection-batch-metadata-form .batch-target select { width: 118px; }
+.inspection-batch-metadata-form .batch-date-scope select { width: 148px; }
 .inspection-batch-metadata-form .japanese-date-input { width: 148px; }
 .inspection-batch-metadata-form .japanese-date-input input { width: 100%; }
 .inspection-batch-metadata-form .batch-number-range { display: flex; flex: none; align-items: center; gap: 4px; }

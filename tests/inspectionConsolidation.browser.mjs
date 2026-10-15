@@ -23,6 +23,7 @@ async function createDatabase() {
   await db.exec(fs.readFileSync('supabase/migrations/202609290001_consolidate_inspection_authorizations.sql', 'utf8'))
   await db.exec(fs.readFileSync('supabase/migrations/202609290002_fill_missing_inspection_metadata.sql', 'utf8'))
   await db.exec(fs.readFileSync('supabase/migrations/202609290003_inspection_metadata_range_override.sql', 'utf8'))
+  await db.exec(fs.readFileSync('supabase/migrations/202610150002_inspection_metadata_date_scope.sql', 'utf8'))
   await db.exec('alter table flexcon_inspection_flexcons add column certificate_print_count integer not null default 0')
   await db.exec("insert into flexcon_inspection_options(option_type,name) values ('brand_aomori','Rice'),('grade','1等'),('grade','2等'),('inspector','Tester'),('inspector','Other')")
   return db
@@ -51,13 +52,17 @@ try {
             body = { ok: true, workerId: 'tester', workerName: 'Tester', permissions: { rice_shipping: 'admin' } }
           } else if (resource.startsWith('rpc/')) {
             const fn = resource.slice(4)
-            assert.ok(['flexcon_add_inspection_group_with_warehouse', 'flexcon_save_inspection_detail_with_settlement', 'flexcon_set_inspection_registration_metadata_range'].includes(fn))
+            assert.ok(['flexcon_add_inspection_group_with_warehouse', 'flexcon_save_inspection_detail_with_settlement', 'flexcon_set_inspection_registration_metadata_scope'].includes(fn))
             const params = route.request().postDataJSON()
             const keys = Object.keys(params)
             assert.ok(keys.every((key) => /^p_[a-z_]+$/.test(key)))
             body = (await db.query(`select public.${fn}(${keys.map((key, i) => `${key} => $${i + 1}`).join(',')}) as result`, keys.map((key) => params[key]))).rows[0].result
           } else if (/^flexcon_inspection_(registrations|flexcons|paper_bags|options|weights)$|^flexcon_authorizations$/.test(resource)) {
             body = (await db.query(`select * from public.${resource}`)).rows
+            // PostgREST returns date columns as YYYY-MM-DD, not timestamps.
+            for (const row of body) for (const field of ['purchase_date', 'inspection_date']) {
+              if (row[field] instanceof Date) row[field] = row[field].toISOString().slice(0, 10)
+            }
           }
           await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) })
         } catch (error) {
@@ -211,14 +216,17 @@ try {
       const batch = page.locator('.inspection-batch-metadata-form')
       assert.equal(await batch.getByLabel('上書きする').isChecked(), false)
       assert.equal(await batch.getByLabel('開始№', { exact: true }).isDisabled(), true)
-      assert.equal(await batch.getByLabel(/^対象/).locator('option[value="bulk"]').count(), 0)
+      assert.equal(await batch.getByLabel('対象', { exact: true }).locator('option[value="bulk"]').count(), 0)
+      assert.equal(await batch.getByLabel('対象検査日', { exact: true }).inputValue(), 'all')
+      assert.ok(await batch.getByLabel('対象検査日', { exact: true }).locator('option[value="2026-09-02"]').count())
+      assert.ok(await batch.getByLabel('対象検査日', { exact: true }).locator('option[value="undated"]').count())
       const beforeBatch = (await db.query('select * from flexcon_inspection_flexcons order by id')).rows
       await batch.getByPlaceholder('変更なし', { exact: true }).fill('令和8年10月1日')
       await batch.getByPlaceholder('変更なし', { exact: true }).press('Tab')
       await batch.getByLabel(/^検査員/).selectOption('Tester')
       await batch.getByLabel(/^検査場所/).selectOption('A')
       await batch.getByLabel(/^等級/).selectOption('1等')
-      const batchApplied = page.waitForResponse(response => response.url().endsWith('/rpc/flexcon_set_inspection_registration_metadata_range'))
+      const batchApplied = page.waitForResponse(response => response.url().endsWith('/rpc/flexcon_set_inspection_registration_metadata_scope'))
       await moisture.fill('16.4')
       // Submit without blurring the edited detail to exercise the unsaved draft flush.
       await batch.evaluate(form => form.requestSubmit())
@@ -248,14 +256,14 @@ try {
       await batch.getByLabel(/^検査員/).selectOption('Other')
       await batch.getByLabel(/^検査場所/).selectOption('B')
       await batch.getByLabel(/^等級/).selectOption('2等')
-      const repeatedBatch = page.waitForResponse(response => response.url().endsWith('/rpc/flexcon_set_inspection_registration_metadata_range'))
+      const repeatedBatch = page.waitForResponse(response => response.url().endsWith('/rpc/flexcon_set_inspection_registration_metadata_scope'))
       await batch.getByRole('button', { name: 'まとめて反映', exact: true }).click()
       await repeatedBatch
       assert.deepEqual((await db.query('select * from flexcon_inspection_flexcons order by id')).rows, afterBatch)
       assert.deepEqual((await db.query('select * from flexcon_inspection_paper_bags')).rows[0], paperAfterBatch)
 
       await page.getByText(/0件の明細の検査日・検査員・検査場所・等級を未設定のみ更新しました/).waitFor({ state: 'attached' })
-      await batch.getByLabel(/^対象/).selectOption('standard')
+      await batch.getByLabel('対象', { exact: true }).selectOption('standard')
       await batch.getByLabel('開始№', { exact: true }).fill('2')
       await batch.getByLabel('終了№', { exact: true }).fill('3')
       await batch.getByLabel('上書きする').check()
@@ -264,7 +272,7 @@ try {
       await batch.getByLabel(/^検査員/).selectOption('Other')
       await batch.getByLabel(/^検査場所/).selectOption('A')
       await batch.getByLabel(/^等級/).selectOption('2等')
-      const rangeApplied = page.waitForResponse(response => response.url().endsWith('/rpc/flexcon_set_inspection_registration_metadata_range'))
+      const rangeApplied = page.waitForResponse(response => response.url().endsWith('/rpc/flexcon_set_inspection_registration_metadata_scope'))
       await batch.getByRole('button', { name: 'まとめて反映', exact: true }).click()
       await rangeApplied
       await page.getByText(/2件の明細の検査日・検査員・検査場所・等級を上書きしました/).waitFor({ state: 'attached' })
@@ -282,11 +290,11 @@ try {
         for (const field of ['warehouse_id', 'settlement_no', 'quantity_kg', 'moisture', 'lot_number']) assert.deepEqual(saved[field], original[field])
       }
       assert.deepEqual((await db.query('select * from flexcon_inspection_paper_bags')).rows[0], paperAfterBatch)
-      await batch.getByLabel(/^対象/).selectOption('paper')
+      await batch.getByLabel('対象', { exact: true }).selectOption('paper')
       assert.equal(await batch.getByLabel('開始№', { exact: true }).inputValue(), '')
       assert.equal(await batch.getByLabel('終了№', { exact: true }).isDisabled(), true)
       await batch.getByLabel(/^検査場所/).selectOption('A')
-      const paperApplied = page.waitForResponse(response => response.url().endsWith('/rpc/flexcon_set_inspection_registration_metadata_range'))
+      const paperApplied = page.waitForResponse(response => response.url().endsWith('/rpc/flexcon_set_inspection_registration_metadata_scope'))
       await batch.getByRole('button', { name: 'まとめて反映', exact: true }).click()
       await paperApplied
       await page.getByText(/1件の明細の検査場所を上書きしました/).waitFor({ state: 'attached' })
@@ -294,9 +302,39 @@ try {
       const paperAfterRange = (await db.query('select * from flexcon_inspection_paper_bags')).rows[0]
       assert.equal(paperAfterRange.inspection_location, 'A')
       for (const field of ['grade', 'inspector_name', 'inspection_date', 'warehouse_id', 'bag_count', 'settlement_no']) assert.deepEqual(paperAfterRange[field], paperAfterBatch[field])
-      await batch.getByLabel(/^対象/).selectOption('standard')
+      await batch.getByLabel('対象', { exact: true }).selectOption('standard')
       await batch.getByLabel('開始№', { exact: true }).fill('2')
       await batch.getByLabel('終了№', { exact: true }).fill('3')
+      await batch.getByLabel('対象検査日', { exact: true }).selectOption('2026-10-03')
+      await batch.getByLabel('開始№', { exact: true }).fill('3')
+      await batch.getByLabel(/^等級/).selectOption('1等')
+      const dateApplied = page.waitForResponse(response => response.url().endsWith('/rpc/flexcon_set_inspection_registration_metadata_scope'))
+      await batch.getByRole('button', { name: 'まとめて反映', exact: true }).click()
+      const dateParams = (await dateApplied).request().postDataJSON()
+      assert.equal(dateParams.p_target_inspection_date, '2026-10-03')
+      assert.equal(dateParams.p_only_undated, false)
+      await page.getByText('1件の明細の等級を上書きしました。', { exact: true }).waitFor({ state: 'attached' })
+      const afterDate = (await db.query('select * from flexcon_inspection_flexcons order by id')).rows
+      for (const original of afterRange) {
+        const saved = afterDate.find(row => row.id === original.id)
+        if (original.record_kind === 'standard' && original.flexcon_no === 3) assert.equal(saved.grade, '1等')
+        else assert.deepEqual(saved, original)
+      }
+      assert.deepEqual((await db.query('select * from flexcon_inspection_paper_bags')).rows[0], paperAfterRange)
+      await batch.getByLabel('対象', { exact: true }).selectOption('paper')
+      await batch.getByLabel(/^検査員/).selectOption('Other')
+      await batch.getByRole('button', { name: 'まとめて反映', exact: true }).click()
+      await page.getByText('指定した対象・対象検査日・番号範囲に明細がありません。', { exact: true }).waitFor({ state: 'attached' })
+      assert.deepEqual((await db.query('select * from flexcon_inspection_flexcons order by id')).rows, afterDate)
+      await batch.getByLabel('対象検査日', { exact: true }).selectOption('2026-10-01')
+      const datedPaperApplied = page.waitForResponse(response => response.url().endsWith('/rpc/flexcon_set_inspection_registration_metadata_scope'))
+      await batch.getByRole('button', { name: 'まとめて反映', exact: true }).click()
+      await datedPaperApplied
+      await page.getByText('1件の明細の検査員を上書きしました。', { exact: true }).waitFor({ state: 'attached' })
+      assert.equal((await db.query('select inspector_name from flexcon_inspection_paper_bags')).rows[0].inspector_name, 'Other')
+      assert.deepEqual((await db.query('select * from flexcon_inspection_flexcons order by id')).rows, afterDate)
+      await batch.getByLabel('対象', { exact: true }).selectOption('standard')
+      await batch.getByLabel('対象検査日', { exact: true }).selectOption('2026-10-03')
       const positions = await batch.evaluate(form => Array.from(form.children).map(el => {
         const rect = el.getBoundingClientRect()
         return rect.y + rect.height / 2

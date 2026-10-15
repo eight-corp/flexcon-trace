@@ -103,7 +103,9 @@ supabase/migrations/202609080002_separate_standard_bulk_numbers.sql
 
 対応SQLは `supabase/migrations/202609290001_consolidate_inspection_authorizations.sql` です。既存の同一委任状の明細を最初の登録へまとめますが、元の登録ヘッダー・明細・ロット番号は削除しません。倉庫別・産年別の在庫が適用前後で一致しなければ全体をロールバックします。DBへ適用した後に対応画面を公開してください。
 
-`npm test` は隔離されたPostgreSQLで統合・追加・紙袋分割・明細編集を検証します。`npm run build` の後に `npm run test:inspection-browser` を実行すると、ChromeでPC・スマートフォン幅の追加操作を検証します。Chromeのインストールが必要です。ブラウザテストの通信・業務ログイン・DB書き込みはすべてテスト用に置き換えます。
+一括設定の「対象検査日」は全体・既存の検査日・未設定から選択でき、推フレの番号範囲と組み合わせて対象を限定します。バラは対象外です。対応SQLは `supabase/migrations/202610150002_inspection_metadata_date_scope.sql` で、検査日を上書きするときも変更前の日付で対象を確定します。DBへ適用した後に画面を公開してください。
+
+`npm test` は隔離されたPostgreSQLで統合・追加・紙袋分割・明細編集・日付別一括設定を検証します。`npm run build` の後に `npm run test:inspection-browser` を実行すると、ChromeでPC・スマートフォン幅の追加・一括設定操作を検証します。Chromeのインストールが必要です。ブラウザテストの通信・業務ログイン・DB書き込みはすべてテスト用に置き換えます。
 
 ## ビルド
 

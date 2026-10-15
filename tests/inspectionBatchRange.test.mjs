@@ -16,6 +16,7 @@ test('batch ranges and overwrite never apply to bulk records', async t => {
     await db.exec(readFileSync(new URL('../supabase/migrations/202609290001_consolidate_inspection_authorizations.sql', import.meta.url), 'utf8'))
     await db.exec(readFileSync(new URL('../supabase/migrations/202609290002_fill_missing_inspection_metadata.sql', import.meta.url), 'utf8'))
     await db.exec(migration)
+    await db.exec(readFileSync(new URL('../supabase/migrations/202610150002_inspection_metadata_date_scope.sql', import.meta.url), 'utf8'))
     await db.exec("insert into flexcon_inspection_options(option_type,name) values ('inspector','New'),('inspector','Other'),('grade','1等'),('grade','2等'),('grade','合格')")
     await db.query("select flexcon_append_inspection_registration('tester',$1::uuid,8,'2026-09-29','APPEND',null,'A','Rice',2,1,50)", [uuid(21)])
     await db.query("select flexcon_add_inspection_group_with_warehouse('tester',$1::uuid,8,'2026-09-29',null,'A','Rice',1,1,1020,0,$2::uuid,'OTHER')", [uuid(2), uuid(11)])

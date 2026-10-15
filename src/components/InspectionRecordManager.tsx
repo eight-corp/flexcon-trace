@@ -64,6 +64,7 @@ type DetailAdditionDraft = { registrationId: string; kind: DetailAdditionKind; f
 type BatchInspectionMetadata = {
   registration_id: string | null
   target_kind: 'all' | 'standard' | 'paper'
+  date_scope: string
   start_no: string
   end_no: string
   overwrite: boolean
@@ -73,7 +74,7 @@ type BatchInspectionMetadata = {
   grade: string
 }
 const EMPTY_BATCH_METADATA: Omit<BatchInspectionMetadata, 'registration_id'> = {
-  target_kind: 'all', start_no: '', end_no: '', overwrite: false,
+  target_kind: 'all', date_scope: 'all', start_no: '', end_no: '', overwrite: false,
   inspection_date: '', inspector_name: '', inspection_location: '', grade: '',
 }
 type GeneratedCertificate = {
@@ -494,12 +495,20 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
   }
   const batchStartNo = batchMetadata.start_no.trim() === '' ? null : Number(batchMetadata.start_no)
   const batchEndNo = batchMetadata.end_no.trim() === '' ? null : Number(batchMetadata.end_no)
+  const batchEligibleRecords = [...selectedStandardFlexcons, ...selectedPaperBags]
+    .filter((item) => item.registration_id === selectedRegistrationId)
+  const batchRecordDate = (item: FlexconInspection | PaperBagInspection) => detailDrafts[item.id]?.inspection_date ?? item.inspection_date ?? ''
+  const batchDateOptions = [...new Set(batchEligibleRecords.map(batchRecordDate).filter(Boolean))].sort()
+  if (batchMetadata.date_scope !== 'all' && batchMetadata.date_scope !== 'undated' && !batchDateOptions.includes(batchMetadata.date_scope)) batchDateOptions.push(batchMetadata.date_scope)
+  const batchHasUndated = batchEligibleRecords.some((item) => !batchRecordDate(item)) || batchMetadata.date_scope === 'undated'
   const batchTargetRecords: Array<FlexconInspection | PaperBagInspection> = (batchMetadata.target_kind === 'paper' ? selectedPaperBags : [
     ...selectedStandardFlexcons.filter((item) => batchMetadata.target_kind === 'all' || (
       (batchStartNo === null || item.flexcon_no >= batchStartNo) && (batchEndNo === null || item.flexcon_no <= batchEndNo)
     )),
     ...(batchMetadata.target_kind === 'all' ? selectedPaperBags : []),
-  ]).filter((item) => item.registration_id === selectedRegistrationId)
+  ]).filter((item) => item.registration_id === selectedRegistrationId && (
+    batchMetadata.date_scope === 'all' || batchRecordDate(item) === (batchMetadata.date_scope === 'undated' ? '' : batchMetadata.date_scope)
+  ))
   const changeBatchMetadata = (values: Partial<BatchInspectionMetadata>) => {
     setBatchMetadataDraft({ ...batchMetadata, registration_id: selectedRegistrationId, ...values })
   }
@@ -828,7 +837,7 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
       if ([batchStartNo, batchEndNo].some((value) => value !== null && (!Number.isInteger(value) || value < 1 || value > 2147483647))) return setNotice({ type: 'error', text: '番号範囲は1以上の整数で入力してください。' })
       if (batchStartNo !== null && batchEndNo !== null && batchStartNo > batchEndNo) return setNotice({ type: 'error', text: '開始№は終了№以下にしてください。' })
     }
-    if (batchTargetRecords.length === 0) return setNotice({ type: 'error', text: '指定した対象・番号範囲に明細がありません。' })
+    if (batchTargetRecords.length === 0) return setNotice({ type: 'error', text: '指定した対象・対象検査日・番号範囲に明細がありません。' })
     const selectedFields = [
       batchMetadata.inspection_date && '検査日',
       batchMetadata.inspector_name && '検査員',
@@ -851,7 +860,7 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
         const saved = await saveInlineDetail('quantity_kg' in item ? 'flexcon' : 'paper', item, {}, true)
         if (!saved) return
       }
-      const { data, error } = await supabase.rpc('flexcon_set_inspection_registration_metadata_range', {
+      const { data, error } = await supabase.rpc('flexcon_set_inspection_registration_metadata_scope', {
         p_worker_id: workerId,
         p_registration_id: selectedRegistration.id,
         p_inspection_date: batchMetadata.inspection_date || null,
@@ -862,6 +871,8 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
         p_start_no: batchMetadata.target_kind === 'standard' ? batchStartNo : null,
         p_end_no: batchMetadata.target_kind === 'standard' ? batchEndNo : null,
         p_overwrite: batchMetadata.overwrite,
+        p_target_inspection_date: batchMetadata.date_scope === 'all' || batchMetadata.date_scope === 'undated' ? null : batchMetadata.date_scope,
+        p_only_undated: batchMetadata.date_scope === 'undated',
       })
       if (error) return setNotice({ type: 'error', text: error.message })
 
@@ -1572,7 +1583,8 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
     {!readOnly && selectedRegistration && <section className="section-band inspection-batch-metadata">
       <form className="inspection-batch-metadata-form" onSubmit={(event) => void applyBatchMetadata(event)}>
         <h2>一括設定</h2>
-        <label className="batch-target">対象<select value={batchMetadata.target_kind} disabled={batchMetadataBusy} onChange={(event) => changeBatchMetadata({ target_kind: event.target.value as BatchInspectionMetadata['target_kind'], start_no: '', end_no: '', grade: '' })}><option value="all">推フレ・紙袋</option><option value="standard">推フレ</option><option value="paper">紙袋</option></select></label>
+        <label className="batch-target">対象<select aria-label="対象" value={batchMetadata.target_kind} disabled={batchMetadataBusy} onChange={(event) => changeBatchMetadata({ target_kind: event.target.value as BatchInspectionMetadata['target_kind'], start_no: '', end_no: '', grade: '' })}><option value="all">推フレ・紙袋</option><option value="standard">推フレ</option><option value="paper">紙袋</option></select></label>
+        <label className="batch-date-scope">対象検査日<select aria-label="対象検査日" value={batchMetadata.date_scope} disabled={batchMetadataBusy} onChange={(event) => changeBatchMetadata({ date_scope: event.target.value, grade: '' })}><option value="all">全体</option>{batchDateOptions.map((date) => <option key={date} value={date}>{displayDate(date)}</option>)}{batchHasUndated && <option value="undated">未設定</option>}</select></label>
         <div className="batch-number-range"><label>№<input aria-label="開始№" type="text" inputMode="numeric" value={batchMetadata.start_no} disabled={batchMetadataBusy || batchMetadata.target_kind !== 'standard'} onChange={(event) => changeBatchMetadata({ start_no: event.target.value, grade: '' })} /></label><span>～</span><input aria-label="終了№" type="text" inputMode="numeric" value={batchMetadata.end_no} disabled={batchMetadataBusy || batchMetadata.target_kind !== 'standard'} onChange={(event) => changeBatchMetadata({ end_no: event.target.value, grade: '' })} /></div>
         <label>検査日<JapaneseDateInput value={batchMetadata.inspection_date} placeholder="変更なし" disabled={batchMetadataBusy} onChange={(inspection_date) => changeBatchMetadata({ inspection_date })} /></label>
         <label>検査員<select value={batchMetadata.inspector_name} disabled={batchMetadataBusy} onChange={(event) => changeBatchMetadata({ inspector_name: event.target.value })}><option value="">変更なし</option>{inspectorOptions.map((option) => <option key={option.id} value={option.name}>{option.name}</option>)}</select></label>
