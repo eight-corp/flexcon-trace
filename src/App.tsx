@@ -9,6 +9,7 @@ import { ShipmentRecord } from './components/ShipmentRecord'
 import { PurchaseStatementManager } from './components/PurchaseStatementManager'
 import { ShipmentHistory } from './components/ShipmentHistory'
 import { ShipmentScanner } from './components/ShipmentScanner'
+import { UndoButton } from './components/UndoButton'
 import { logoutBusinessSession, maintainBusinessSession, MANAGEMENT_MENU_URL, restoreBusinessSession } from './lib/businessAuth'
 import { useCalendarMode } from './lib/calendarMode'
 import type { Worker } from './types'
@@ -33,6 +34,7 @@ function App() {
   const [loginError, setLoginError] = useState('')
   const [tab, setTab] = useState<Tab>(initialTab)
   const [historyVersion, setHistoryVersion] = useState(0)
+  const [undoVersion, setUndoVersion] = useState(0)
   const [inspectionAuthorizationId, setInspectionAuthorizationId] = useState<string | null>(null)
   const [inspectionRegistrationId, setInspectionRegistrationId] = useState<string | null>(null)
   const [inspectionRecordTarget, setInspectionRecordTarget] = useState<InspectionRecordTarget | null>(null)
@@ -153,6 +155,7 @@ function App() {
           </div>
         </div>
         <div className="header-actions">
+          {canOperate && <UndoButton workerId={worker.worker_id} onUndone={() => { setUndoVersion((version) => version + 1); setHistoryVersion((version) => version + 1) }} />}
           <div className="calendar-mode-control" aria-label="日付表示">
             <span>和暦</span>
             <button className="toggle-switch" type="button" role="switch" aria-label="西暦表示" aria-checked={calendarMode === 'seireki'} title={calendarMode === 'wareki' ? '西暦に切り替え' : '和暦に切り替え'} onClick={() => setCalendarMode(calendarMode === 'wareki' ? 'seireki' : 'wareki')}><span /></button>
@@ -168,7 +171,7 @@ function App() {
         </div>
       </header>
 
-      <main className={`app-main ${statementApplication || tab === 'history' || tab === 'inventory-history' || tab === 'inventory' || tab === 'authorizations' || tab === 'memos' || tab === 'inspections' ? 'app-main-wide' : ''} ${statementApplication ? 'app-main-statements' : ''} ${!statementApplication && tab === 'inspections' && inspectionAuthorizationId ? 'app-main-inspection-detail' : ''} ${!statementApplication && tab === 'inspections' && !inspectionAuthorizationId ? 'app-main-inspection-summary' : ''}`}>
+      <main key={undoVersion} className={`app-main ${statementApplication || tab === 'history' || tab === 'inventory-history' || tab === 'inventory' || tab === 'authorizations' || tab === 'memos' || tab === 'inspections' ? 'app-main-wide' : ''} ${statementApplication ? 'app-main-statements' : ''} ${!statementApplication && tab === 'inspections' && inspectionAuthorizationId ? 'app-main-inspection-detail' : ''} ${!statementApplication && tab === 'inspections' && !inspectionAuthorizationId ? 'app-main-inspection-summary' : ''}`}>
         {!statementApplication && tab === 'scan' && isAdmin && (
           <>
             <button className="secondary-button qr-scan-back" type="button" onClick={() => setTab('shipping-record')}><ArrowLeft size={18} />出荷記録へ戻る</button>

@@ -94,23 +94,24 @@ Deno.serve(async (request) => {
       if (pending && (record.readerId !== user.workerId || record.confirmed)) throw new Error('この確認待ち画像は変更できません。')
       if (pending && record.imagePath) return jsonResponse(request, { imagePath: record.imagePath })
 
-      const imagePath = `${statementId}/original.jpg`
+      const imagePath = `${statementId}/${crypto.randomUUID()}.jpg`
       const bytes = Uint8Array.from(atob(imageBase64), (character) => character.charCodeAt(0))
       const upload = await fetch(`${supabaseUrl}/storage/v1/object/${bucketName}/${imagePath}`, {
         method: 'POST',
-        headers: { ...serviceHeaders('image/jpeg'), 'x-upsert': pending ? 'false' : 'true', 'cache-control': '3600' },
+        headers: { ...serviceHeaders('image/jpeg'), 'x-upsert': 'false', 'cache-control': '3600' },
         body: bytes,
       })
-      if (!upload.ok && !(pending && upload.status === 409)) throw new Error('仕切書画像をStorageへ保存できませんでした。')
+      if (!upload.ok) throw new Error('仕切書画像をStorageへ保存できませんでした。')
 
-      const update = await fetch(`${supabaseUrl}/rest/v1/${record.table}?id=eq.${encodeURIComponent(statementId)}${pending ? '&confirmed_at=is.null' : ''}`, {
-        method: 'PATCH',
-        headers: { ...serviceHeaders(), Prefer: 'return=representation' },
-        body: JSON.stringify({ image_path: imagePath, updated_at: new Date().toISOString() }),
+      const update = await fetch(`${supabaseUrl}/rest/v1/rpc/flexcon_attach_purchase_statement_image`, {
+        method: 'POST',
+        headers: { ...serviceHeaders(), 'x-business-session': request.headers.get('x-business-session') ?? '' },
+        body: JSON.stringify({ p_worker_id: user.workerId, p_statement_id: statementId, p_image_path: imagePath }),
       })
-      if (!update.ok) throw new Error('仕切書と画像を紐付けできませんでした。')
-      const updated = await update.json() as unknown[]
-      if (updated.length !== 1) throw new Error('仕切書の状態が変更されています。確認待ち一覧を再読込してください。')
+      if (!update.ok) {
+        const result = await update.json() as { message?: string }
+        throw new Error(result.message || '仕切書と画像を紐付けできませんでした。')
+      }
       return jsonResponse(request, { imagePath })
     }
 
@@ -135,13 +136,9 @@ Deno.serve(async (request) => {
     if (action === 'delete') {
       await requirePurchaseStatementUser(request, ['admin'])
       const imagePath = body.imagePath ?? ''
-      if (!/^[0-9a-f-]{36}\/original\.jpg$/i.test(imagePath)) throw new Error('画像パスが不正です。')
-      const removal = await fetch(`${supabaseUrl}/storage/v1/object/${bucketName}/${imagePath}`, {
-        method: 'DELETE',
-        headers: serviceHeaders(),
-      })
-      if (!removal.ok && removal.status !== 404) throw new Error('仕切書画像を削除できませんでした。')
-      return jsonResponse(request, { ok: true })
+      if (!/^[0-9a-f-]{36}\/(original|[0-9a-f-]{36})\.jpg$/i.test(imagePath)) throw new Error('画像パスが不正です。')
+      // Keep private, immutable image versions so undo can restore their references.
+      return jsonResponse(request, { ok: true, retainedForUndo: true })
     }
 
     return jsonResponse(request, { error: '操作が不正です。' }, 400)

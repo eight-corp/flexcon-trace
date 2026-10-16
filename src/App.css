@@ -6,7 +6,7 @@
 }
 .brand-lockup { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .brand-lockup strong, .brand-lockup small { display: block; letter-spacing: 0; }
-.brand-lockup strong { font-size: 16px; color: #163c29; }
+.brand-lockup strong { font-size: 16px; color: #163c29; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .brand-lockup small { color: var(--muted); font-size: 11px; margin-top: 1px; }
 .brand-mark { width: 36px; height: 36px; display: grid; place-items: center; color: #fff; background: var(--green); border-radius: 6px; }
 .app-main { width: min(100%, 920px); min-width: 0; margin: 0 auto; padding: 18px 16px 30px; overflow-x: auto; overscroll-behavior-inline: contain; -webkit-overflow-scrolling: touch; }
@@ -14,7 +14,14 @@
 .loading-screen { min-height: 100vh; min-height: 100dvh; display: grid; place-content: center; justify-items: center; gap: 12px; color: var(--green); }
 .icon-button { width: 38px; height: 38px; display: grid; place-items: center; border: 0; background: transparent; color: #4d5950; border-radius: 6px; }
 .icon-button:hover { background: var(--surface-soft); }
-.header-actions { display: flex; align-items: center; gap: 4px; }
+.header-actions { display: flex; flex-shrink: 0; align-items: center; gap: 4px; }
+.global-undo-slot { display: block; flex: 0 0 38px; width: 38px; height: 38px; }
+.global-undo-button { position: fixed; z-index: 1050; color: var(--green); background: #fff; }
+.global-undo-button:disabled { opacity: .45; }
+.global-undo-notice { position: fixed; z-index: 1200; top: 70px; right: 12px; max-width: min(420px, calc(100vw - 24px)); display: flex; align-items: center; gap: 8px; box-shadow: 0 3px 12px rgb(0 0 0 / 12%); }
+.global-undo-notice .icon-button { flex: 0 0 30px; width: 30px; height: 30px; }
+.modal-backdrop.global-undo-backdrop { z-index: 1100; }
+.registration-modal.global-undo-modal { width: min(440px, 100%); }
 .calendar-mode-control { display: flex; align-items: center; gap: 5px; white-space: nowrap; font-size: 12px; font-weight: 700; color: #4d5950; }
 .calendar-mode-control .toggle-switch { width: 40px; height: 23px; border-radius: 12px; padding: 2px; }
 .calendar-mode-control .toggle-switch span { width: 19px; height: 19px; }
@@ -972,9 +979,9 @@ table thead th { text-align: center !important; }
   .brand-lockup { flex: 0 0 218px; }
   .brand-lockup strong { font-size: 13px; }
   .brand-mark { width: 31px; height: 31px; flex: 0 0 31px; }
-  .header-actions { flex: 0 0 184px; justify-content: flex-end; }
+  .header-actions { flex: 0 0 226px; justify-content: flex-end; }
   .menu-button { padding: 0 5px; font-size: 12px; }
-  .bottom-nav { top: 0; bottom: auto; left: 236px; right: 198px; width: auto; height: 63px; padding: 0; grid-template-rows: 1fr; border: 0; border-bottom: 1px solid var(--line); overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; }
+  .bottom-nav { top: 0; bottom: auto; left: 236px; right: 240px; width: auto; height: 63px; padding: 0; grid-template-rows: 1fr; border: 0; border-bottom: 1px solid var(--line); overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; }
   .bottom-nav button { height: 63px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 0 2px; white-space: nowrap; font-size: 11px; }
   .bottom-nav button svg { width: 18px; height: 18px; }
   .bottom-nav button span { overflow-wrap: normal; }

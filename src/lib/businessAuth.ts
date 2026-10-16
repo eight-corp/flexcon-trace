@@ -1,4 +1,5 @@
 import type { Worker } from '../types'
+import { trackBusinessWrite } from './businessOperations'
 
 const STORAGE_KEY = 'business.session.v1'
 const nativeFetch = window.fetch.bind(window)
@@ -55,7 +56,10 @@ export const businessAuthorizedFetch: typeof fetch = async (input, init = {}) =>
     const target = new URL(input instanceof Request ? input.url : String(input), location.href)
     if (target.origin === new URL(supabaseUrl).origin) headers.set('x-business-session', token)
   }
-  return nativeFetch(input, { ...init, headers })
+  const target = new URL(input instanceof Request ? input.url : String(input), location.href)
+  const finish = supabaseUrl && target.origin === new URL(supabaseUrl).origin
+    ? trackBusinessWrite(target, init.method ?? (input instanceof Request ? input.method : 'GET')) : () => {}
+  try { return await nativeFetch(input, { ...init, headers }) } finally { finish() }
 }
 
 export async function restoreBusinessSession(appId: 'rice_shipping' | 'purchase_statements' = 'rice_shipping'): Promise<Worker | null> {
