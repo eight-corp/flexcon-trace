@@ -667,7 +667,7 @@
 .moisture-input-grid input { min-width: 0; padding: 7px 6px; }
 .inspection-average-input { background: #edf1ee; color: #334039; font-weight: 700; }
 .inspection-total-input { background: #edf1ee; color: #334039; font-weight: 700; }
-.moisture-high { color: var(--red) !important; font-weight: 700; }
+.moisture-high { background: #f7b3b3 !important; border-color: #c33e3e !important; font-weight: 700; }
 .inspection-form-actions { flex-wrap: nowrap; margin-top: 4px; }
 .certificate-create-button { color: var(--green-dark); border-color: #8db59a; }
 .inspection-master-grid { display: grid; grid-template-columns: 1fr; gap: 10px; align-items: start; }
