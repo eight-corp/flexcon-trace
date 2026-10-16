@@ -201,10 +201,26 @@ try {
         const params = response.request().postDataJSON()
         return params.p_detail_id === detailId && params.p_quantity === 1050
       })
-      await quantity.fill('1050')
+      await quantity.fill('1,050')
+      assert.equal(await quantity.inputValue(), '1050')
       await quantitySaved
       assert.equal((await db.query('select quantity_kg from flexcon_inspection_flexcons where id=$1::uuid', [detailId])).rows[0].quantity_kg, 1050)
+      await quantity.press('Enter')
+      assert.equal(await quantity.inputValue(), '1,050')
+      await quantity.focus()
+      assert.equal(await quantity.inputValue(), '1,050')
       const moisture = firstRow.getByRole('textbox', { name: '水分', exact: true })
+      const wholeMoistureSaved = page.waitForResponse(response => {
+        if (!response.url().endsWith('/rpc/flexcon_save_inspection_detail_with_settlement')) return false
+        const params = response.request().postDataJSON()
+        return params.p_detail_id === detailId && params.p_moisture === 13
+      })
+      await moisture.fill('13')
+      await wholeMoistureSaved
+      await moisture.press('Enter')
+      assert.equal(await moisture.inputValue(), '13.0')
+      await moisture.focus()
+      assert.equal(await moisture.inputValue(), '13.0')
       const moistureSaved = page.waitForResponse(response => {
         if (!response.url().endsWith('/rpc/flexcon_save_inspection_detail_with_settlement')) return false
         const params = response.request().postDataJSON()
