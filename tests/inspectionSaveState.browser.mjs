@@ -112,6 +112,25 @@ try {
         await notBold(record.id)
         selection.release()
         await waitBold(record.id)
+        const moisture = row.getByRole('textbox', { name: '水分', exact: true })
+        for (const invalid of ['abc', '-', '.', '13..0', '13%', 'NaN', 'Infinity', '１３']) {
+          await moisture.fill(invalid)
+          assert.equal(await moisture.evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(247, 179, 179)')
+          await notBold(record.id)
+        }
+        await moisture.press('Enter')
+        await page.getByText('水分は0から100の範囲で入力してください。', { exact: true }).waitFor({ state: 'attached' })
+        assert.equal(await moisture.inputValue(), '１３')
+        assert.equal(Number((await db.query(`select moisture from ${table} where id=$1`, [record.id])).rows[0].moisture), 13)
+        await moisture.fill('')
+        assert.equal(await moisture.evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(255, 241, 191)')
+        await moisture.fill('16.1')
+        assert.equal(await moisture.evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(247, 179, 179)')
+        await moisture.fill('16')
+        assert.equal(await moisture.evaluate(el => el.classList.contains('moisture-high') || el.classList.contains('moisture-invalid')), false)
+        await moisture.fill('13')
+        await moisture.press('Enter')
+        await waitBold(record.id)
       }
       const id = flexcons[0].id
       const row = rowFor(id)
