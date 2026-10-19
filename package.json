@@ -9,6 +9,7 @@
     "lint": "oxlint",
     "test": "node --test tests/*.test.mjs",
     "test:inspection-browser": "node tests/inspectionConsolidation.browser.mjs",
+    "test:inspection-add-dates-browser": "node tests/inspectionAdditionDates.browser.mjs",
     "test:inspection-save-browser": "node tests/inspectionSaveState.browser.mjs",
     "test:inspection-pagination-browser": "node tests/inspectionPagination.browser.mjs",
     "test:inspection-aggregate-filters-browser": "node tests/inspectionAggregateFilters.browser.mjs",

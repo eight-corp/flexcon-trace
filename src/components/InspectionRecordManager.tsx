@@ -185,13 +185,14 @@ function today() {
   return date.toISOString().slice(0, 10)
 }
 function emptyAddGroupForm(): AddGroupForm {
+  const date = today()
   return {
     authorization_id: '',
     producer_name: '',
     fiscal_year: String(currentFiscalYear()),
-    purchase_date: today(),
+    purchase_date: date,
     settlement_no: '',
-    inspection_date: today(),
+    inspection_date: date,
     inspection_location: '',
     brand: '',
     flexcon_count: '',
@@ -1512,6 +1513,14 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
       flexcon_count: kind === 'standard' ? '1' : '',
     } })
   }
+  const toggleAddGroupForm = () => {
+    setProducerPickerOpen(false)
+    if (!addGroupFormOpen) {
+      const date = today()
+      setAddGroupForm(current => ({ ...current, purchase_date: date, inspection_date: date }))
+    }
+    setAddGroupFormOpen(current => !current)
+  }
   const renderAdditionFields = (form: AddGroupForm, change: (values: Partial<AddGroupForm>) => void, authorization: AuthorizationRecord | null) => {
     const brandType = brandTypeForPrefecture(authorization?.prefecture ?? null)
     const brands = inspectionOptions.filter((item) => item.active && (item.option_type === brandType || item.option_type === 'brand'))
@@ -1556,7 +1565,7 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
 
   if (!selectedAuthorization) {
     return <div className="inspection-page">
-      <div className="page-heading inspection-summary-heading"><p>生産者詳細で追加した順番に検査記録を表示します。</p><div className="inspection-summary-heading-actions"><button className="secondary-button inspection-summary-add-button" type="button" title={summaryView === 'list' ? '一覧の絞り込みをクリア' : '集計の絞り込みをクリア'} disabled={summaryView === 'list' ? !hasSummaryFilters : !hasAggregateFilters} onClick={summaryView === 'list' ? clearSummaryFilters : clearAggregateFilters}><FilterX size={16} />絞り込み解除</button>{summaryView === 'list' && !readOnly && <button className={`inspection-summary-add-button ${addGroupFormOpen ? 'secondary-button' : 'primary-button'}`} type="button" aria-expanded={addGroupFormOpen} onClick={() => { setProducerPickerOpen(false); setAddGroupFormOpen((current) => !current) }}>{addGroupFormOpen ? <><X size={16} />閉じる</> : <><Plus size={16} />追加</>}</button>}</div></div>
+      <div className="page-heading inspection-summary-heading"><p>生産者詳細で追加した順番に検査記録を表示します。</p><div className="inspection-summary-heading-actions"><button className="secondary-button inspection-summary-add-button" type="button" title={summaryView === 'list' ? '一覧の絞り込みをクリア' : '集計の絞り込みをクリア'} disabled={summaryView === 'list' ? !hasSummaryFilters : !hasAggregateFilters} onClick={summaryView === 'list' ? clearSummaryFilters : clearAggregateFilters}><FilterX size={16} />絞り込み解除</button>{summaryView === 'list' && !readOnly && <button className={`inspection-summary-add-button ${addGroupFormOpen ? 'secondary-button' : 'primary-button'}`} type="button" aria-expanded={addGroupFormOpen} onClick={toggleAddGroupForm}>{addGroupFormOpen ? <><X size={16} />閉じる</> : <><Plus size={16} />追加</>}</button>}</div></div>
       <div className="inspection-record-tabs inspection-summary-tabs" role="tablist" aria-label="検査記録の表示">
         <button type="button" role="tab" aria-selected={summaryView === 'list'} className={summaryView === 'list' ? 'active' : ''} onClick={() => setSummaryView('list')}><List size={18} />一覧</button>
         <button type="button" role="tab" aria-selected={summaryView === 'aggregate'} className={summaryView === 'aggregate' ? 'active' : ''} onClick={() => { setProducerPickerOpen(false); setAddGroupFormOpen(false); setSummaryView('aggregate') }}><BarChart3 size={18} />集計</button>
