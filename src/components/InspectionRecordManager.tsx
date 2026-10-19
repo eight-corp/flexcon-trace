@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type Dispatch, type RefObject, type SetStateAction } from 'react'
 import { ArrowDown, ArrowLeft, ArrowUp, BarChart3, ChevronDown, CircleAlert, CircleCheck, ClipboardList, ExternalLink, FileText, FilterX, List, Plus, Printer, Save, TableRowsSplit, Trash2, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { loadAllRows } from '../lib/loadAllRows'
 import { formatDisplayDate, formatJapaneseDateForFilename, type CalendarMode } from '../lib/japaneseEra'
 import { useCalendarMode } from '../lib/calendarMode'
 import { matchesFilterText } from '../lib/tableFilters'
@@ -413,11 +414,12 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
 
   useEffect(() => {
     const load = async () => {
+      // The API caps each response; lists and totals need every page of related records.
       const [authorizationResult, registrationResult, flexconResult, paperResult, optionResult, weightResult] = await Promise.all([
-        supabase.from('flexcon_authorizations').select('*').order('authorization_no'),
-        supabase.from('flexcon_inspection_registrations').select('*').order('registration_no'),
-        supabase.from('flexcon_inspection_flexcons').select('*').order('purchase_date', { ascending: false }).order('flexcon_no'),
-        supabase.from('flexcon_inspection_paper_bags').select('*').order('purchase_date', { ascending: false }).order('created_at'),
+        loadAllRows((from, to) => supabase.from('flexcon_authorizations').select('*').order('authorization_no').order('id').range(from, to)),
+        loadAllRows((from, to) => supabase.from('flexcon_inspection_registrations').select('*').order('registration_no').order('id').range(from, to)),
+        loadAllRows((from, to) => supabase.from('flexcon_inspection_flexcons').select('*').order('purchase_date', { ascending: false }).order('flexcon_no').order('id').range(from, to)),
+        loadAllRows((from, to) => supabase.from('flexcon_inspection_paper_bags').select('*').order('purchase_date', { ascending: false }).order('created_at').order('id').range(from, to)),
         supabase.from('flexcon_inspection_options').select('*').order('sort_order').order('name'),
         supabase.from('flexcon_inspection_weights').select('*'),
       ])
