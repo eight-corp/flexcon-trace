@@ -14,6 +14,7 @@ import { selectedInspectionGrade } from '../lib/inspectionGrade'
 import { findWarehouseForInspectionLocation } from '../lib/inspectionWarehouse'
 import { navigateInspectionField } from '../lib/inspectionFieldNavigation'
 import { groupInspectionRecordsByDate } from '../lib/inspectionDateGroups'
+import { inspectionAggregateDisplayValue, inspectionAggregateGroupKey, matchesInspectionAggregateFilters, type InspectionAggregateColumn, type InspectionAggregateFilters, type InspectionAggregateRow as InspectionProgressRow } from '../lib/inspectionAggregateFilters'
 import { certificateDefaultRange } from '../lib/certificateDefaultRange'
 import { matchesInspectionPeriod, type InspectionPeriod } from '../lib/inspectionPeriod'
 import type { AuthorizationRecord, FlexconInspection, InspectionOption, InspectionRegistration, InspectionWeight, PaperBagInspection } from '../types'
@@ -91,15 +92,6 @@ type GradingNoticeFailure = {
   summary: string
   reasons: string[]
 }
-type InspectionProgressRow = {
-  kind: 'flexcon' | 'paper'
-  fiscalYear: number
-  origin: string
-  brand: string
-  inspectedByGrade: Record<string, number>
-  inspectedQuantity: number
-  uninspectedQuantity: number
-}
 type InspectionDetailRow = {
   id: string
   registrationId: string
@@ -154,6 +146,7 @@ export type InspectionSummaryState = {
   textFilters: Partial<Record<SummaryColumn, string>>
   calendarMode: CalendarMode
   period: InspectionPeriod
+  aggregateFilters: InspectionAggregateFilters
 }
 export type InspectionSummaryScroll = { top: number; left: number; pageTop: number; pageLeft: number; mainTop: number; mainLeft: number }
 
@@ -348,6 +341,15 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
   const [detailAddition, setDetailAddition] = useState<DetailAdditionDraft | null>(null)
   const { view: summaryView, sort: summarySort, columnFilters: summaryColumnFilters, textFilters: summaryTextFilters } = summaryState
   const hasSummaryFilters = SUMMARY_COLUMNS.some((column) => summaryColumnFilters[column.key] !== undefined || Boolean(summaryTextFilters[column.key]))
+  const aggregateFilters = summaryState.aggregateFilters
+  const hasAggregateFilters = Object.values(aggregateFilters.columnFilters).some(value => value !== undefined) || Object.values(aggregateFilters.textFilters).some(value => Boolean(value?.trim()))
+  const changeAggregateColumnFilter = (key: InspectionAggregateColumn, values: string[] | undefined) => onSummaryStateChange(current => ({
+    ...current, aggregateFilters: { ...current.aggregateFilters, columnFilters: { ...current.aggregateFilters.columnFilters, [key]: values } },
+  }))
+  const changeAggregateTextFilter = (key: InspectionAggregateColumn, value: string) => onSummaryStateChange(current => ({
+    ...current, aggregateFilters: { ...current.aggregateFilters, textFilters: { ...current.aggregateFilters.textFilters, [key]: value } },
+  }))
+  const clearAggregateFilters = () => onSummaryStateChange(current => ({ ...current, aggregateFilters: { columnFilters: {}, textFilters: {} } }))
   const inspectionPeriod = summaryState.period
   const invalidInspectionPeriod = Boolean(inspectionPeriod.start && inspectionPeriod.end && inspectionPeriod.start > inspectionPeriod.end)
   const changeInspectionPeriod = (values: Partial<InspectionPeriod>) => onSummaryStateChange((current) => ({ ...current, period: { ...current.period, ...values } }))
@@ -360,6 +362,10 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
       ...current, calendarMode,
       columnFilters: { ...current.columnFilters, purchaseDates: undefined, inspectionDates: undefined },
       textFilters: { ...current.textFilters, purchaseDates: undefined, inspectionDates: undefined },
+      aggregateFilters: {
+        columnFilters: { ...current.aggregateFilters.columnFilters, fiscalYear: undefined },
+        textFilters: { ...current.aggregateFilters.textFilters, fiscalYear: undefined },
+      },
     }))
   }, [calendarMode, summaryState.calendarMode, onSummaryStateChange])
   // Restore after loading so an empty table cannot clamp the saved position.
@@ -701,12 +707,22 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
       .filter(isInspectionResultComplete)
       .map((item) => selectedInspectionGrade(item.grade))
       .filter(Boolean)
-    return [...new Set([...masterGrades, ...usedGrades])]
-  }, [periodFlexcons, inspectionOptions, periodPaperBags])
-  const inspectionProgressTotals = useMemo(() => inspectionProgressRows.reduce((totals, row) => ({
+    const filteredGrades = [...Object.keys(aggregateFilters.columnFilters), ...Object.keys(aggregateFilters.textFilters)]
+      .filter(key => key.startsWith('grade:') && (aggregateFilters.columnFilters[key as InspectionAggregateColumn] !== undefined || aggregateFilters.textFilters[key as InspectionAggregateColumn]?.trim()))
+      .map(key => key.slice('grade:'.length))
+    return [...new Set([...masterGrades, ...usedGrades, ...filteredGrades])]
+  }, [periodFlexcons, inspectionOptions, periodPaperBags, aggregateFilters])
+  const aggregateColumns: Array<{ key: InspectionAggregateColumn; label: string; numeric?: boolean }> = [
+    { key: 'fiscalYear', label: '産年' }, { key: 'origin', label: '産地' }, { key: 'brand', label: '銘柄' },
+    ...inspectionAggregateGrades.map(grade => ({ key: `grade:${grade}` as const, label: grade, numeric: true })),
+    { key: 'inspectedQuantity', label: '検査済み合計', numeric: true }, { key: 'uninspectedQuantity', label: '未検査数量', numeric: true },
+  ]
+  const displayedProgressRows = useMemo(() => inspectionProgressRows.filter(row => matchesInspectionAggregateFilters(row, aggregateFilters, calendarMode)), [inspectionProgressRows, aggregateFilters, calendarMode])
+  const displayedAggregateGroups = useMemo(() => new Set(displayedProgressRows.map(inspectionAggregateGroupKey)), [displayedProgressRows])
+  const inspectionProgressTotals = useMemo(() => displayedProgressRows.reduce((totals, row) => ({
     inspected: totals.inspected + row.inspectedQuantity,
     uninspected: totals.uninspected + row.uninspectedQuantity,
-  }), { inspected: 0, uninspected: 0 }), [inspectionProgressRows])
+  }), { inspected: 0, uninspected: 0 }), [displayedProgressRows])
   const inspectionDetailRows = useMemo(() => {
     const authorizationById = new Map(authorizations.map((authorization) => [authorization.id, authorization]))
     const commonDetail = (item: FlexconInspection | PaperBagInspection) => {
@@ -1451,8 +1467,8 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
     </details>
   }
   const renderInspectionAggregate = (kind: InspectionProgressRow['kind'], title: string) => {
-    const rows = inspectionProgressRows.filter((row) => row.kind === kind)
-    const details = inspectionDetailRows.filter((row) => row.kind === kind)
+    const rows = displayedProgressRows.filter((row) => row.kind === kind)
+    const details = inspectionDetailRows.filter((row) => row.kind === kind && displayedAggregateGroups.has(inspectionAggregateGroupKey(row)))
     const totals = rows.reduce((total, row) => ({
       inspected: total.inspected + row.inspectedQuantity,
       uninspected: total.uninspected + row.uninspectedQuantity,
@@ -1463,7 +1479,7 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
         <div className="inspection-progress-totals"><span>検査済み <strong>{totals.inspected.toLocaleString()}kg</strong></span><span>未検査 <strong>{totals.uninspected.toLocaleString()}kg</strong></span></div>
       </div>
       <div className="inspection-progress-table-wrap"><table className="inspection-progress-table">
-        <thead><tr><th>産年</th><th>産地</th><th>銘柄</th>{inspectionAggregateGrades.map((grade) => <th className="numeric-cell" key={grade}>{grade}</th>)}<th className="numeric-cell">検査済み合計</th><th className="numeric-cell">未検査数量</th></tr></thead>
+        <thead><tr>{aggregateColumns.map(column => <th key={column.key} className={column.numeric ? 'numeric-cell' : undefined}><div className="shipment-column-heading inspection-aggregate-column-heading"><span>{column.label}</span><TableColumnFilter label={column.label} values={[...new Set(inspectionProgressRows.map(row => inspectionAggregateDisplayValue(row, column.key, calendarMode)))].sort((left, right) => left.localeCompare(right, 'ja', { numeric: true }))} selectedValues={aggregateFilters.columnFilters[column.key]} onChange={values => changeAggregateColumnFilter(column.key, values)} textValue={aggregateFilters.textFilters[column.key] ?? ''} onTextChange={value => changeAggregateTextFilter(column.key, value)} openRight={column.key === 'fiscalYear' || column.key === 'origin'} /></div></th>)}</tr></thead>
         <tbody>{rows.map((row) => <tr key={JSON.stringify([row.fiscalYear, row.origin, row.brand])}>
           <td>{displayCropYear(row.fiscalYear)}</td><td>{row.origin}</td><td>{row.brand}</td>{inspectionAggregateGrades.map((grade) => <td className="inspection-progress-grade numeric-cell" key={grade}>{row.inspectedByGrade[grade] ? `${row.inspectedByGrade[grade].toLocaleString()}kg` : ''}</td>)}<td className="inspection-progress-inspected numeric-cell">{row.inspectedQuantity.toLocaleString()}kg</td><td className="inspection-progress-uninspected numeric-cell">{row.uninspectedQuantity.toLocaleString()}kg</td>
         </tr>)}
@@ -1531,7 +1547,7 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
 
   if (!selectedAuthorization) {
     return <div className="inspection-page">
-      <div className="page-heading inspection-summary-heading"><p>生産者詳細で追加した順番に検査記録を表示します。</p>{summaryView === 'list' && <div className="inspection-summary-heading-actions"><button className="secondary-button inspection-summary-add-button" type="button" title="一覧の絞り込みをクリア" disabled={!hasSummaryFilters} onClick={clearSummaryFilters}><FilterX size={16} />絞り込み解除</button>{!readOnly && <button className={`inspection-summary-add-button ${addGroupFormOpen ? 'secondary-button' : 'primary-button'}`} type="button" aria-expanded={addGroupFormOpen} onClick={() => { setProducerPickerOpen(false); setAddGroupFormOpen((current) => !current) }}>{addGroupFormOpen ? <><X size={16} />閉じる</> : <><Plus size={16} />追加</>}</button>}</div>}</div>
+      <div className="page-heading inspection-summary-heading"><p>生産者詳細で追加した順番に検査記録を表示します。</p><div className="inspection-summary-heading-actions"><button className="secondary-button inspection-summary-add-button" type="button" title={summaryView === 'list' ? '一覧の絞り込みをクリア' : '集計の絞り込みをクリア'} disabled={summaryView === 'list' ? !hasSummaryFilters : !hasAggregateFilters} onClick={summaryView === 'list' ? clearSummaryFilters : clearAggregateFilters}><FilterX size={16} />絞り込み解除</button>{summaryView === 'list' && !readOnly && <button className={`inspection-summary-add-button ${addGroupFormOpen ? 'secondary-button' : 'primary-button'}`} type="button" aria-expanded={addGroupFormOpen} onClick={() => { setProducerPickerOpen(false); setAddGroupFormOpen((current) => !current) }}>{addGroupFormOpen ? <><X size={16} />閉じる</> : <><Plus size={16} />追加</>}</button>}</div></div>
       <div className="inspection-record-tabs inspection-summary-tabs" role="tablist" aria-label="検査記録の表示">
         <button type="button" role="tab" aria-selected={summaryView === 'list'} className={summaryView === 'list' ? 'active' : ''} onClick={() => setSummaryView('list')}><List size={18} />一覧</button>
         <button type="button" role="tab" aria-selected={summaryView === 'aggregate'} className={summaryView === 'aggregate' ? 'active' : ''} onClick={() => { setProducerPickerOpen(false); setAddGroupFormOpen(false); setSummaryView('aggregate') }}><BarChart3 size={18} />集計</button>

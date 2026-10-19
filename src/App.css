@@ -765,6 +765,9 @@
 .inspection-progress-table thead { position: sticky; top: 0; z-index: 3; }
 .inspection-progress-table th { background: #eef2ee; box-shadow: 0 2px 0 #c8cec9; color: #3d4840; }
 .inspection-progress-table .numeric-cell { text-align: right; }
+.inspection-aggregate-column-heading { grid-template-columns: max-content 28px; gap: 4px; }
+.inspection-aggregate-column-heading > span { align-self: center; }
+.inspection-progress-table .numeric-cell .inspection-aggregate-column-heading { justify-content: flex-end; }
 .inspection-progress-table td.inspection-progress-inspected, .inspection-progress-table td.inspection-progress-uninspected { font-weight: 700; }
 .inspection-progress-grade { color: #405148; }
 .inspection-progress-table th:last-child, .inspection-progress-table td:last-child { border-right: 0; }
