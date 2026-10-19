@@ -13,7 +13,7 @@ import { formatPrefectureName } from '../lib/prefecture'
 import { selectedInspectionGrade } from '../lib/inspectionGrade'
 import { findWarehouseForInspectionLocation } from '../lib/inspectionWarehouse'
 import { navigateInspectionField } from '../lib/inspectionFieldNavigation'
-import { groupInspectionRecordsByDate } from '../lib/inspectionDateGroups'
+import { groupInspectionSummaryRecords, inspectionSummaryKindLabel, type InspectionSummaryKind } from '../lib/inspectionSummaryGroups'
 import { inspectionAggregateDisplayValue, inspectionAggregateGroupKey, matchesInspectionAggregateFilters, type InspectionAggregateColumn, type InspectionAggregateFilters, type InspectionAggregateRow as InspectionProgressRow } from '../lib/inspectionAggregateFilters'
 import { certificateDefaultRange } from '../lib/certificateDefaultRange'
 import { matchesInspectionPeriod, type InspectionPeriod } from '../lib/inspectionPeriod'
@@ -114,6 +114,8 @@ type InspectionDetailRow = {
   complete: boolean
 }
 type InspectionRegistrationSummaryRow = {
+  groupKey: string
+  recordKind: InspectionSummaryKind
   registrationId: string
   registrationNo: number
   settlementNo: string
@@ -138,7 +140,7 @@ type InspectionRegistrationSummaryRow = {
   inspectionStatus: '完了' | '未完了'
 }
 type SummarySortDirection = 'asc' | 'desc'
-type SummaryColumn = 'settlementNo' | 'purchaseDates' | 'inspectionDates' | 'fullName' | 'origin' | 'municipality' | 'inspectionLocations' | 'authorizationNo' | 'brands' | 'grade' | 'flexconCount' | 'paperBagCount' | 'bulkQuantity' | 'inspectedQuantity' | 'uninspectedQuantity' | 'inspectionStatus'
+type SummaryColumn = 'settlementNo' | 'purchaseDates' | 'inspectionDates' | 'fullName' | 'origin' | 'municipality' | 'inspectionLocations' | 'authorizationNo' | 'brands' | 'recordKind' | 'grade' | 'flexconCount' | 'paperBagCount' | 'bulkQuantity' | 'inspectedQuantity' | 'uninspectedQuantity' | 'inspectionStatus'
 export type InspectionSummaryState = {
   view: 'list' | 'aggregate'
   sort: { key: SummaryColumn; direction: SummarySortDirection } | null
@@ -161,6 +163,7 @@ const SUMMARY_COLUMNS: Array<{ key: SummaryColumn; label: string }> = [
   { key: 'municipality', label: '市町村名' },
   { key: 'inspectionLocations', label: '検査場所' },
   { key: 'brands', label: '銘柄' },
+  { key: 'recordKind', label: '種類' },
   { key: 'grade', label: '等級' },
   { key: 'flexconCount', label: '推フレ数' },
   { key: 'paperBagCount', label: '紙袋数' },
@@ -277,12 +280,14 @@ function joinDistinct(values: Array<string | null | undefined>, formatter: (valu
   return [...new Set(values.map((value) => value?.trim()).filter((value): value is string => Boolean(value)).map(formatter))].join('、')
 }
 function summaryDisplayValue(row: InspectionRegistrationSummaryRow, key: SummaryColumn) {
+  if (key === 'recordKind') return inspectionSummaryKindLabel(row.recordKind)
   if (key === 'flexconCount') return `${row.flexconCount.toLocaleString()}本`
   if (key === 'paperBagCount') return `${row.paperBagCount.toLocaleString()}袋`
   if (key === 'bulkQuantity' || key === 'inspectedQuantity' || key === 'uninspectedQuantity') return `${row[key].toLocaleString()}kg`
   return String(row[key] ?? '')
 }
 function summarySortValue(row: InspectionRegistrationSummaryRow, key: SummaryColumn) {
+  if (key === 'recordKind') return inspectionSummaryKindLabel(row.recordKind)
   if (key === 'flexconCount' || key === 'paperBagCount' || key === 'bulkQuantity' || key === 'inspectedQuantity' || key === 'uninspectedQuantity') return row[key]
   return String(row[key] ?? '')
 }
@@ -543,7 +548,7 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
       const registeredFlexcons = flexconsByRegistration.get(registration.id) ?? []
       const registeredPaperBags = paperBagsByRegistration.get(registration.id) ?? []
       const registrationRecords: Array<FlexconInspection | PaperBagInspection> = [...registeredFlexcons, ...registeredPaperBags]
-      return groupInspectionRecordsByDate(registrationRecords).map(([inspectionDate, records]): InspectionRegistrationSummaryRow => {
+      return groupInspectionSummaryRecords(registrationRecords, item => 'quantity_kg' in item ? flexconRecordKind(item, weights) : 'paper').map(({ key, inspectionDate, brand, kind, records }): InspectionRegistrationSummaryRow => {
         const dateFlexcons = records.filter((item): item is FlexconInspection => 'quantity_kg' in item)
         const datePaperBags = records.filter((item): item is PaperBagInspection => !('quantity_kg' in item))
         const grade = joinDistinct(records.map((item) => selectedInspectionGrade(item.grade) || '未入力'))
@@ -553,6 +558,8 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
           'quantity_kg' in item ? item.quantity_kg : item.bag_count * 30
         )
         return {
+          groupKey: JSON.stringify([registration.id, key]),
+          recordKind: kind,
           registrationId: registration.id,
           registrationNo: registration.registration_no,
           settlementNo: joinDistinct(records.map((item) => item.settlement_no ?? registration.settlement_no)),
@@ -567,7 +574,7 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
           municipality: authorization.municipality ?? '',
           inspectionLocations: joinDistinct(records.map((item) => item.inspection_location)),
           authorizationNo: authorization.authorization_no,
-          brands: joinDistinct(records.map((item) => item.brand)),
+          brands: brand,
           grade,
           flexconCount: standardFlexcons.length,
           paperBagCount: datePaperBags.reduce((total, item) => total + item.bag_count, 0),
@@ -617,53 +624,55 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
   const deleteInspectionRegistration = async (row: InspectionRegistrationSummaryRow) => {
     if (busy) return
     const inspectionDateLabel = row.inspectionDate ? formatDisplayDate(row.inspectionDate, calendarMode) : '検査日未設定'
+    const groupLabel = `${row.brands || '銘柄未設定'}・${inspectionSummaryKindLabel(row.recordKind)}`
     const details = [
       `推フレ ${row.flexconCount}本`,
       `紙袋 ${row.paperBagCount}袋`,
       `バラ ${row.bulkQuantity.toLocaleString()}kg`,
     ].join('、')
-    if (!window.confirm(`${row.fullName}（委任状№ ${row.authorizationNo}）の${inspectionDateLabel}の行を削除しますか？\n${details}\n\nこの行の明細だけを削除します。他の検査日の記録は削除しません。`)) return
+    if (!window.confirm(`${row.fullName}（委任状№ ${row.authorizationNo}）の${inspectionDateLabel}（${groupLabel}）の行を削除しますか？\n${details}\n\nこの行の明細だけを削除します。同じ検査日でも他の銘柄・種類の記録は削除しません。他の検査日の記録も削除しません。`)) return
 
     setBusy(true)
     setNotice(null)
-    const { error } = await supabase.rpc('flexcon_delete_inspection_registration_date', {
+    const { error } = await supabase.rpc('flexcon_delete_inspection_summary_group', {
       p_worker_id: workerId,
       p_registration_id: row.registrationId,
       p_inspection_date: row.inspectionDate,
+      p_brand: row.brands,
+      p_record_kind: row.recordKind,
       p_flexcon_ids: row.flexconIds,
       p_paper_bag_ids: row.paperBagIds,
     })
     setBusy(false)
     if (error) return setNotice({ type: 'error', text: error.message })
 
-    setNotice({ type: 'success', text: `${row.fullName}の${inspectionDateLabel}の行を削除しました。` })
+    setNotice({ type: 'success', text: `${row.fullName}の${inspectionDateLabel}（${groupLabel}）の行を削除しました。` })
     setVersion((value) => value + 1)
   }
 
-  const dateFilteredGroups = useMemo(() => {
+  const dateFilteredRecords = useMemo(() => {
     const columns = ['purchaseDates', 'inspectionDates'] as const
     if (!columns.some((key) => summaryColumnFilters[key] !== undefined || Boolean(summaryTextFilters[key]?.trim()))) return null
-    const groups = new Map<string, Set<string | null>>()
+    const ids = { flexcons: new Set<string>(), paperBags: new Set<string>() }
     for (const row of summaryRows) {
       if (!columns.every((key) => {
         const selected = summaryColumnFilters[key]
         const value = summaryDisplayValue(row, key)
         return (selected === undefined || selected.includes(value)) && matchesFilterText(value, summaryTextFilters[key] ?? '')
       })) continue
-      const dates = groups.get(row.registrationId) ?? new Set<string | null>()
-      dates.add(row.inspectionDate)
-      groups.set(row.registrationId, dates)
+      row.flexconIds.forEach(id => ids.flexcons.add(id))
+      row.paperBagIds.forEach(id => ids.paperBags.add(id))
     }
-    return groups
+    return ids
   }, [summaryRows, summaryColumnFilters, summaryTextFilters])
   const periodFlexcons = useMemo(() => flexcons.filter((item) => (
-    (!dateFilteredGroups || dateFilteredGroups.get(item.registration_id)?.has(item.inspection_date || null))
+    (!dateFilteredRecords || dateFilteredRecords.flexcons.has(item.id))
     && matchesInspectionPeriod(item, inspectionPeriod)
-  )), [flexcons, dateFilteredGroups, inspectionPeriod])
+  )), [flexcons, dateFilteredRecords, inspectionPeriod])
   const periodPaperBags = useMemo(() => paperBags.filter((item) => (
-    (!dateFilteredGroups || dateFilteredGroups.get(item.registration_id)?.has(item.inspection_date || null))
+    (!dateFilteredRecords || dateFilteredRecords.paperBags.has(item.id))
     && matchesInspectionPeriod(item, inspectionPeriod)
-  )), [paperBags, dateFilteredGroups, inspectionPeriod])
+  )), [paperBags, dateFilteredRecords, inspectionPeriod])
   const inspectionProgressRows = useMemo(() => {
     const authorizationById = new Map(authorizations.map((authorization) => [authorization.id, authorization]))
     const grouped = new Map<string, InspectionProgressRow>()
@@ -1582,10 +1591,10 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
       </section>}
       {summaryView === 'list' && <div className="inspection-summary-wrap" ref={summaryWrapRef} onScroll={rememberSummaryPosition}><table className="inspection-summary-table">
         <thead><tr>{SUMMARY_COLUMNS.map((column) => <InspectionSummaryColumnHeader key={column.key} column={column} sort={summarySort} values={summaryFilterValues[column.key]} selectedValues={summaryColumnFilters[column.key]} textValue={summaryTextFilters[column.key] ?? ''} onSort={changeSummarySort} onFilterChange={changeSummaryColumnFilter} onTextChange={changeSummaryTextFilter} />)}{!readOnly && <th className="inspection-summary-actions-heading">操作</th>}</tr></thead>
-        <tbody>{displayedSummary.map((row, index) => <tr className={index > 0 && displayedSummary[index - 1].registrationId !== row.registrationId ? 'inspection-summary-registration-start' : undefined} key={JSON.stringify([row.registrationId, row.inspectionDate])} tabIndex={0} onClick={() => openSummaryRecord(row)} onKeyDown={(event) => { if (event.key === 'Enter' && event.target === event.currentTarget) openSummaryRecord(row) }}>
+        <tbody>{displayedSummary.map((row, index) => <tr className={index > 0 && displayedSummary[index - 1].registrationId !== row.registrationId ? 'inspection-summary-registration-start' : undefined} key={row.groupKey} tabIndex={0} onClick={() => openSummaryRecord(row)} onKeyDown={(event) => { if (event.key === 'Enter' && event.target === event.currentTarget) openSummaryRecord(row) }}>
           <td><span className={`inspection-completion-status ${row.inspectionStatus === '完了' ? 'complete' : 'incomplete'}`}>{row.inspectionStatus === '完了' ? <CircleCheck size={15} aria-hidden="true" /> : <CircleAlert size={15} aria-hidden="true" />}{row.inspectionStatus}</span></td>
-          <td className="numeric-cell">{row.authorizationNo}</td><td>{row.settlementNo}</td><td>{row.purchaseDates}</td><td>{row.inspectionDates}</td><td><strong>{row.fullName}</strong></td><td>{row.origin}</td><td>{row.municipality}</td><td>{row.inspectionLocations}</td><td>{row.brands}</td><td>{row.grade}</td><td className="numeric-cell">{row.flexconCount.toLocaleString()}本</td><td className="numeric-cell">{row.paperBagCount.toLocaleString()}袋</td><td className="numeric-cell">{row.bulkQuantity.toLocaleString()}kg</td><td className="inspection-progress-inspected numeric-cell">{row.inspectedQuantity.toLocaleString()}kg</td><td className="inspection-progress-uninspected numeric-cell">{row.uninspectedQuantity.toLocaleString()}kg</td>
-          {!readOnly && <td className="inspection-summary-actions"><button className="icon-button delete-icon" type="button" title="この行だけを削除" aria-label={`${row.fullName}・${row.inspectionDates || '検査日未設定'}の行を削除`} disabled={busy} onClick={(event) => { event.stopPropagation(); void deleteInspectionRegistration(row) }}><Trash2 size={17} /></button></td>}
+          <td className="numeric-cell">{row.authorizationNo}</td><td>{row.settlementNo}</td><td>{row.purchaseDates}</td><td>{row.inspectionDates}</td><td><strong>{row.fullName}</strong></td><td>{row.origin}</td><td>{row.municipality}</td><td>{row.inspectionLocations}</td><td>{row.brands}</td><td>{inspectionSummaryKindLabel(row.recordKind)}</td><td>{row.grade}</td><td className="numeric-cell">{row.flexconCount.toLocaleString()}本</td><td className="numeric-cell">{row.paperBagCount.toLocaleString()}袋</td><td className="numeric-cell">{row.bulkQuantity.toLocaleString()}kg</td><td className="inspection-progress-inspected numeric-cell">{row.inspectedQuantity.toLocaleString()}kg</td><td className="inspection-progress-uninspected numeric-cell">{row.uninspectedQuantity.toLocaleString()}kg</td>
+          {!readOnly && <td className="inspection-summary-actions"><button className="icon-button delete-icon" type="button" title="この行だけを削除" aria-label={`${row.fullName}・${row.inspectionDates || '検査日未設定'}・${row.brands || '銘柄未設定'}・${inspectionSummaryKindLabel(row.recordKind)}の行を削除`} disabled={busy} onClick={(event) => { event.stopPropagation(); void deleteInspectionRegistration(row) }}><Trash2 size={17} /></button></td>}
         </tr>)}
         {displayedSummary.length === 0 && <tr><td colSpan={SUMMARY_COLUMNS.length + (readOnly ? 0 : 1)} className="empty-state">該当する検査記録はありません</td></tr>}</tbody>
       </table></div>}

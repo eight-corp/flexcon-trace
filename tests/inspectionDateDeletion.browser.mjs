@@ -24,6 +24,11 @@ try {
         insert into flexcon_inspection_flexcons(registration_id,authorization_id,fiscal_year,purchase_date,inspection_date,record_kind,flexcon_no,lot_number,brand,quantity_kg,created_by_worker_id)
           values ('00000000-0000-0000-0000-000000000023','00000000-0000-0000-0000-000000000002',8,'2026-10-15','2026-10-15','standard',1,'20260002001','Rice',1020,'tester');`)
       await db.exec(fs.readFileSync('supabase/migrations/202610150001_inspection_date_deletion.sql', 'utf8'))
+      await db.exec(`create schema flexcon_undo_private;
+        create table flexcon_undo_private.rpcs(function_name text,argument_types text,implementation_name text,app_id text,primary key(function_name,argument_types));
+        create function flexcon_undo_private.prepare(p_worker_id text,p_function text,p_app text) returns boolean language plpgsql as $$ begin perform public.flexcon_require_active_worker(p_worker_id); return true; end; $$;
+        create function flexcon_undo_private.finish() returns void language plpgsql as $$ begin return; end; $$;`)
+      await db.exec(fs.readFileSync('supabase/migrations/202610190001_inspection_summary_groups.sql', 'utf8'))
       await context.addInitScript(() => localStorage.setItem('business.session.v1', 'mock-session'))
       await context.route('**/*', route => route.abort())
       await context.route('https://inspection-deletion.test/**', route => {
@@ -35,10 +40,10 @@ try {
         try {
           let body = []
           if (resource === 'rpc/business_session') body = { ok: true, workerId: 'tester', workerName: 'Tester', permissions: { rice_shipping: 'operator' } }
-          else if (resource === 'rpc/flexcon_delete_inspection_registration_date') {
+          else if (resource === 'rpc/flexcon_delete_inspection_summary_group') {
             const args = route.request().postDataJSON()
             requests.push(args)
-            body = (await db.query('select flexcon_delete_inspection_registration_date($1,$2::uuid,$3::date,$4::uuid[],$5::uuid[]) result', [args.p_worker_id,args.p_registration_id,args.p_inspection_date,args.p_flexcon_ids,args.p_paper_bag_ids])).rows[0].result
+            body = (await db.query('select flexcon_delete_inspection_summary_group($1,$2::uuid,$3::date,$4,$5,$6::uuid[],$7::uuid[]) result', [args.p_worker_id,args.p_registration_id,args.p_inspection_date,args.p_brand,args.p_record_kind,args.p_flexcon_ids,args.p_paper_bag_ids])).rows[0].result
           } else if (/^flexcon_inspection_(registrations|flexcons|paper_bags|options|weights)$|^flexcon_authorizations$/.test(resource)) {
             body = (await db.query(`select coalesce(jsonb_agg(t),'[]'::jsonb) result from ${resource} t`)).rows[0].result
           } else if (resource.startsWith('rpc/')) throw new Error(`Unexpected RPC: ${resource}`)
@@ -53,25 +58,26 @@ try {
       await page.goto('https://inspection-deletion.test/')
       await page.getByRole('button', { name: '検査記録', exact: true }).click()
       const rows = page.locator('.inspection-summary-table tbody tr')
-      await page.waitForFunction(() => document.querySelectorAll('.inspection-summary-table tbody tr').length === 3)
-      const selected = rows.filter({ has: page.locator('td:nth-child(2)', { hasText: /^1$/ }) }).filter({ hasText: '令和8年10月15日' })
+      await page.waitForFunction(() => document.querySelectorAll('.inspection-summary-table tbody tr').length === 4)
+      const selected = rows.filter({ has: page.locator('td:nth-child(2)', { hasText: /^1$/ }) }).filter({ hasText: '令和8年10月15日' }).filter({ has: page.getByRole('cell', { name: '推フレ', exact: true }) })
       const saved = (await db.query("select to_jsonb(t) result from flexcon_inspection_flexcons t where inspection_date='2026-10-14' or authorization_id='00000000-0000-0000-0000-000000000002' order by id")).rows
       const expected = (await db.query("select id from flexcon_inspection_flexcons where inspection_date='2026-10-15' and authorization_id='00000000-0000-0000-0000-000000000001'")).rows.map(r => r.id)
       let message = ''
       page.once('dialog', async dialog => { message = dialog.message(); await dialog.dismiss() })
       await selected.getByRole('button', { name: /の行を削除$/ }).click()
       assert.match(message, /令和8年10月15日/)
-      assert.match(message, /推フレ 1本、紙袋 10袋、バラ 0kg/)
-      assert.match(message, /他の検査日の記録は削除しません/)
+      assert.match(message, /推フレ 1本、紙袋 0袋、バラ 0kg/)
+      assert.match(message, /他の検査日の記録も削除しません/)
       assert.equal(requests.length, 0)
       page.once('dialog', dialog => dialog.accept())
       await selected.getByRole('button', { name: /の行を削除$/ }).click()
-      await page.getByText('Producerの令和8年10月15日の行を削除しました。', { exact: true }).waitFor({ state: 'attached' })
-      await page.waitForFunction(() => document.querySelectorAll('.inspection-summary-table tbody tr').length === 2)
+      await page.getByText('Producerの令和8年10月15日（Rice・推フレ）の行を削除しました。', { exact: true }).waitFor({ state: 'attached' })
+      await page.waitForFunction(() => document.querySelectorAll('.inspection-summary-table tbody tr').length === 3)
       assert.equal(requests.length, 1)
       assert.equal(requests[0].p_inspection_date, '2026-10-15')
       assert.deepEqual(requests[0].p_flexcon_ids, expected)
-      assert.equal(requests[0].p_paper_bag_ids.length, 1)
+      assert.equal(requests[0].p_paper_bag_ids.length, 0)
+      assert.equal((await db.query('select count(*)::int n from flexcon_inspection_paper_bags')).rows[0].n, 1)
       assert.equal(await selected.count(), 0)
       assert.deepEqual((await db.query('select to_jsonb(t) result from flexcon_inspection_flexcons t order by id')).rows, saved)
       assert.equal((await db.query('select count(*)::int n from flexcon_inspection_deletion_archives')).rows[0].n, 1)

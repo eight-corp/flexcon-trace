@@ -81,10 +81,11 @@ try {
       }
       const feedRows = table.locator('tbody tr').filter({ hasText: '飼料用米テスト生産者' })
       await feedRows.first().waitFor()
-      assert.equal(await feedRows.count(), 2, 'both feed-rice inspection dates appear')
+      assert.equal(await feedRows.count(), 3, 'both feed-rice inspection dates and the separate paper group appear')
       assert.match(await feedRows.nth(0).innerText(), /飼料用玄米/)
-      assert.match(await feedRows.nth(0).innerText(), /6,150/)
-      assert.match(await feedRows.nth(1).innerText(), /7,000/)
+      assert.match(await feedRows.nth(0).innerText(), /6,000/)
+      assert.match(await feedRows.nth(1).innerText(), /150kg/)
+      assert.match(await feedRows.nth(2).innerText(), /7,000/)
       for (const resource of ['flexcon_authorizations', 'flexcon_inspection_registrations', 'flexcon_inspection_flexcons', 'flexcon_inspection_paper_bags']) {
         assert.deepEqual(requests.get(resource).map(item => item.from), [0, 1000], resource)
         assert.ok(requests.get(resource).every(item => item.limit === 1000 && item.order.endsWith('id.asc')), 'stable unique row ordering across pages')
@@ -95,7 +96,7 @@ try {
       await trigger.click()
       await page.getByRole('searchbox', { name: '銘柄を文字で絞り込む', exact: true }).fill('飼料用')
       await page.keyboard.press('Escape')
-      assert.equal(await table.locator('tbody tr').count(), 2)
+      assert.equal(await table.locator('tbody tr').count(), 3)
       if (process.env.QA_ARTIFACTS) await page.screenshot({ path: path.join(process.env.QA_ARTIFACTS, `feed-rice-list-${scenario.width}.png`) })
       await feedRows.first().click()
       await page.locator('.producer-inspection-page').waitFor()

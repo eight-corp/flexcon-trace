@@ -32,6 +32,10 @@ export async function undoDatabase() {
     }
     await db.exec(`create or replace function business_private.actor(p_bootstrap boolean default false) returns text language sql as $$ select nullif(current_setting('fixture.actor',true),''); $$;`)
     await db.exec(undoDeploymentSql(fs.readFileSync('supabase/migrations/202610160001_operator_undo.sql', 'utf8')))
+    for (const file of fs.readdirSync('supabase/migrations').sort()) {
+      if (file <= '202610160001_operator_undo.sql') continue
+      await db.exec(undoDeploymentSql(fs.readFileSync(`supabase/migrations/${file}`, 'utf8')))
+    }
     const rpc = (actor, name, args = {}) => db.transaction(async tx => {
       await tx.query("select set_config('fixture.actor',$1,true)", [actor])
       const entries = Object.entries(args)

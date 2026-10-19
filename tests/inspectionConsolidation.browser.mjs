@@ -76,7 +76,7 @@ try {
       await page.getByRole('button', { name: '検査記録', exact: true }).click()
       const table = page.locator('.inspection-summary-table')
       await table.locator('tbody tr').first().waitFor()
-      assert.equal(await table.locator('tbody tr').count(), 2)
+      assert.equal(await table.locator('tbody tr').count(), 3)
       assert.match(await table.locator('tbody tr').first().innerText(), /OLD-A/)
       assert.match(await table.locator('tbody tr').first().innerText(), /1等/)
       assert.equal(await table.locator('tbody tr').first().locator('td').nth(4).innerText(), '令和8年9月2日')
@@ -381,26 +381,26 @@ try {
       await page.getByRole('button', { name: '検査記録へ戻る', exact: true }).click()
       await table.locator('tbody tr').first().waitFor()
       await table.getByRole('cell', { name: '令和8年10月3日', exact: true }).waitFor()
-      assert.equal(await table.locator('tbody tr').count(), 4)
+      assert.equal(await table.locator('tbody tr').count(), 5)
       assert.match((await table.locator('tbody tr').allTextContents()).join(' '), new RegExp(`UI-${width}`))
       assert.equal(await table.locator('tbody tr').first().locator('td').first().innerText(), '完了')
       const dates = await table.locator('tbody tr td:nth-child(5)').allTextContents()
       assert.equal(new Set(dates).size, 4)
       const octoberRow = table.locator('tbody tr').filter({ has: page.getByRole('cell', { name: '令和8年10月3日', exact: true }) })
       assert.equal(await octoberRow.locator('td').first().innerText(), '未完了')
-      assert.equal(await octoberRow.locator('td').nth(11).innerText(), '2本')
-      assert.equal(await octoberRow.locator('td').nth(12).innerText(), '0袋')
-      assert.equal(await octoberRow.locator('td').nth(13).innerText(), '0kg')
-      assert.equal(await octoberRow.locator('td').nth(15).innerText(), '2,040kg')
+      assert.equal(await octoberRow.locator('td').nth(12).innerText(), '2本')
+      assert.equal(await octoberRow.locator('td').nth(13).innerText(), '0袋')
+      assert.equal(await octoberRow.locator('td').nth(14).innerText(), '0kg')
+      assert.equal(await octoberRow.locator('td').nth(16).innerText(), '2,040kg')
       const totals = await table.locator('tbody').evaluate(el => Array.from(el.querySelectorAll('tr')).reduce((total, row) => {
         const number = index => Number(row.children[index].textContent.replace(/[^0-9.]/g, ''))
-        return { standard: total.standard + number(11), paper: total.paper + number(12), bulk: total.bulk + number(13), kg: total.kg + number(14) + number(15) }
+        return { standard: total.standard + number(12), paper: total.paper + number(13), bulk: total.bulk + number(14), kg: total.kg + number(15) + number(16) }
       }, { standard: 0, paper: 0, bulk: 0, kg: 0 }))
       assert.deepEqual(totals, { standard: 20, paper: 10, bulk: 50, kg: 1050 + 19 * 1020 + 300 + 50 })
       if (process.env.QA_ARTIFACTS) await page.screenshot({ path: path.join(process.env.QA_ARTIFACTS, `inspection-list-date-groups-${width}.png`) })
       // Each date row opens every detail for the authorization, not just that date.
-      for (const date of dates) {
-        const dateCell = table.locator('tbody tr td:nth-child(5)').filter({ hasText: date })
+      for (const date of new Set(dates)) {
+        const dateCell = table.locator('tbody tr td:nth-child(5)').filter({ hasText: date }).first()
         await dateCell.click()
         await page.locator('.producer-inspection-page').waitFor()
         await page.locator('.inspection-detail-table').first().locator('tbody tr').nth(19).waitFor()
@@ -431,7 +431,7 @@ try {
       await page.getByRole('searchbox', { name: '検査日を文字で絞り込む', exact: true }).fill('')
       await page.keyboard.press('Escape')
 
-      // Confirm all three detail kinds contribute to the binary completion status.
+      // Each kind now has its own completion status rather than marking sibling kinds incomplete.
       await db.exec("update flexcon_inspection_flexcons set inspection_date='2026-09-29', inspector_name='Tester', grade='1等', moisture=15; update flexcon_inspection_paper_bags set inspection_date='2026-09-29', inspector_name='Tester', grade='1等', moisture=15")
       const statusCell = table.locator('tbody tr').first().locator('td').first()
       const reloadList = async () => {
@@ -441,20 +441,20 @@ try {
       }
       await reloadList()
       assert.equal(await statusCell.innerText(), '完了')
-      for (const [detailTable, condition] of [
-        ['flexcon_inspection_flexcons', "record_kind='standard' and flexcon_no=1"],
-        ['flexcon_inspection_flexcons', "record_kind='bulk'"],
-        ['flexcon_inspection_paper_bags', 'true'],
+      for (const [detailTable, condition, kind] of [
+        ['flexcon_inspection_flexcons', "record_kind='standard' and flexcon_no=1", '推フレ'],
+        ['flexcon_inspection_flexcons', "record_kind='bulk'", 'バラ'],
+        ['flexcon_inspection_paper_bags', 'true', '紙袋'],
       ]) {
         await db.exec(`update ${detailTable} set moisture=null where ${condition}`)
         await reloadList()
-        assert.equal(await statusCell.innerText(), '未完了')
+        assert.equal(await table.locator('tbody tr').filter({ has: page.getByRole('cell', { name: kind, exact: true }) }).locator('td').first().innerText(), '未完了')
         await db.exec(`update ${detailTable} set moisture=15 where ${condition}`)
       }
       await reloadList()
       assert.equal(await statusCell.innerText(), '完了')
       await page.getByRole('button', { name: '検査状況', exact: true }).click()
-      assert.equal(await table.locator('tbody tr').count(), 1)
+      assert.equal(await table.locator('tbody tr').count(), 3)
       if (process.env.QA_ARTIFACTS) {
         await statusCell.scrollIntoViewIfNeeded()
         await page.screenshot({ path: path.join(process.env.QA_ARTIFACTS, `inspection-completion-${width}.png`) })
@@ -660,7 +660,7 @@ try {
       await openFilter('検査日')
       await page.getByRole('searchbox', { name: '検査日を文字で絞り込む', exact: true }).fill('令和8年10月1日')
       await page.keyboard.press('Escape')
-      assert.equal(await table.locator('tbody tr').count(), 2)
+      assert.equal(await table.locator('tbody tr').count(), 4)
       await page.getByRole('tab', { name: '集計' }).click()
       assert.deepEqual(await progressTotals(), ['2,390kg', '0kg'])
       assert.deepEqual(await kindTotals(flexconProgress), ['2,090kg', '0kg'])
