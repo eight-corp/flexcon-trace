@@ -8,6 +8,7 @@ const flexcons = Array.from({ length: 57 }, (_, index) => {
   const no = index + 1
   return { ...base, id: `f${no}`, flexcon_no: no, lot_number: String(no), quantity_kg: no > 50 && no < 57 ? 75 : 1020,
     record_kind: no > 50 && no < 57 ? 'bulk' : 'standard', brand: no <= 40 ? 'Rice A' : no < 57 ? 'Rice B' : 'Rice C',
+    certificate_print_count: no === 41 || no === 42 ? 1 : 0,
     purchase_date: no > 40 ? `2026-10-${String(Math.min(no - 30, 28)).padStart(2, '0')}` : base.purchase_date,
     inspection_date: no <= 40 ? no <= 30 ? `2026-09-${String(no).padStart(2, '0')}` : `2026-10-${String(no - 30).padStart(2, '0')}` : no <= 50 ? '2026-10-15' : no < 57 ? '2026-10-16' : null }
 }).reverse() // Fetch order is not the same as the numbered detail display order.
@@ -79,6 +80,28 @@ try {
           : scenario.target === 'p11' ? Array.from({ length: 6 }, (_, i) => `p${11 + i}`) : ['f57'])
           .map(id => `inspection-record-${id}`)
         assert.deepEqual(await page.locator('.inspection-target-row').evaluateAll(rows => rows.map(row => row.id)), expectedIds, 'Highlight all and only the matching group')
+        await page.mouse.move(5, 5)
+        const styles = await page.locator('.inspection-target-row').evaluateAll(rows => rows.map(row => {
+          const style = getComputedStyle(row)
+          const fields = [...row.querySelectorAll('input,select')]
+          const colors = () => [getComputedStyle(row).backgroundColor, ...fields.map(field => [getComputedStyle(field).backgroundColor, getComputedStyle(field).borderColor])]
+          const result = {
+            top: style.getPropertyValue('--inspection-target-top').trim(),
+            bottom: style.getPropertyValue('--inspection-target-bottom').trim(),
+            shadow: style.boxShadow,
+            before: colors(),
+          }
+          row.classList.remove('inspection-target-row')
+          result.after = colors()
+          row.classList.add('inspection-target-row')
+          return result
+        }))
+        for (const [index, style] of styles.entries()) {
+          assert.equal(style.top, index === 0 ? '2px' : '0px', 'Only the group start has a top border')
+          assert.equal(style.bottom, index === styles.length - 1 ? '-2px' : '0px', 'Only the group end has a bottom border')
+          assert.match(style.shadow, /rgb\(49, 119, 173\)/)
+          assert.deepEqual(style.before, style.after, 'Selection must preserve row and field colors, including printed status')
+        }
         assert.equal(await page.locator('.inspection-detail-table tbody tr[id]').count(), 73, 'Other records stay available')
         assert.equal(await target.locator('..').evaluate(tbody => tbody.closest('.inspection-detail-table-wrap').scrollLeft), 0)
         if (process.env.QA_ARTIFACTS && scenario.kind === 'バラ') await page.screenshot({ path: path.join(process.env.QA_ARTIFACTS, `summary-target-${viewport.width}.png`) })
@@ -92,7 +115,7 @@ try {
       await page.waitForFunction(() => document.querySelector('.producer-inspection-page')?.scrollTop > 0)
       assert.deepEqual(mutations, [])
       assert.deepEqual(errors, [])
-      console.log(`PASS ${viewport.width}x${viewport.height}: complete group highlighting, first display order, delayed loading, click/Enter, all kinds, undated, reopening and full details`)
+      console.log(`PASS ${viewport.width}x${viewport.height}: group outline only, original colors, first display order, delayed loading, click/Enter, all kinds, undated, reopening and full details`)
     } finally { await context.close() }
   }
 } finally { await browser.close() }
