@@ -863,7 +863,11 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
   })
   const openSummaryRecord = (row: InspectionRegistrationSummaryRow) => {
     rememberSummaryPosition()
-    onSelectedRecordTargetChange(null)
+    const flexconIds = new Set(row.flexconIds)
+    const firstFlexcon = flexcons.filter(item => flexconIds.has(item.id)).sort((left, right) => left.flexcon_no - right.flexcon_no)[0]
+    const paperBagIds = new Set(row.paperBagIds)
+    const firstPaperBag = paperBags.find(item => paperBagIds.has(item.id))
+    onSelectedRecordTargetChange(firstFlexcon ? { kind: 'flexcon', id: firstFlexcon.id } : firstPaperBag ? { kind: 'paper', id: firstPaperBag.id } : null)
     onSelectedRegistrationChange(row.registrationId)
     onSelectedAuthorizationChange(row.authorizationId)
   }
