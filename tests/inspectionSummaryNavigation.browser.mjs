@@ -74,7 +74,11 @@ try {
           const box = row.getBoundingClientRect(), container = detail.getBoundingClientRect(), header = heading.getBoundingClientRect()
           return box.top >= Math.max(container.top, header.bottom) - 1 && box.bottom <= Math.min(container.bottom, window.innerHeight) + 1
         }, scenario.target)
-        assert.equal(await page.locator('.inspection-target-row').count(), 1)
+        const expectedIds = (scenario.target === 'f41' ? Array.from({ length: 10 }, (_, i) => `f${41 + i}`)
+          : scenario.target === 'f51' ? Array.from({ length: 6 }, (_, i) => `f${51 + i}`)
+          : scenario.target === 'p11' ? Array.from({ length: 6 }, (_, i) => `p${11 + i}`) : ['f57'])
+          .map(id => `inspection-record-${id}`)
+        assert.deepEqual(await page.locator('.inspection-target-row').evaluateAll(rows => rows.map(row => row.id)), expectedIds, 'Highlight all and only the matching group')
         assert.equal(await page.locator('.inspection-detail-table tbody tr[id]').count(), 73, 'Other records stay available')
         assert.equal(await target.locator('..').evaluate(tbody => tbody.closest('.inspection-detail-table-wrap').scrollLeft), 0)
         if (process.env.QA_ARTIFACTS && scenario.kind === 'バラ') await page.screenshot({ path: path.join(process.env.QA_ARTIFACTS, `summary-target-${viewport.width}.png`) })
@@ -88,7 +92,7 @@ try {
       await page.waitForFunction(() => document.querySelector('.producer-inspection-page')?.scrollTop > 0)
       assert.deepEqual(mutations, [])
       assert.deepEqual(errors, [])
-      console.log(`PASS ${viewport.width}x${viewport.height}: grouped row target, first display order, delayed loading, click/Enter, all kinds, undated, reopening and full details`)
+      console.log(`PASS ${viewport.width}x${viewport.height}: complete group highlighting, first display order, delayed loading, click/Enter, all kinds, undated, reopening and full details`)
     } finally { await context.close() }
   }
 } finally { await browser.close() }

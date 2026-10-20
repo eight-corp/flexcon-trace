@@ -36,7 +36,7 @@ type Props = {
   onSelectedRecordTargetChange: (target: InspectionRecordTarget | null) => void
   onBack: () => void
 }
-export type InspectionRecordTarget = { kind: 'flexcon' | 'paper'; id: string }
+export type InspectionRecordTarget = { kind: 'flexcon' | 'paper'; id: string; highlightIds?: string[] }
 type Notice = { type: 'success' | 'error'; text: string } | null
 type AddGroupForm = {
   authorization_id: string
@@ -332,6 +332,7 @@ function brandTypeForPrefecture(prefecture: string | null): 'brand_aomori' | 'br
 }
 export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedAuthorizationId, selectedRegistrationId, selectedRecordTarget, summaryState, onSummaryStateChange, summaryScrollRef, onSelectedAuthorizationChange, onSelectedRegistrationChange, onSelectedRecordTargetChange, onBack }: Props) {
   const reportingPeriod = useReportingPeriod()
+  const highlightedRecordIds = useMemo(() => new Set(selectedRecordTarget ? [selectedRecordTarget.id, ...(selectedRecordTarget.highlightIds ?? [])] : []), [selectedRecordTarget])
   const { mode: calendarMode, formatDate: displayDate, formatCropYear: displayCropYear } = useCalendarMode()
   const [authorizations, setAuthorizations] = useState<AuthorizationRecord[]>([])
   const [registrations, setRegistrations] = useState<InspectionRegistration[]>([])
@@ -867,7 +868,7 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
     const firstFlexcon = flexcons.filter(item => flexconIds.has(item.id)).sort((left, right) => left.flexcon_no - right.flexcon_no)[0]
     const paperBagIds = new Set(row.paperBagIds)
     const firstPaperBag = paperBags.find(item => paperBagIds.has(item.id))
-    onSelectedRecordTargetChange(firstFlexcon ? { kind: 'flexcon', id: firstFlexcon.id } : firstPaperBag ? { kind: 'paper', id: firstPaperBag.id } : null)
+    onSelectedRecordTargetChange(firstFlexcon ? { kind: 'flexcon', id: firstFlexcon.id, highlightIds: row.flexconIds } : firstPaperBag ? { kind: 'paper', id: firstPaperBag.id, highlightIds: row.paperBagIds } : null)
     onSelectedRegistrationChange(row.registrationId)
     onSelectedAuthorizationChange(row.authorizationId)
   }
@@ -1570,7 +1571,7 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
     <div className="section-title"><div><h2>{title}</h2><span>{items.length}本</span></div>{!readOnly && <div className="button-row">{items.length > 0 && <span className="certificate-status-key"><span aria-hidden="true" />印刷済み</span>}<button className="secondary-button certificate-create-button" type="button" disabled={certificateFlexconsFor(certificateSectionKind).length === 0} onClick={() => openCertificateDialog(certificateSectionKind)}><FileText size={18} />検査証明書作成</button></div>}</div>
     <div className="inspection-detail-table-wrap"><table className="inspection-detail-table" onKeyDownCapture={navigateInspectionField}>
       <thead><tr><th>№</th><th>年度</th><th>仕入日</th><th>仕切り書</th><th>検査日</th><th>検査員</th><th>検査場所</th><th>産地</th><th>銘柄</th><th>数量（kg）</th><th>水分</th><th>等級</th><th>理由</th>{!readOnly && <th></th>}</tr></thead>
-      <tbody>{items.map((item) => <tr id={`inspection-record-${item.id}`} className={[(item.certificate_print_count ?? 0) > 0 ? 'certificate-printed-row' : '', !detailDrafts[item.id] && isInspectionResultComplete(item) ? 'inspection-complete-row' : '', selectedRecordTarget?.kind === 'flexcon' && selectedRecordTarget.id === item.id ? 'inspection-target-row' : ''].filter(Boolean).join(' ') || undefined} title={(item.certificate_print_count ?? 0) > 0 ? `印刷済み（${item.certificate_print_count}回）` : '未印刷'} key={item.id}><td>{item.flexcon_no}</td>{readOnly ? renderReadOnlyMetadataFields(item) : renderInlineMetadataFields('flexcon', item)}{readOnly ? renderReadOnlyProductFields(item) : renderInlineProductFields('flexcon', item)}{readOnly ? renderReadOnlyResultFields(item) : renderInlineResultFields('flexcon', item)}{!readOnly && <td className="inspection-row-actions"><button className="icon-button delete-icon" type="button" title="削除" aria-label={`№${item.flexcon_no}を削除`} onClick={() => void deleteFlexcon(item)}><Trash2 size={17} /></button></td>}</tr>)}
+      <tbody>{items.map((item) => <tr id={`inspection-record-${item.id}`} className={[(item.certificate_print_count ?? 0) > 0 ? 'certificate-printed-row' : '', !detailDrafts[item.id] && isInspectionResultComplete(item) ? 'inspection-complete-row' : '', selectedRecordTarget?.kind === 'flexcon' && highlightedRecordIds.has(item.id) ? 'inspection-target-row' : ''].filter(Boolean).join(' ') || undefined} title={(item.certificate_print_count ?? 0) > 0 ? `印刷済み（${item.certificate_print_count}回）` : '未印刷'} key={item.id}><td>{item.flexcon_no}</td>{readOnly ? renderReadOnlyMetadataFields(item) : renderInlineMetadataFields('flexcon', item)}{readOnly ? renderReadOnlyProductFields(item) : renderInlineProductFields('flexcon', item)}{readOnly ? renderReadOnlyResultFields(item) : renderInlineResultFields('flexcon', item)}{!readOnly && <td className="inspection-row-actions"><button className="icon-button delete-icon" type="button" title="削除" aria-label={`№${item.flexcon_no}を削除`} onClick={() => void deleteFlexcon(item)}><Trash2 size={17} /></button></td>}</tr>)}
       {items.length === 0 && <tr><td colSpan={readOnly ? 13 : 14} className="empty-state">登録されていません</td></tr>}
       </tbody>
     </table>{renderDetailAddition(certificateSectionKind)}</div>
@@ -1653,7 +1654,7 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
       <div className="section-title"><div><h2>紙袋</h2><span>{selectedPaperBags.reduce((total, item) => total + item.bag_count, 0).toLocaleString()}袋 / {selectedPaperBags.length.toLocaleString()}件</span></div></div>
       <div className="inspection-detail-table-wrap"><table className="inspection-detail-table paper-detail-table" onKeyDownCapture={navigateInspectionField}>
         <thead><tr><th>年度</th><th>仕入日</th><th>仕切り書</th><th>検査日</th><th>検査員</th><th>検査場所</th><th>産地</th><th>銘柄</th><th>数量（袋）</th><th>総重量</th><th>水分</th><th>等級</th><th>理由</th>{!readOnly && <th></th>}</tr></thead>
-        <tbody>{selectedPaperBags.map((item) => <tr id={`inspection-record-${item.id}`} className={[!detailDrafts[item.id] && isInspectionResultComplete(item) ? 'inspection-complete-row' : '', selectedRecordTarget?.kind === 'paper' && selectedRecordTarget.id === item.id ? 'inspection-target-row' : ''].filter(Boolean).join(' ') || undefined} key={item.id}>{readOnly ? renderReadOnlyMetadataFields(item) : renderInlineMetadataFields('paper', item)}{readOnly ? renderReadOnlyProductFields(item) : renderInlineProductFields('paper', item)}<td>{(item.bag_count * 30).toLocaleString()}kg</td>{readOnly ? renderReadOnlyResultFields(item) : renderInlineResultFields('paper', item)}{!readOnly && <td className="inspection-row-actions inspection-row-actions-wide"><button className="icon-button" type="button" title="2行に分割" aria-label={`${item.brand ?? ''}の紙袋を2行に分割`} disabled={busy || item.bag_count < 2} onClick={() => beginSplitPaperBags(item)}><TableRowsSplit size={17} /></button><button className="icon-button delete-icon" type="button" title="削除" aria-label={`${item.brand ?? ''}の紙袋を削除`} onClick={() => void deletePaperBags(item)}><Trash2 size={17} /></button></td>}</tr>)}
+        <tbody>{selectedPaperBags.map((item) => <tr id={`inspection-record-${item.id}`} className={[!detailDrafts[item.id] && isInspectionResultComplete(item) ? 'inspection-complete-row' : '', selectedRecordTarget?.kind === 'paper' && highlightedRecordIds.has(item.id) ? 'inspection-target-row' : ''].filter(Boolean).join(' ') || undefined} key={item.id}>{readOnly ? renderReadOnlyMetadataFields(item) : renderInlineMetadataFields('paper', item)}{readOnly ? renderReadOnlyProductFields(item) : renderInlineProductFields('paper', item)}<td>{(item.bag_count * 30).toLocaleString()}kg</td>{readOnly ? renderReadOnlyResultFields(item) : renderInlineResultFields('paper', item)}{!readOnly && <td className="inspection-row-actions inspection-row-actions-wide"><button className="icon-button" type="button" title="2行に分割" aria-label={`${item.brand ?? ''}の紙袋を2行に分割`} disabled={busy || item.bag_count < 2} onClick={() => beginSplitPaperBags(item)}><TableRowsSplit size={17} /></button><button className="icon-button delete-icon" type="button" title="削除" aria-label={`${item.brand ?? ''}の紙袋を削除`} onClick={() => void deletePaperBags(item)}><Trash2 size={17} /></button></td>}</tr>)}
         {selectedPaperBags.length === 0 && <tr><td colSpan={readOnly ? 13 : 14} className="empty-state">登録されていません</td></tr>}
         </tbody>
       </table>{renderDetailAddition('paper')}</div>

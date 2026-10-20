@@ -80,9 +80,10 @@ try {
       const totals = page.locator('.inspection-summary-aggregate > .section-title .inspection-progress-totals')
       assert.match(await totals.innerText(), /2,040kg[\s\S]*1,020kg/)
       await page.getByRole('tab', { name: '一覧', exact: true }).click()
-      await summary.locator('tbody tr').first().click()
+      await undated.click()
       await page.locator('.producer-inspection-page').waitFor()
       assert.equal(await page.locator('.inspection-detail-table tbody tr[id]').count(), 6)
+      assert.deepEqual(await page.locator('.inspection-target-row').evaluateAll(rows => rows.map(row => row.id)), ['inspection-record-f3'], 'Hidden sibling dates must not be highlighted')
       assert.match(await page.locator('.producer-inspection-heading').innerText(), /全期間の明細/)
 
       await nav.getByRole('button', { name: '在庫', exact: true }).click()

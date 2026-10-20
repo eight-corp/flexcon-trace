@@ -116,6 +116,8 @@ try {
       assert.equal(await paper.locator('.inspection-progress-table .empty-state').count(), 1)
       await flexcon.locator('.inspection-record-detail-list.uninspected tbody tr').first().click()
       await page.locator('.producer-inspection-page').waitFor()
+      await page.locator('.inspection-target-row').waitFor()
+      assert.equal(await page.locator('.inspection-target-row').count(), 1, 'An individual aggregate detail still highlights only its own row')
       await page.getByRole('button', { name: '検査記録へ戻る', exact: true }).click()
       await waitTotals([1000, 50])
       await nav.getByRole('button', { name: '在庫', exact: true }).click()
