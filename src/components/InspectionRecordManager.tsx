@@ -2,6 +2,8 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type Dispatch, t
 import { ArrowDown, ArrowLeft, ArrowUp, BarChart3, ChevronDown, CircleAlert, CircleCheck, ClipboardList, ExternalLink, FileText, FilterX, List, Plus, Printer, Save, TableRowsSplit, Trash2, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { loadAllRows } from '../lib/loadAllRows'
+import { useReportingPeriod } from '../lib/reportingPeriodContext'
+import { inspectionReportingDate, matchesReportingPeriod } from '../lib/reportingPeriod'
 import { formatDisplayDate, formatJapaneseDateForFilename, type CalendarMode } from '../lib/japaneseEra'
 import { useCalendarMode } from '../lib/calendarMode'
 import { matchesFilterText } from '../lib/tableFilters'
@@ -114,6 +116,7 @@ type InspectionDetailRow = {
   complete: boolean
 }
 type InspectionRegistrationSummaryRow = {
+  partialPeriodGroup: boolean
   groupKey: string
   recordKind: InspectionSummaryKind
   registrationId: string
@@ -328,6 +331,7 @@ function brandTypeForPrefecture(prefecture: string | null): 'brand_aomori' | 'br
   return null
 }
 export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedAuthorizationId, selectedRegistrationId, selectedRecordTarget, summaryState, onSummaryStateChange, summaryScrollRef, onSelectedAuthorizationChange, onSelectedRegistrationChange, onSelectedRecordTargetChange, onBack }: Props) {
+  const reportingPeriod = useReportingPeriod()
   const { mode: calendarMode, formatDate: displayDate, formatCropYear: displayCropYear } = useCalendarMode()
   const [authorizations, setAuthorizations] = useState<AuthorizationRecord[]>([])
   const [registrations, setRegistrations] = useState<InspectionRegistration[]>([])
@@ -549,7 +553,9 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
       const registeredFlexcons = flexconsByRegistration.get(registration.id) ?? []
       const registeredPaperBags = paperBagsByRegistration.get(registration.id) ?? []
       const registrationRecords: Array<FlexconInspection | PaperBagInspection> = [...registeredFlexcons, ...registeredPaperBags]
-      return groupInspectionSummaryRecords(registrationRecords, item => 'quantity_kg' in item ? flexconRecordKind(item, weights) : 'paper').map(({ key, inspectionDate, brand, kind, records }): InspectionRegistrationSummaryRow => {
+      return groupInspectionSummaryRecords(registrationRecords, item => 'quantity_kg' in item ? flexconRecordKind(item, weights) : 'paper').flatMap(({ key, inspectionDate, brand, kind, records: allRecords }): InspectionRegistrationSummaryRow[] => {
+        const records = allRecords.filter(item => matchesReportingPeriod(inspectionReportingDate(item), reportingPeriod))
+        if (records.length === 0) return []
         const dateFlexcons = records.filter((item): item is FlexconInspection => 'quantity_kg' in item)
         const datePaperBags = records.filter((item): item is PaperBagInspection => !('quantity_kg' in item))
         const grade = joinDistinct(records.map((item) => selectedInspectionGrade(item.grade) || '未入力'))
@@ -558,7 +564,8 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
         const quantityFor = (item: FlexconInspection | PaperBagInspection) => (
           'quantity_kg' in item ? item.quantity_kg : item.bag_count * 30
         )
-        return {
+        return [{
+          partialPeriodGroup: records.length !== allRecords.length,
           groupKey: JSON.stringify([registration.id, key]),
           recordKind: kind,
           registrationId: registration.id,
@@ -583,10 +590,10 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
           inspectedQuantity: records.filter(isInspectionResultComplete).reduce((total, item) => total + quantityFor(item), 0),
           uninspectedQuantity: records.filter((item) => !isInspectionResultComplete(item)).reduce((total, item) => total + quantityFor(item), 0),
           inspectionStatus: records.every(isInspectionResultComplete) ? '完了' : '未完了',
-        }
+        }]
       })
     }).sort((left, right) => left.registrationNo - right.registrationNo)
-  }, [authorizations, flexcons, paperBags, registrations, weights, calendarMode])
+  }, [authorizations, flexcons, paperBags, registrations, weights, calendarMode, reportingPeriod])
   const summaryFilterValues = useMemo(() => Object.fromEntries(SUMMARY_COLUMNS.map((column) => [
     column.key,
     Array.from(new Set(summaryRows.map((row) => summaryDisplayValue(row, column.key)))).sort((left, right) => left.localeCompare(right, 'ja', { numeric: true })),
@@ -623,7 +630,7 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
   }
 
   const deleteInspectionRegistration = async (row: InspectionRegistrationSummaryRow) => {
-    if (busy) return
+    if (busy || row.partialPeriodGroup) return
     const inspectionDateLabel = row.inspectionDate ? formatDisplayDate(row.inspectionDate, calendarMode) : '検査日未設定'
     const groupLabel = `${row.brands || '銘柄未設定'}・${inspectionSummaryKindLabel(row.recordKind)}`
     const details = [
@@ -668,12 +675,14 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
   }, [summaryRows, summaryColumnFilters, summaryTextFilters])
   const periodFlexcons = useMemo(() => flexcons.filter((item) => (
     (!dateFilteredRecords || dateFilteredRecords.flexcons.has(item.id))
+    && matchesReportingPeriod(inspectionReportingDate(item), reportingPeriod)
     && matchesInspectionPeriod(item, inspectionPeriod)
-  )), [flexcons, dateFilteredRecords, inspectionPeriod])
+  )), [flexcons, dateFilteredRecords, inspectionPeriod, reportingPeriod])
   const periodPaperBags = useMemo(() => paperBags.filter((item) => (
     (!dateFilteredRecords || dateFilteredRecords.paperBags.has(item.id))
+    && matchesReportingPeriod(inspectionReportingDate(item), reportingPeriod)
     && matchesInspectionPeriod(item, inspectionPeriod)
-  )), [paperBags, dateFilteredRecords, inspectionPeriod])
+  )), [paperBags, dateFilteredRecords, inspectionPeriod, reportingPeriod])
   const inspectionProgressRows = useMemo(() => {
     const authorizationById = new Map(authorizations.map((authorization) => [authorization.id, authorization]))
     const grouped = new Map<string, InspectionProgressRow>()
@@ -1603,7 +1612,7 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
         <tbody>{displayedSummary.map((row, index) => <tr className={index > 0 && displayedSummary[index - 1].registrationId !== row.registrationId ? 'inspection-summary-registration-start' : undefined} key={row.groupKey} tabIndex={0} onClick={() => openSummaryRecord(row)} onKeyDown={(event) => { if (event.key === 'Enter' && event.target === event.currentTarget) openSummaryRecord(row) }}>
           <td><span className={`inspection-completion-status ${row.inspectionStatus === '完了' ? 'complete' : 'incomplete'}`}>{row.inspectionStatus === '完了' ? <CircleCheck size={15} aria-hidden="true" /> : <CircleAlert size={15} aria-hidden="true" />}{row.inspectionStatus}</span></td>
           <td className="numeric-cell">{row.authorizationNo}</td><td>{row.settlementNo}</td><td>{row.purchaseDates}</td><td>{row.inspectionDates}</td><td><strong>{row.fullName}</strong></td><td>{row.origin}</td><td>{row.municipality}</td><td>{row.inspectionLocations}</td><td>{row.brands}</td><td>{inspectionSummaryKindLabel(row.recordKind)}</td><td>{row.grade}</td><td className="numeric-cell">{row.flexconCount.toLocaleString()}本</td><td className="numeric-cell">{row.paperBagCount.toLocaleString()}袋</td><td className="numeric-cell">{row.bulkQuantity.toLocaleString()}kg</td><td className="inspection-progress-inspected numeric-cell">{row.inspectedQuantity.toLocaleString()}kg</td><td className="inspection-progress-uninspected numeric-cell">{row.uninspectedQuantity.toLocaleString()}kg</td>
-          {!readOnly && <td className="inspection-summary-actions"><button className="icon-button delete-icon" type="button" title="この行だけを削除" aria-label={`${row.fullName}・${row.inspectionDates || '検査日未設定'}・${row.brands || '銘柄未設定'}・${inspectionSummaryKindLabel(row.recordKind)}の行を削除`} disabled={busy} onClick={(event) => { event.stopPropagation(); void deleteInspectionRegistration(row) }}><Trash2 size={17} /></button></td>}
+          {!readOnly && <td className="inspection-summary-actions"><button className="icon-button delete-icon" type="button" title={row.partialPeriodGroup ? '期間外の同じグループがあります。明細から削除してください。' : 'この行だけを削除'} aria-label={`${row.fullName}・${row.inspectionDates || '検査日未設定'}・${row.brands || '銘柄未設定'}・${inspectionSummaryKindLabel(row.recordKind)}の行を削除`} disabled={busy || row.partialPeriodGroup} onClick={(event) => { event.stopPropagation(); void deleteInspectionRegistration(row) }}><Trash2 size={17} /></button></td>}
         </tr>)}
         {displayedSummary.length === 0 && <tr><td colSpan={SUMMARY_COLUMNS.length + (readOnly ? 0 : 1)} className="empty-state">該当する検査記録はありません</td></tr>}</tbody>
       </table></div>}
@@ -1614,7 +1623,7 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
   return <div className="producer-inspection-page">
     <div className="producer-inspection-heading">
       <button className="icon-button" type="button" title={readOnly ? '委任状一覧へ戻る' : '検査記録へ戻る'} aria-label={readOnly ? '委任状一覧へ戻る' : '検査記録へ戻る'} onClick={onBack}><ArrowLeft size={21} /></button>
-      <div><h1>{selectedAuthorization.full_name}</h1><p>委任状№ {selectedAuthorization.authorization_no}　{[selectedAuthorization.prefecture, selectedAuthorization.municipality].filter(Boolean).join(' ')}{!readOnly && selectedRegistration ? `　登録No. ${selectedRegistration.registration_no}` : ''}</p></div>
+      <div><h1>{selectedAuthorization.full_name}</h1><p>委任状№ {selectedAuthorization.authorization_no}　{[selectedAuthorization.prefecture, selectedAuthorization.municipality].filter(Boolean).join(' ')}{!readOnly && selectedRegistration ? `　登録No. ${selectedRegistration.registration_no}` : ''}　全期間の明細</p></div>
       {readOnly && <div className="producer-inspection-actions">
         <button className="secondary-button" type="button" onClick={() => void createInspectionLedgerPdf()} disabled={inspectionLedgerBusy || gradingNoticeBusy}><ClipboardList size={18} />{inspectionLedgerBusy ? 'PDF作成中...' : '検査請求者別検査台帳'}</button>
         <button className="secondary-button" type="button" onClick={() => void createGradingNoticePdf()} disabled={gradingNoticeBusy || inspectionLedgerBusy}><FileText size={18} />{gradingNoticeBusy ? 'PDF作成中...' : '格付結果通知票'}</button>

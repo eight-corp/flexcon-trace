@@ -1,5 +1,23 @@
 #root { min-height: 100vh; min-height: 100dvh; }
 .app-shell { min-height: 100vh; min-height: 100dvh; padding-bottom: 74px; }
+.app-top { position: sticky; top: 0; z-index: 20; }
+.app-top .app-header { position: static; }
+.reporting-period-bar { min-height: 52px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; padding: 6px 16px; background: #f5f8f6; border-bottom: 1px solid var(--line); }
+.reporting-period-year, .reporting-period-dates { display: flex; align-items: center; gap: 6px; }
+.reporting-period-year > span { font-size: 13px; font-weight: 700; white-space: nowrap; }
+.reporting-period-year .icon-button { width: 30px; height: 32px; }
+.reporting-period-year select { width: 142px; min-height: 32px; padding: 4px 8px; }
+.reporting-period-dates > .japanese-date-input { width: 190px; min-width: 0; }
+.reporting-period-dates input { height: 32px; min-height: 32px; font-size: 13px; padding-top: 4px; padding-bottom: 4px; }
+.reporting-period-error { color: var(--red); font-size: 12px; }
+.inventory-reporting-basis { display: flex; margin-bottom: 10px; }
+.inventory-reporting-basis label { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.inventory-reporting-basis select { width: 260px; max-width: 100%; }
+@media (max-width: 760px) {
+  .reporting-period-bar { padding: 6px 8px; gap: 5px; }
+  .reporting-period-dates { width: 100%; }
+  .reporting-period-dates > .japanese-date-input { flex: 1; width: auto; }
+}
 .app-header {
   height: 64px; padding: 0 16px; display: flex; align-items: center; justify-content: space-between;
   background: #fff; border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 20;
@@ -18,7 +36,7 @@
 .global-undo-slot { display: block; flex: 0 0 38px; width: 38px; height: 38px; }
 .global-undo-button { position: fixed; z-index: 1050; color: var(--green); background: #fff; }
 .global-undo-button:disabled { opacity: .45; }
-.global-undo-notice { position: fixed; z-index: 1200; top: 70px; right: 12px; max-width: min(420px, calc(100vw - 24px)); display: flex; align-items: center; gap: 8px; box-shadow: 0 3px 12px rgb(0 0 0 / 12%); }
+.global-undo-notice { position: fixed; z-index: 1200; top: calc(var(--app-top-height, 64px) + 6px); right: 12px; max-width: min(420px, calc(100vw - 24px)); display: flex; align-items: center; gap: 8px; box-shadow: 0 3px 12px rgb(0 0 0 / 12%); }
 .global-undo-notice .icon-button { flex: 0 0 30px; width: 30px; height: 30px; }
 .modal-backdrop.global-undo-backdrop { z-index: 1100; }
 .registration-modal.global-undo-modal { width: min(440px, 100%); }
@@ -26,7 +44,7 @@
 .calendar-mode-control .toggle-switch { width: 40px; height: 23px; border-radius: 12px; padding: 2px; }
 .calendar-mode-control .toggle-switch span { width: 19px; height: 19px; }
 .calendar-mode-control .toggle-switch[aria-checked="true"] span { transform: translateX(17px); }
-.menu-button { min-height: 38px; display: inline-flex; align-items: center; gap: 5px; padding: 0 10px; border: 0; border-radius: 6px; background: transparent; color: #4d5950; font-weight: 700; }
+.menu-button { min-height: 38px; display: inline-flex; align-items: center; gap: 5px; padding: 0 10px; border: 0; border-radius: 6px; background: transparent; color: #4d5950; font-weight: 700; white-space: nowrap; flex-shrink: 0; }
 .menu-button:hover { background: var(--surface-soft); }
 .page-heading { margin-bottom: 14px; }
 .shipment-record-heading { display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
@@ -964,9 +982,9 @@ table thead th { text-align: center !important; }
 @media (min-width: 760px) {
   .app-shell { padding-bottom: 74px; }
   .app-main { padding: 20px 22px 34px; }
-  .app-main.app-main-wide { width: 100%; max-width: none; height: calc(100dvh - 64px); padding-bottom: 20px; overflow: hidden; }
-  .app-main.app-main-inspection-summary { height: auto; min-height: calc(100dvh - 64px); padding-bottom: 34px; overflow: visible; }
-  .app-main.app-main-wide.app-main-statements { height: auto; min-height: calc(100dvh - 64px); padding-bottom: 34px; overflow-x: auto; overflow-y: visible; }
+  .app-main.app-main-wide { width: 100%; max-width: none; height: calc(100dvh - var(--app-top-height, 64px)); padding-bottom: 20px; overflow: hidden; }
+  .app-main.app-main-inspection-summary { height: auto; min-height: calc(100dvh - var(--app-top-height, 64px)); padding-bottom: 34px; overflow: visible; }
+  .app-main.app-main-wide.app-main-statements { height: auto; min-height: calc(100dvh - var(--app-top-height, 64px)); padding-bottom: 34px; overflow-x: auto; overflow-y: visible; }
   .app-main-wide .authorization-page { height: 100%; min-height: 0; display: flex; flex-direction: column; }
   .app-main-wide .memo-page { height: 100%; }
   .app-main-wide .authorization-table-wrap { flex: 1; min-height: 0; }
@@ -982,16 +1000,16 @@ table thead th { text-align: center !important; }
   .brand-lockup { flex: 0 0 218px; }
   .brand-lockup strong { font-size: 13px; }
   .brand-mark { width: 31px; height: 31px; flex: 0 0 31px; }
-  .header-actions { flex: 0 0 226px; justify-content: flex-end; }
+  .header-actions { flex: 0 0 270px; justify-content: flex-end; }
   .menu-button { padding: 0 5px; font-size: 12px; }
-  .bottom-nav { top: 0; bottom: auto; left: 236px; right: 240px; width: auto; height: 63px; padding: 0; grid-template-rows: 1fr; border: 0; border-bottom: 1px solid var(--line); overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; }
+  .bottom-nav { top: 0; bottom: auto; left: 236px; right: 284px; width: auto; height: 63px; padding: 0; grid-template-rows: 1fr; border: 0; border-bottom: 1px solid var(--line); overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; }
   .bottom-nav button { height: 63px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 0 2px; white-space: nowrap; font-size: 11px; }
   .bottom-nav button svg { width: 18px; height: 18px; }
   .bottom-nav button span { overflow-wrap: normal; }
 }
 
 @media (max-width: 959px) {
-  .app-main.app-main-inspection-detail { height: calc(100dvh - 64px - 74px); overflow: hidden; padding-bottom: 16px; }
+  .app-main.app-main-inspection-detail { height: calc(100dvh - var(--app-top-height, 64px) - 74px); overflow: hidden; padding-bottom: 16px; }
 }
 
 @media (max-width: 440px) {

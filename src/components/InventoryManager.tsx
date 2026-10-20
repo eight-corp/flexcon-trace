@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { AlertTriangle, ArrowDown, ArrowDownToLine, ArrowRightLeft, ArrowUp, ArrowUpFromLine, Camera, FileUp, Plus, Save, Search, Trash2, Warehouse, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { loadAllRows } from '../lib/loadAllRows'
+import { useReportingPeriod } from '../lib/reportingPeriodContext'
+import { matchesReportingPeriod } from '../lib/reportingPeriod'
+import { inventoryReportingDates, inventoryReportingSnapshot, type InventoryPeriodBasis } from '../lib/inventoryReportingPeriod'
 import { formatJapaneseDateForFilename, formatDisplayCropYear, formatDisplayDate, type CalendarMode } from '../lib/japaneseEra'
 import { useCalendarMode } from '../lib/calendarMode'
 import { matchesFilterText } from '../lib/tableFilters'
@@ -303,8 +307,14 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
   const [warehouses, setWarehouses] = useState<InspectionOption[]>([])
   const [productOptions, setProductOptions] = useState<InspectionOption[]>([])
   const [movements, setMovements] = useState<InventoryMovement[]>([])
-  const [balances, setBalances] = useState<InventoryBalance[]>([])
-  const [shippedQuantities, setShippedQuantities] = useState<InventoryShippedQuantity[]>([])
+  const reportingPeriod = useReportingPeriod()
+  const [inspectionYears, setInspectionYears] = useState<{ flexcons: Array<{ id: string; fiscal_year: number }>; paperBags: Array<{ id: string; fiscal_year: number }> }>({ flexcons: [], paperBags: [] })
+  const [balanceBasis, setBalanceBasis] = useState<InventoryPeriodBasis>(() => {
+    try { return sessionStorage.getItem('rice.inventory-period-basis.v1') === 'net' ? 'net' : 'closing' } catch { return 'closing' }
+  })
+  const snapshot = useMemo(() => inventoryReportingSnapshot(movements, warehouses, inspectionYears.flexcons, inspectionYears.paperBags, reportingPeriod, balanceBasis), [movements, warehouses, inspectionYears, reportingPeriod, balanceBasis])
+  const balances: InventoryBalance[] = snapshot.balances
+  const shippedQuantities: InventoryShippedQuantity[] = snapshot.shippedQuantities
   const [form, setForm] = useState<MovementForm>(emptyForm)
   const [editing, setEditing] = useState<InventoryMovement | null>(null)
   const [editForm, setEditForm] = useState<MovementForm>(emptyForm)
@@ -338,26 +348,28 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
   const [selectedMovementKeys, setSelectedMovementKeys] = useState<Set<string>>(new Set())
 
   useEffect(() => {
+    let cancelled = false
     void Promise.all([
       supabase.from('flexcon_inspection_options').select('*').eq('option_type', 'warehouse').order('sort_order').order('name'),
       supabase.from('flexcon_inspection_options').select('*').in('option_type', ['origin', 'brand', 'brand_aomori', 'brand_iwate', 'shipment_product', 'grade']).eq('active', true).order('sort_order').order('name'),
-      supabase.from('flexcon_inventory_ledger').select('*')
-        .not('source_type', 'in', '(inspection_flexcon,inspection_paper_bag,shipment_record)')
-        .order('movement_date', { ascending: false }).order('created_at', { ascending: false }).order('id', { ascending: true }).limit(1000),
-      supabase.from('flexcon_inventory_balances_by_crop_year').select('*').order('crop_year', { ascending: false, nullsFirst: false }).order('warehouse_name').order('origin').order('product_name').order('grade').order('unit'),
-      supabase.from('flexcon_inventory_shipped_quantities_by_crop_year').select('*'),
-    ]).then(([warehouseResult, productResult, movementResult, balanceResult, shippedResult]) => {
-      if (warehouseResult.error || movementResult.error || balanceResult.error || shippedResult.error) return setNotice({ type: 'error', text: '在庫情報を取得できません。在庫管理用SQLを実行してください。' })
+      loadAllRows((from, to) => supabase.from('flexcon_inventory_ledger').select('*').order('movement_date', { ascending: false }).order('created_at', { ascending: false }).order('id').range(from, to)),
+      loadAllRows((from, to) => supabase.from('flexcon_inspection_flexcons').select('id,fiscal_year').order('id').range(from, to)),
+      loadAllRows((from, to) => supabase.from('flexcon_inspection_paper_bags').select('id,fiscal_year').order('id').range(from, to)),
+      loadAllRows((from, to) => supabase.from('flexcon_shipments').select('id,shipped_at,flexcon_manual_shipment_items(id)').order('id').range(from, to)),
+      loadAllRows((from, to) => supabase.from('flexcon_purchase_statement_lines').select('id,purchased_at').order('id').range(from, to)),
+    ]).then(([warehouseResult, productResult, movementResult, flexconResult, paperResult, shipmentResult, purchaseResult]) => {
+      if (cancelled) return
+      if (warehouseResult.error || movementResult.error || flexconResult.error || paperResult.error || shipmentResult.error || purchaseResult.error) return setNotice({ type: 'error', text: '在庫情報を取得できません。在庫管理用SQLを実行してください。' })
       setWarehouses((warehouseResult.data ?? []) as InspectionOption[])
       if (!productResult.error) setProductOptions((productResult.data ?? []) as InspectionOption[])
-      const movementRows = (movementResult.data ?? []) as InventoryMovement[]
+      const movementRows = inventoryReportingDates((movementResult.data ?? []) as InventoryMovement[], shipmentResult.data ?? [], purchaseResult.data ?? [])
       if (movementRows.every((movement) => Number.isFinite(Number(movement.registration_order)))) {
         movementRows.sort((left, right) => Number(left.registration_order) - Number(right.registration_order))
       }
       setMovements(movementRows)
-      setBalances((balanceResult.data ?? []) as InventoryBalance[])
-      setShippedQuantities((shippedResult.data ?? []) as InventoryShippedQuantity[])
+      setInspectionYears({ flexcons: flexconResult.data ?? [], paperBags: paperResult.data ?? [] })
     })
+    return () => { cancelled = true }
   }, [version])
 
   const activeWarehouses = warehouses.filter((warehouse) => warehouse.active)
@@ -881,7 +893,8 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
     setVersion((value) => value + 1)
   }
 
-  const listMovements = useMemo(() => view === 'statement-list' ? movements.filter((movement) => movement.source_type === 'settlement') : movements, [movements, view])
+  const listMovements = useMemo(() => movements.filter(movement => matchesReportingPeriod(movement.movement_date, reportingPeriod)
+    && (view === 'statement-list' ? movement.source_type === 'settlement' : !['inspection_flexcon', 'inspection_paper_bag', 'shipment_record'].includes(movement.source_type))), [movements, view, reportingPeriod])
   const visibleInventoryColumns = useMemo(() => view === 'statement-list' ? INVENTORY_COLUMNS.filter((column) => column.key !== 'note') : INVENTORY_COLUMNS.filter((column) => column.key !== 'producerName'), [view])
   const filterValues = useMemo(() => Object.fromEntries(visibleInventoryColumns.map((column) => [column.key, [...new Set(listMovements.map((movement) => movementValue(movement, column.key, calendarMode)))].sort((a, b) => a.localeCompare(b, 'ja', { numeric: true }))])) as Record<InventoryColumn, string[]>, [listMovements, visibleInventoryColumns, calendarMode])
   const displayedMovements = useMemo(() => {
@@ -983,7 +996,12 @@ export function InventoryManager({ view, workerId, workerName, canOperate, isAdm
   }
 
   return <div className={`inventory-page ${view === 'balance' ? 'inventory-page-balance' : ''}`}>
-    <div className="page-heading"><p>{view === 'history' ? '検査対象のお米は【検査記録】から登録して下さい。' : view === 'statement-reader' ? '仕切書を撮影し、米穀明細と仕入価格を読み取って登録します。' : view === 'statement-list' ? '撮影して登録した仕切書の明細を確認・編集します。' : '倉庫ごとの現在庫を産地、名称、等級別に表示します。'}</p></div>
+    {view === 'balance' && <div className="inventory-reporting-basis"><label>在庫集計<select aria-label="在庫の集計方法" value={balanceBasis} onChange={event => {
+      const value = event.target.value as InventoryPeriodBasis
+      setBalanceBasis(value)
+      try { sessionStorage.setItem('rice.inventory-period-basis.v1', value) } catch { /* Keep the selection in memory. */ }
+    }}><option value="closing">繰越を含む期間末残数</option><option value="net">期間内の入庫−出庫</option></select></label></div>}
+    <div className="page-heading"><p>{view === 'history' ? '検査対象のお米は【検査記録】から登録して下さい。' : view === 'statement-reader' ? '仕切書を撮影し、米穀明細と仕入価格を読み取って登録します。' : view === 'statement-list' ? '撮影して登録した仕切書の明細を確認・編集します。' : balanceBasis === 'closing' ? '期間末在庫（前期間からの繰越を含む）' : '期間内増減（入庫−出庫）'}</p></div>
     {view === 'history' && canOperate && <section className="section-band inventory-entry-section">
       <div className="inventory-entry-toolbar">
         <div className="inventory-mode-switch" role="group" aria-label="移動区分">

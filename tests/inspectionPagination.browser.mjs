@@ -61,7 +61,8 @@ try {
         assert.equal(route.request().method(), 'GET', 'no business writes in pagination tests')
         const from = Number(url.searchParams.get('offset') ?? 0)
         const limit = Math.min(Number(url.searchParams.get('limit') ?? 1000), 1000)
-        requests.set(table, [...(requests.get(table) ?? []), { from, limit, order: url.searchParams.get('order') }])
+        // Inventory also paginates the year lookup; assertions below target full inspection rows.
+        if (url.searchParams.get('select') !== 'id,fiscal_year') requests.set(table, [...(requests.get(table) ?? []), { from, limit, order: url.searchParams.get('order') }])
         if (scenario.failLaterPage && table === 'flexcon_inspection_flexcons' && from === 1000) {
           await route.fulfill({ status: 400, contentType: 'application/json', body: JSON.stringify({ message: 'TEST_LATER_PAGE_FAILED' }) })
           return
@@ -72,6 +73,7 @@ try {
       page.on('pageerror', error => errors.push(error.message))
       await page.goto('https://pagination.test/')
       await page.getByRole('navigation', { name: 'メインメニュー' }).getByRole('button', { name: '検査記録', exact: true }).click()
+      await page.getByRole('combobox', { name: '表示年度', exact: true }).selectOption('all')
       const table = page.locator('.inspection-summary-table')
       if (scenario.failLaterPage) {
         await page.getByText('登録No.対応の検査記録用SQLを実行してください。', { exact: true }).waitFor({ state: 'attached' })

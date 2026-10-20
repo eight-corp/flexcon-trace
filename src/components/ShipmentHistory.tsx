@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ArrowDown, ArrowUp, Building2, Download, LayoutGrid, Pencil, Save, Table2, Trash2, Truck, UserRound, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { loadAllRows } from '../lib/loadAllRows'
+import { useReportingPeriod } from '../lib/reportingPeriodContext'
+import { matchesReportingPeriod, shipmentReportingDate } from '../lib/reportingPeriod'
 import { formatDisplayCropYear, formatDisplayDateTime, formatJapaneseDateForFilename, type CalendarMode } from '../lib/japaneseEra'
 import { useCalendarMode } from '../lib/calendarMode'
 import { matchesFilterText } from '../lib/tableFilters'
@@ -206,6 +209,7 @@ function ShipmentColumnHeader({
 }
 
 export function ShipmentHistory({ refreshKey, workerId, canEdit, isAdmin }: Props) {
+  const reportingPeriod = useReportingPeriod()
   const { mode: calendarMode, formatDateTime: formatShipmentDateTime } = useCalendarMode()
   const [shipments, setShipments] = useState<Shipment[]>([])
   const [destinations, setDestinations] = useState<Destination[]>([])
@@ -235,10 +239,12 @@ export function ShipmentHistory({ refreshKey, workerId, canEdit, isAdmin }: Prop
   }, [calendarMode])
 
   useEffect(() => {
+    let cancelled = false
     void Promise.all([
-      supabase.from('flexcon_shipments').select('id, destination_id, transport_profile_id, shipped_at, carrier_name, driver_name, vehicle_no, note, shipment_kind, origin_prefecture, product_name, quantity_count, purchase_price_per_bale, flexcon_destinations(name), flexcon_shipment_items(lot_number, origin_prefecture, product_name, grade, moisture, reason), flexcon_manual_shipment_items(id, crop_year, origin_prefecture, product_name, quantity_count, unit, grade, moisture, reason, sort_order), workers(worker_name)').order('shipped_at', { ascending: false }).limit(200),
+      loadAllRows((from, to) => supabase.from('flexcon_shipments').select('id, destination_id, transport_profile_id, shipped_at, carrier_name, driver_name, vehicle_no, note, shipment_kind, origin_prefecture, product_name, quantity_count, purchase_price_per_bale, flexcon_destinations(name), flexcon_shipment_items(lot_number, origin_prefecture, product_name, grade, moisture, reason), flexcon_manual_shipment_items(id, crop_year, origin_prefecture, product_name, quantity_count, unit, grade, moisture, reason, sort_order), workers(worker_name)').order('shipped_at', { ascending: false }).order('id').range(from, to)),
       supabase.from('flexcon_mixed_flexcons').select('mixed_no, lot_number, flexcon_mixed_flexcon_members(sort_order, flexcon_authorizations(full_name))'),
     ]).then(([shipmentResult, mixedResult]) => {
+      if (cancelled) return
       if (shipmentResult.error) setNotice({ type: 'error', text: shipmentResult.error.message })
       else setShipments((shipmentResult.data ?? []) as unknown as Shipment[])
 
@@ -260,6 +266,7 @@ export function ShipmentHistory({ refreshKey, workerId, canEdit, isAdmin }: Prop
         setMixedShipmentByLot(mixedByLot)
       }
       })
+    return () => { cancelled = true }
   }, [refreshKey, localVersion])
 
   useEffect(() => {
@@ -277,9 +284,9 @@ export function ShipmentHistory({ refreshKey, workerId, canEdit, isAdmin }: Prop
     })
   }, [canEdit])
 
-  const filtered = shipments
+  const filtered = useMemo(() => shipments.filter(shipment => matchesReportingPeriod(shipmentReportingDate(shipment.shipped_at), reportingPeriod)), [shipments, reportingPeriod])
 
-  const tableRows = useMemo(() => shipments.flatMap((shipment, shipmentIndex) =>
+  const tableRows = useMemo(() => filtered.flatMap((shipment, shipmentIndex) =>
     shipmentProductGroups(shipment).map((group, groupIndex) => ({
       id: `${shipment.id}-${groupIndex}-${group.name}`,
       shipment,
@@ -304,7 +311,7 @@ export function ShipmentHistory({ refreshKey, workerId, canEdit, isAdmin }: Prop
       vehicle: shipment.vehicle_no ?? '',
       worker: shipment.workers?.worker_name ?? '',
       note: shipment.note ?? '',
-    }))), [shipments, calendarMode])
+    }))), [filtered, calendarMode])
 
   const filterValues = useMemo(() => Object.fromEntries(TABLE_COLUMNS.map((column) => [
     column.key,

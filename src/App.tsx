@@ -10,6 +10,9 @@ import { PurchaseStatementManager } from './components/PurchaseStatementManager'
 import { ShipmentHistory } from './components/ShipmentHistory'
 import { ShipmentScanner } from './components/ShipmentScanner'
 import { UndoButton } from './components/UndoButton'
+import { ReportingPeriodControl } from './components/ReportingPeriodControl'
+import { ReportingPeriodContext } from './lib/reportingPeriodContext'
+import { ALL_REPORTING_PERIOD, currentReportingPeriod, REPORTING_PERIOD_STORAGE_KEY, validReportingPeriod } from './lib/reportingPeriod'
 import { logoutBusinessSession, maintainBusinessSession, MANAGEMENT_MENU_URL, restoreBusinessSession } from './lib/businessAuth'
 import { useCalendarMode } from './lib/calendarMode'
 import type { Worker } from './types'
@@ -35,6 +38,16 @@ function App() {
   const [tab, setTab] = useState<Tab>(initialTab)
   const [historyVersion, setHistoryVersion] = useState(0)
   const [undoVersion, setUndoVersion] = useState(0)
+  const [reportingPeriod, setReportingPeriod] = useState(() => {
+    try {
+      const stored: unknown = JSON.parse(sessionStorage.getItem(REPORTING_PERIOD_STORAGE_KEY) ?? 'null')
+      if (validReportingPeriod(stored)) return stored
+    } catch { /* A blocked or invalid session store must not prevent startup. */ }
+    return currentReportingPeriod()
+  })
+  useEffect(() => {
+    try { sessionStorage.setItem(REPORTING_PERIOD_STORAGE_KEY, JSON.stringify(reportingPeriod)) } catch { /* The in-memory selection still works. */ }
+  }, [reportingPeriod])
   const [inspectionAuthorizationId, setInspectionAuthorizationId] = useState<string | null>(null)
   const [inspectionRegistrationId, setInspectionRegistrationId] = useState<string | null>(null)
   const [inspectionRecordTarget, setInspectionRecordTarget] = useState<InspectionRecordTarget | null>(null)
@@ -43,6 +56,16 @@ function App() {
   const inspectionSummaryScroll = useRef<InspectionSummaryScroll>({ top: 0, left: 0, pageTop: 0, pageLeft: 0, mainTop: 0, mainLeft: 0 })
   const [authorizationListState, setAuthorizationListState] = useState<AuthorizationListState>({ sort: null, columnFilters: {}, textFilters: {} })
   const authorizationListScroll = useRef<AuthorizationListScroll>({ top: 0, left: 0, pageTop: 0, pageLeft: 0, mainTop: 0, mainLeft: 0 })
+  const appTopRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const top = appTopRef.current
+    if (!top) return
+    const measure = () => document.documentElement.style.setProperty('--app-top-height', `${top.getBoundingClientRect().height}px`)
+    const observer = new ResizeObserver(measure)
+    measure()
+    observer.observe(top)
+    return () => { observer.disconnect(); document.documentElement.style.removeProperty('--app-top-height') }
+  }, [loading, worker])
 
   useEffect(() => {
     document.title = statementApplication ? '(株)エイト 仕切書読込み' : '(株)エイト 米穀出荷管理'
@@ -145,7 +168,9 @@ function App() {
   const navStyle = { '--nav-count': statementApplication ? (isAdmin ? 4 : canOperate ? 3 : 2) : isAdmin ? 8 : canOperate ? 7 : 3 } as CSSProperties
 
   return (
+    <ReportingPeriodContext.Provider value={statementApplication ? ALL_REPORTING_PERIOD : reportingPeriod}>
     <div className="app-shell">
+      <div className="app-top" ref={appTopRef}>
       <header className="app-header">
         <div className="brand-lockup">
           <span className="brand-mark"><Wheat size={21} aria-hidden="true" /></span>
@@ -170,6 +195,8 @@ function App() {
           </button>
         </div>
       </header>
+      {!statementApplication && <ReportingPeriodControl value={reportingPeriod} onChange={setReportingPeriod} />}
+      </div>
 
       <main key={undoVersion} className={`app-main ${statementApplication || tab === 'history' || tab === 'inventory-history' || tab === 'inventory' || tab === 'authorizations' || tab === 'memos' || tab === 'inspections' ? 'app-main-wide' : ''} ${statementApplication ? 'app-main-statements' : ''} ${!statementApplication && tab === 'inspections' && inspectionAuthorizationId ? 'app-main-inspection-detail' : ''} ${!statementApplication && tab === 'inspections' && !inspectionAuthorizationId ? 'app-main-inspection-summary' : ''}`}>
         {!statementApplication && tab === 'scan' && isAdmin && (
@@ -287,6 +314,7 @@ function App() {
         </>}
       </nav>
     </div>
+    </ReportingPeriodContext.Provider>
   )
 }
 
