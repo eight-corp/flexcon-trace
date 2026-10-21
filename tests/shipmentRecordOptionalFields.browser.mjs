@@ -72,14 +72,14 @@ try {
         const actions = element.querySelector('.other-rice-actions')
         const fields = [...element.querySelectorAll('.shipment-form-row')]
         return editor && summary && actions && fields.length > 0 && fields.every(field =>
-          Boolean(field.compareDocumentPosition(summary) & Node.DOCUMENT_POSITION_FOLLOWING)
-          && field.getBoundingClientRect().bottom <= summary.getBoundingClientRect().top)
-          && Boolean(summary.compareDocumentPosition(editor) & Node.DOCUMENT_POSITION_FOLLOWING)
-          && summary.getBoundingClientRect().bottom <= editor.getBoundingClientRect().top
-          && Boolean(editor.compareDocumentPosition(actions) & Node.DOCUMENT_POSITION_FOLLOWING)
-          && editor.getBoundingClientRect().bottom <= actions.getBoundingClientRect().top
+          Boolean(field.compareDocumentPosition(editor) & Node.DOCUMENT_POSITION_FOLLOWING)
+          && field.getBoundingClientRect().bottom <= editor.getBoundingClientRect().top)
+          && Boolean(editor.compareDocumentPosition(summary) & Node.DOCUMENT_POSITION_FOLLOWING)
+          && editor.getBoundingClientRect().bottom <= summary.getBoundingClientRect().top
+          && summary.nextElementSibling === actions
+          && summary.getBoundingClientRect().bottom <= actions.getBoundingClientRect().top
           && element.lastElementChild === actions
-      }), true, 'All input fields precede the detail summary/editor, with clear and register actions at the bottom')
+      }), true, 'Input fields precede the detail editor, followed by the summary immediately above clear and register actions')
       await form.getByLabel('出庫元倉庫').selectOption('00000000-0000-0000-0000-000000000005')
       const addItem = async () => {
         const editor = form.getByRole('region', { name: '出荷明細' })

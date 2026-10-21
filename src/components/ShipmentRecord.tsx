@@ -133,12 +133,12 @@ export function ShipmentRecord({ workerId, workerName, onRegistered, onOpenQrSca
       <label className="shipment-form-row"><span>仕入値（任意・1俵当たり）</span><input type="number" min="0" step="1" inputMode="decimal" value={purchasePrice} onChange={(event) => setPurchasePrice(event.target.value)} /></label>
       <label className="shipment-form-row"><span>備考（任意）</span><textarea rows={2} value={note} onChange={(event) => setNote(event.target.value)} placeholder="申し送りなど" /></label>
       <h2 className="other-rice-heading">出荷内容</h2>
+      <ShipmentRecordItemsEditor key={editorVersion} items={items} onChange={setItems} options={shipmentProducts} disabled={busy} />
       <div className="shipment-registration-summary" aria-label="出荷内容">
         <div><span>明細数</span><strong>{count}件</strong></div>
         <div><span>産地</span><strong>{origin}</strong></div>
         <div><span>種類・数量</span><strong>{products}</strong></div>
       </div>
-      <ShipmentRecordItemsEditor key={editorVersion} items={items} onChange={setItems} options={shipmentProducts} disabled={busy} />
       <div className="modal-actions other-rice-actions"><button className="secondary-button" type="button" onClick={clearForm} disabled={busy}><RotateCcw size={18} />入力をクリア</button><button className="primary-button" type="submit" disabled={busy || items.length === 0}><Send size={18} />{busy ? '登録中...' : '出荷を登録'}</button></div>
     </form>
   </div>
