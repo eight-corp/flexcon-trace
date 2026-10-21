@@ -13,6 +13,7 @@
     "test:reporting-period-browser": "node tests/reportingPeriod.browser.mjs",
     "test:shipment-history-scroll-browser": "node tests/shipmentHistoryScroll.browser.mjs",
     "test:shipment-workspace-browser": "node tests/shipmentWorkspace.browser.mjs",
+    "test:shipment-history-columns-browser": "node tests/shipmentHistoryColumns.browser.mjs",
     "test:inspection-save-browser": "node tests/inspectionSaveState.browser.mjs",
     "test:inspection-pagination-browser": "node tests/inspectionPagination.browser.mjs",
     "test:inspection-aggregate-filters-browser": "node tests/inspectionAggregateFilters.browser.mjs",

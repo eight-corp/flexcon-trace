@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase'
 import { loadAllRows } from '../lib/loadAllRows'
 import { useReportingPeriod } from '../lib/reportingPeriodContext'
 import { matchesReportingPeriod, shipmentReportingDate } from '../lib/reportingPeriod'
-import { formatDisplayCropYear, formatDisplayDateTime, formatJapaneseDateForFilename, type CalendarMode } from '../lib/japaneseEra'
+import { formatDisplayCropYear, formatDisplayDate, formatJapaneseDateForFilename, type CalendarMode } from '../lib/japaneseEra'
 import { useCalendarMode } from '../lib/calendarMode'
 import { matchesFilterText } from '../lib/tableFilters'
 import { TableColumnFilter } from './TableColumnFilter'
@@ -27,7 +27,7 @@ type Notice = { type: 'success' | 'error'; text: string } | null
 type ViewMode = 'cards' | 'table'
 type SortDirection = 'asc' | 'desc'
 type MixedShipmentInfo = { mixedNo: number; producerLabel: string }
-type TableColumn = 'shippedAt' | 'cropYear' | 'destination' | 'origin' | 'productName' | 'grade' | 'moisture' | 'reason' | 'flexconQuantity' | 'paperBagQuantity' | 'kgQuantity' | 'carrier' | 'driver' | 'vehicle' | 'worker' | 'note'
+type TableColumn = 'shippedAt' | 'destination' | 'cropYear' | 'origin' | 'productName' | 'grade' | 'flexconQuantity' | 'paperBagQuantity' | 'kgQuantity' | 'purchasePrice' | 'note'
 type ShipmentProductGroup = {
   cropYear: number | null
   origin: string
@@ -49,18 +49,14 @@ type ShipmentTableRow = {
   origin: string
   productName: string
   grade: string
-  moisture: string
-  reason: string
   flexconQuantity: number
   flexconQuantityText: string
   paperBagQuantity: number
   paperBagQuantityText: string
   kgQuantity: number
   kgQuantityText: string
-  carrier: string
-  driver: string
-  vehicle: string
-  worker: string
+  purchasePrice: number | null
+  purchasePriceText: string
   note: string
 }
 
@@ -75,21 +71,16 @@ type DestinationSummaryRow = {
 }
 
 const TABLE_COLUMNS: Array<{ key: TableColumn; label: string }> = [
-  { key: 'shippedAt', label: '出荷日時' },
-  { key: 'cropYear', label: '産年' },
+  { key: 'shippedAt', label: '出荷日' },
   { key: 'destination', label: '納品先' },
+  { key: 'cropYear', label: '産年' },
   { key: 'origin', label: '産地' },
   { key: 'productName', label: '品名' },
   { key: 'grade', label: '等級' },
-  { key: 'moisture', label: '水分' },
-  { key: 'reason', label: '理由' },
   { key: 'flexconQuantity', label: 'フレコン本数' },
   { key: 'paperBagQuantity', label: '紙袋数' },
   { key: 'kgQuantity', label: 'kg数量' },
-  { key: 'carrier', label: '運送会社' },
-  { key: 'driver', label: 'ドライバー' },
-  { key: 'vehicle', label: '車両番号' },
-  { key: 'worker', label: '担当者' },
+  { key: 'purchasePrice', label: '仕入れ値（円／俵）' },
   { key: 'note', label: '備考' },
 ]
 
@@ -174,6 +165,7 @@ function tableFilterValue(row: ShipmentTableRow, key: TableColumn) {
   if (key === 'flexconQuantity') return row.flexconQuantityText
   if (key === 'paperBagQuantity') return row.paperBagQuantityText
   if (key === 'kgQuantity') return row.kgQuantityText
+  if (key === 'purchasePrice') return row.purchasePriceText
   return row[key]
 }
 
@@ -293,25 +285,21 @@ export function ShipmentHistory({ active, refreshKey, workerId, canEdit, isAdmin
       id: `${shipment.id}-${groupIndex}-${group.name}`,
       shipment,
       originalOrder: shipmentIndex * 100 + groupIndex,
-      shippedAt: formatDisplayDateTime(shipment.shipped_at, calendarMode),
+      shippedAt: formatDisplayDate(shipmentReportingDate(shipment.shipped_at), calendarMode),
       shippedAtValue: new Date(shipment.shipped_at).getTime(),
       cropYear: formatDisplayCropYear(group.cropYear, calendarMode),
       destination: shipmentDestinationLabel(shipment),
       origin: group.origin,
       productName: group.name,
       grade: shipment.shipment_kind === 'other_rice' || shipment.shipment_kind === 'manual_record' ? group.grade : group.grade || '未入力',
-      moisture: group.moisture === null ? '' : `${group.moisture.toFixed(1)}%`,
-      reason: group.reason,
       flexconQuantity: group.unit === '本' ? group.count : 0,
       flexconQuantityText: group.unit === '本' ? `${group.count}本` : '',
       paperBagQuantity: group.unit === '袋' ? group.count : 0,
       paperBagQuantityText: group.unit === '袋' ? `${group.count}袋` : '',
       kgQuantity: group.unit === 'kg' ? group.count : 0,
       kgQuantityText: group.unit === 'kg' ? `${group.count}kg` : '',
-      carrier: shipment.carrier_name ?? '',
-      driver: shipment.driver_name ?? '',
-      vehicle: shipment.vehicle_no ?? '',
-      worker: shipment.workers?.worker_name ?? '',
+      purchasePrice: shipment.purchase_price_per_bale ?? null,
+      purchasePriceText: shipment.purchase_price_per_bale?.toLocaleString('ja-JP') ?? '',
       note: shipment.note ?? '',
     }))), [filtered, calendarMode])
 
@@ -351,7 +339,7 @@ export function ShipmentHistory({ active, refreshKey, workerId, canEdit, isAdmin
             : b[sort.key]
       const comparison = typeof left === 'number' && typeof right === 'number'
         ? left - right
-        : String(left).localeCompare(String(right), 'ja', { numeric: true })
+        : String(left ?? '').localeCompare(String(right ?? ''), 'ja', { numeric: true })
       return sort.direction === 'asc' ? comparison : -comparison
     })
   }, [columnFilters, columnTextFilters, sort, tableRows])
@@ -747,20 +735,15 @@ export function ShipmentHistory({ active, refreshKey, workerId, canEdit, isAdmin
                       </td>
                     )}
                     <td>{row.shippedAt}</td>
-                    <td>{row.cropYear}</td>
                     <td>{row.destination}</td>
+                    <td>{row.cropYear}</td>
                     <td>{row.origin}</td>
                     <td>{row.productName}</td>
                     <td>{row.grade}</td>
-                    <td className="numeric-cell">{row.moisture}</td>
-                    <td>{row.reason}</td>
                     <td className="numeric-cell">{row.flexconQuantityText}</td>
                     <td className="numeric-cell">{row.paperBagQuantityText}</td>
                     <td className="numeric-cell">{row.kgQuantityText}</td>
-                    <td>{row.carrier}</td>
-                    <td>{row.driver}</td>
-                    <td>{row.vehicle}</td>
-                    <td>{row.worker}</td>
+                    <td className="numeric-cell">{row.purchasePriceText}</td>
                     <td className="shipment-note-cell">{row.note}</td>
                   </tr>
                 ))}
