@@ -68,11 +68,18 @@ try {
       const form = page.locator('.shipment-registration-form')
       assert.equal(await form.evaluate(element => {
         const editor = element.querySelector('[aria-label="出荷明細"]')
+        const summary = element.querySelector('.shipment-registration-summary')
+        const actions = element.querySelector('.other-rice-actions')
         const fields = [...element.querySelectorAll('.shipment-form-row')]
-        return editor && fields.length > 0 && fields.every(field =>
-          Boolean(field.compareDocumentPosition(editor) & Node.DOCUMENT_POSITION_FOLLOWING)
-          && field.getBoundingClientRect().bottom <= editor.getBoundingClientRect().top)
-      }), true, 'Shipment details follow every shipment information field in DOM and visual order')
+        return editor && summary && actions && fields.length > 0 && fields.every(field =>
+          Boolean(field.compareDocumentPosition(summary) & Node.DOCUMENT_POSITION_FOLLOWING)
+          && field.getBoundingClientRect().bottom <= summary.getBoundingClientRect().top)
+          && Boolean(summary.compareDocumentPosition(editor) & Node.DOCUMENT_POSITION_FOLLOWING)
+          && summary.getBoundingClientRect().bottom <= editor.getBoundingClientRect().top
+          && Boolean(editor.compareDocumentPosition(actions) & Node.DOCUMENT_POSITION_FOLLOWING)
+          && editor.getBoundingClientRect().bottom <= actions.getBoundingClientRect().top
+          && element.lastElementChild === actions
+      }), true, 'All input fields precede the detail summary/editor, with clear and register actions at the bottom')
       await form.getByLabel('出庫元倉庫').selectOption('00000000-0000-0000-0000-000000000005')
       const addItem = async () => {
         const editor = form.getByRole('region', { name: '出荷明細' })
@@ -112,6 +119,14 @@ try {
       await form.getByLabel('ドライバー名（任意）').fill('山田')
       await form.getByLabel('車体番号（任意）').fill('青森 100')
       if (process.env.QA_ARTIFACTS) await page.screenshot({ path: path.join(process.env.QA_ARTIFACTS, `shipment-details-below-fields-${width}.png`), fullPage: true })
+      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight))
+      for (const name of ['入力をクリア', '出荷を登録']) {
+        assert.equal(await form.getByRole('button', { name, exact: true }).evaluate(element => {
+          const rect = element.getBoundingClientRect()
+          return document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2)?.closest('button') === element
+        }), true, `${name} remains reachable below the details and above navigation`)
+      }
+      if (process.env.QA_ARTIFACTS) await page.screenshot({ path: path.join(process.env.QA_ARTIFACTS, `shipment-bottom-actions-${width}.png`) })
       await form.getByRole('button', { name: '出荷を登録' }).click()
       await page.waitForFunction(() => document.querySelector('.shipment-registration-summary strong')?.textContent === '0件')
       assert.equal(requests.length, 2)
