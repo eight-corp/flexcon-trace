@@ -27,7 +27,7 @@ type Notice = { type: 'success' | 'error'; text: string } | null
 type ViewMode = 'cards' | 'table'
 type SortDirection = 'asc' | 'desc'
 type MixedShipmentInfo = { mixedNo: number; producerLabel: string }
-type TableColumn = 'shippedAt' | 'destination' | 'cropYear' | 'origin' | 'productName' | 'grade' | 'flexconQuantity' | 'paperBagQuantity' | 'kgQuantity' | 'purchasePrice' | 'note'
+type TableColumn = 'shippedAt' | 'sourceWarehouse' | 'destination' | 'cropYear' | 'origin' | 'productName' | 'grade' | 'flexconQuantity' | 'paperBagQuantity' | 'kgQuantity' | 'purchasePrice' | 'note'
 type ShipmentProductGroup = {
   cropYear: number | null
   origin: string
@@ -44,6 +44,7 @@ type ShipmentTableRow = {
   originalOrder: number
   shippedAt: string
   shippedAtValue: number
+  sourceWarehouse: string
   cropYear: string
   destination: string
   origin: string
@@ -72,6 +73,7 @@ type DestinationSummaryRow = {
 
 const TABLE_COLUMNS: Array<{ key: TableColumn; label: string }> = [
   { key: 'shippedAt', label: '出荷日' },
+  { key: 'sourceWarehouse', label: '出荷元' },
   { key: 'destination', label: '納品先' },
   { key: 'cropYear', label: '産年' },
   { key: 'origin', label: '産地' },
@@ -235,7 +237,7 @@ export function ShipmentHistory({ active, refreshKey, workerId, canEdit, isAdmin
     if (!active) return
     let cancelled = false
     void Promise.all([
-      loadAllRows((from, to) => supabase.from('flexcon_shipments').select('id, destination_id, transport_profile_id, shipped_at, carrier_name, driver_name, vehicle_no, note, shipment_kind, origin_prefecture, product_name, quantity_count, purchase_price_per_bale, flexcon_destinations(name), flexcon_shipment_items(lot_number, origin_prefecture, product_name, grade, moisture, reason), flexcon_manual_shipment_items(id, crop_year, origin_prefecture, product_name, quantity_count, unit, grade, moisture, reason, sort_order), workers(worker_name)').order('shipped_at', { ascending: false }).order('id').range(from, to)),
+      loadAllRows((from, to) => supabase.from('flexcon_shipments').select('id, destination_id, transport_profile_id, shipped_at, carrier_name, driver_name, vehicle_no, note, shipment_kind, origin_prefecture, product_name, quantity_count, purchase_price_per_bale, source_warehouse:flexcon_inspection_options!inventory_from_warehouse_id(name), flexcon_destinations(name), flexcon_shipment_items(lot_number, origin_prefecture, product_name, grade, moisture, reason), flexcon_manual_shipment_items(id, crop_year, origin_prefecture, product_name, quantity_count, unit, grade, moisture, reason, sort_order), workers(worker_name)').order('shipped_at', { ascending: false }).order('id').range(from, to)),
       supabase.from('flexcon_mixed_flexcons').select('mixed_no, lot_number, flexcon_mixed_flexcon_members(sort_order, flexcon_authorizations(full_name))'),
     ]).then(([shipmentResult, mixedResult]) => {
       if (cancelled) return
@@ -287,6 +289,7 @@ export function ShipmentHistory({ active, refreshKey, workerId, canEdit, isAdmin
       originalOrder: shipmentIndex * 100 + groupIndex,
       shippedAt: formatDisplayDate(shipmentReportingDate(shipment.shipped_at), calendarMode),
       shippedAtValue: new Date(shipment.shipped_at).getTime(),
+      sourceWarehouse: shipment.source_warehouse?.name ?? '未設定',
       cropYear: formatDisplayCropYear(group.cropYear, calendarMode),
       destination: shipmentDestinationLabel(shipment),
       origin: group.origin,
@@ -735,6 +738,7 @@ export function ShipmentHistory({ active, refreshKey, workerId, canEdit, isAdmin
                       </td>
                     )}
                     <td>{row.shippedAt}</td>
+                    <td>{row.sourceWarehouse}</td>
                     <td>{row.destination}</td>
                     <td>{row.cropYear}</td>
                     <td>{row.origin}</td>
