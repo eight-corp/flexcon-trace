@@ -129,7 +129,7 @@ try {
       if (process.env.QA_ARTIFACTS) await page.screenshot({ path: path.join(process.env.QA_ARTIFACTS, `shipment-optional-fields-${width}.png`), fullPage: true })
       // Preserve access to historical records that predate required destinations.
       requests[0].p_destination_id = null
-      await page.getByRole('button', { name: '出荷履歴', exact: true }).click()
+      await page.getByRole('tab', { name: '履歴', exact: true }).click()
       const table = page.locator('.shipment-table')
       await table.locator('thead th').first().getByText('操作').waitFor()
       await table.locator('tbody tr').first().getByRole('button', { name: /出荷履歴を編集/ }).waitFor()
@@ -167,6 +167,7 @@ try {
       assert.equal(updates[0].p_items[0].crop_year, 2025)
       await history.locator('.shipment-item').first().getByText('ドライバー：田中').waitFor()
       await page.clock.setFixedTime('2027-01-01T00:01:00+09:00')
+      await page.getByRole('button', { name: '在庫', exact: true }).click()
       await page.getByRole('button', { name: '出荷記録', exact: true }).click()
       assert.equal(await editor.getByLabel('産年').first().inputValue(), '9')
       await page.getByRole('switch', { name: '西暦表示', exact: true }).click()

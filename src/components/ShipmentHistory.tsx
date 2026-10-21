@@ -16,6 +16,7 @@ import { ShipmentRecordItemsEditor } from './ShipmentRecordItemsEditor'
 import { type ShipmentRecordItemDraft, validateShipmentRecordItems } from '../lib/shipmentRecordValidation'
 
 type Props = {
+  active: boolean
   refreshKey: number
   workerId: string
   canEdit: boolean
@@ -208,7 +209,7 @@ function ShipmentColumnHeader({
   )
 }
 
-export function ShipmentHistory({ refreshKey, workerId, canEdit, isAdmin }: Props) {
+export function ShipmentHistory({ active, refreshKey, workerId, canEdit, isAdmin }: Props) {
   const reportingPeriod = useReportingPeriod()
   const { mode: calendarMode, formatDateTime: formatShipmentDateTime } = useCalendarMode()
   const [shipments, setShipments] = useState<Shipment[]>([])
@@ -239,6 +240,7 @@ export function ShipmentHistory({ refreshKey, workerId, canEdit, isAdmin }: Prop
   }, [calendarMode])
 
   useEffect(() => {
+    if (!active) return
     let cancelled = false
     void Promise.all([
       loadAllRows((from, to) => supabase.from('flexcon_shipments').select('id, destination_id, transport_profile_id, shipped_at, carrier_name, driver_name, vehicle_no, note, shipment_kind, origin_prefecture, product_name, quantity_count, purchase_price_per_bale, flexcon_destinations(name), flexcon_shipment_items(lot_number, origin_prefecture, product_name, grade, moisture, reason), flexcon_manual_shipment_items(id, crop_year, origin_prefecture, product_name, quantity_count, unit, grade, moisture, reason, sort_order), workers(worker_name)').order('shipped_at', { ascending: false }).order('id').range(from, to)),
@@ -267,10 +269,10 @@ export function ShipmentHistory({ refreshKey, workerId, canEdit, isAdmin }: Prop
       }
       })
     return () => { cancelled = true }
-  }, [refreshKey, localVersion])
+  }, [active, refreshKey, localVersion])
 
   useEffect(() => {
-    if (!canEdit) return
+    if (!active || !canEdit) return
     void Promise.all([
       supabase.from('flexcon_destinations').select('*').order('active', { ascending: false }).order('name'),
       supabase.from('flexcon_transport_profiles').select('*').order('active', { ascending: false }).order('company_name'),
@@ -282,7 +284,7 @@ export function ShipmentHistory({ refreshKey, workerId, canEdit, isAdmin }: Prop
       else setTransportProfiles((transportResult.data ?? []) as TransportProfile[])
       if (!productResult.error) setShipmentProducts((productResult.data ?? []) as InspectionOption[])
     })
-  }, [canEdit])
+  }, [active, canEdit])
 
   const filtered = useMemo(() => shipments.filter(shipment => matchesReportingPeriod(shipmentReportingDate(shipment.shipped_at), reportingPeriod)), [shipments, reportingPeriod])
 
@@ -638,6 +640,8 @@ export function ShipmentHistory({ refreshKey, workerId, canEdit, isAdmin }: Prop
     anchor.click()
     URL.revokeObjectURL(url)
   }
+
+  if (!active) return null
 
   return (
     <div>

@@ -75,8 +75,17 @@ try {
         }), true, 'undo stays reachable above page dialogs')
       }
       const tabs = scenario.statements ? ['仕切書読込', '確認待ち', '仕切書一覧']
-        : ['入出庫管理', '検査記録', '出荷記録', '出荷履歴', '在庫', '委任状一覧', 'メモ書き', ...(scenario.actor === 'admin' ? ['マスタ'] : [])]
-      for (const tab of tabs) { await navigation.getByRole('button', { name: tab, exact: true }).click(); await checkPosition() }
+        : ['入出庫管理', '検査記録', '出荷記録', '在庫', '委任状一覧', 'メモ書き', ...(scenario.actor === 'admin' ? ['マスタ'] : [])]
+      for (const tab of tabs) {
+        await navigation.getByRole('button', { name: tab, exact: true }).click()
+        await checkPosition()
+        if (tab === '出荷記録') {
+          await page.getByRole('tab', { name: '履歴', exact: true }).click()
+          await checkPosition()
+          await page.getByRole('tab', { name: '登録', exact: true }).click()
+          await checkPosition()
+        }
+      }
       if (scenario.statements || scenario.actor === 'admin' || scenario.width === 320) {
         if (process.env.QA_ARTIFACTS) await page.screenshot({ path: path.join(process.env.QA_ARTIFACTS, `undo-position-${scenario.actor}-${scenario.statements ? 'statements' : 'rice'}-${scenario.width}.png`) })
         assert.deepEqual(errors, [])
@@ -123,6 +132,7 @@ try {
       await edit.getByLabel('メモ内容', { exact: true }).fill('Pending save')
       await edit.getByRole('button', { name: '保存', exact: true }).click()
       await sawSavePromise
+      await page.waitForFunction(() => document.querySelector('.global-undo-button')?.disabled)
       assert.equal(await button.isDisabled(), true)
       releaseSave()
       await page.locator('.memo-preview').filter({ hasText: 'Pending save' }).waitFor()
