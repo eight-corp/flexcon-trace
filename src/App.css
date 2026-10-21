@@ -983,6 +983,7 @@ table thead th { text-align: center !important; }
   .app-main { padding: 20px 22px 34px; }
   .app-main.app-main-wide { width: 100%; max-width: none; height: calc(100dvh - var(--app-top-height, 64px)); padding-bottom: 20px; overflow: hidden; }
   .app-main.app-main-inspection-summary { height: auto; min-height: calc(100dvh - var(--app-top-height, 64px)); padding-bottom: 34px; overflow: visible; }
+  .app-main.app-main-shipment-history { height: auto; min-height: calc(100dvh - var(--app-top-height, 64px)); padding-bottom: 34px; overflow: visible; }
   .app-main.app-main-wide.app-main-statements { height: auto; min-height: calc(100dvh - var(--app-top-height, 64px)); padding-bottom: 34px; overflow-x: auto; overflow-y: visible; }
   .app-main-wide .authorization-page { height: 100%; min-height: 0; display: flex; flex-direction: column; }
   .app-main-wide .memo-page { height: 100%; }
