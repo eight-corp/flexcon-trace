@@ -73,7 +73,8 @@ test('undo restores business operations exactly and protects operator boundaries
       await call('tester', 'flexcon_add_inventory_movement', movement)
       const stockBefore = (await db.query('select * from flexcon_inventory_balances_by_crop_year order by warehouse_id,product_name,grade,unit')).rows
       await roundTrip('tester', 'flexcon_add_inventory_movement', { ...movement, p_from_warehouse_id: warehouseA, p_to_warehouse_id: warehouseB, p_quantity: 3 })
-      await roundTrip('tester', 'flexcon_register_inventory_record', { p_destination_id: null, p_transport_profile_id: null, p_shipped_at: '2026-10-16T09:00:00+09:00', p_driver_name: 'Driver', p_vehicle_no: 'Test', p_purchase_price_per_bale: null, p_from_warehouse_id: warehouseA, p_note: '', p_items: [{ crop_year: 2026, origin_prefecture: '青森県', product_name: '青天のへきれき', quantity_count: 2, grade: '1等', unit: '本' }] })
+      const destination = await call('admin', 'flexcon_add_destination', { p_name: 'Undo destination', p_address: '', p_contact_name: '' })
+      await roundTrip('tester', 'flexcon_register_inventory_record', { p_destination_id: destination, p_transport_profile_id: null, p_shipped_at: '2026-10-16T09:00:00+09:00', p_driver_name: 'Driver', p_vehicle_no: 'Test', p_purchase_price_per_bale: null, p_from_warehouse_id: warehouseA, p_note: '', p_items: [{ crop_year: 2026, origin_prefecture: '青森県', product_name: '青天のへきれき', quantity_count: 2, grade: '1等', unit: '本' }] })
       assert.deepEqual((await db.query('select * from flexcon_inventory_balances_by_crop_year order by warehouse_id,product_name,grade,unit')).rows, stockBefore)
     })
     await t.test('statement reading, immutable image attachment, confirmation and deletion round trip', async () => {

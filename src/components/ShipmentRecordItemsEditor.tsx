@@ -12,7 +12,7 @@ type Props = {
 }
 
 export function ShipmentRecordItemsEditor({ items, onChange, options, disabled = false }: Props) {
-  const [cropYear, setCropYear] = useState('')
+  const [cropYear, setCropYear] = useState(() => String(new Date().getFullYear()))
   const [origin, setOrigin] = useState('')
   const [product, setProduct] = useState('')
   const [grade, setGrade] = useState('')
@@ -42,6 +42,7 @@ export function ShipmentRecordItemsEditor({ items, onChange, options, disabled =
         quantityCount: String(count), unit,
       }])
     }
+    setCropYear(String(new Date().getFullYear()))
     setProduct('')
     setGrade('')
     setQuantity('1')

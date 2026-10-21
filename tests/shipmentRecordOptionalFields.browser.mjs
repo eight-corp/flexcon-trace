@@ -8,7 +8,7 @@ const uuid = number => `00000000-0000-0000-0000-${String(number).padStart(12, '0
 const browser = await chromium.launch({ channel: 'chrome', headless: true })
 try {
   for (const width of [1440, 390]) {
-    const context = await browser.newContext({ viewport: { width, height: 900 }, serviceWorkers: 'block' })
+    const context = await browser.newContext({ viewport: { width, height: 900 }, timezoneId: 'Asia/Tokyo', serviceWorkers: 'block' })
     const requests = []
     const updates = []
     const errors = []
@@ -62,9 +62,17 @@ try {
       })
       const page = await context.newPage()
       page.on('pageerror', error => errors.push(error.message))
+      await page.clock.setFixedTime('2026-10-21T12:00:00+09:00')
       await page.goto('https://shipment.test/')
       await page.getByRole('button', { name: '出荷記録', exact: true }).click()
       const form = page.locator('.shipment-registration-form')
+      assert.equal(await form.evaluate(element => {
+        const editor = element.querySelector('[aria-label="出荷明細"]')
+        const fields = [...element.querySelectorAll('.shipment-form-row')]
+        return editor && fields.length > 0 && fields.every(field =>
+          Boolean(field.compareDocumentPosition(editor) & Node.DOCUMENT_POSITION_FOLLOWING)
+          && field.getBoundingClientRect().bottom <= editor.getBoundingClientRect().top)
+      }), true, 'Shipment details follow every shipment information field in DOM and visual order')
       await form.getByLabel('出庫元倉庫').selectOption('00000000-0000-0000-0000-000000000005')
       const addItem = async () => {
         const editor = form.getByRole('region', { name: '出荷明細' })
@@ -74,15 +82,22 @@ try {
         await editor.getByRole('button', { name: '追加' }).click()
       }
       const editor = form.getByRole('region', { name: '出荷明細' })
+      assert.equal(await editor.getByLabel('産年').first().inputValue(), '8', 'New detail defaults to this year')
+      await editor.getByLabel('産年').first().fill('')
       await editor.getByRole('button', { name: '追加' }).click()
       await editor.getByRole('alert').getByText('産年を入力してください。').waitFor()
       await addItem()
-      assert.equal(await form.getByLabel('納品先（任意）').getAttribute('required'), null)
+      assert.notEqual(await form.getByLabel('納品先', { exact: true }).getAttribute('required'), null)
+      await form.getByRole('button', { name: '出荷を登録' }).click()
+      await page.getByRole('alert').getByText('納品先を選択してください。').waitFor()
+      assert.equal(requests.length, 0, 'Missing destination must never reach the server')
+      await form.getByLabel('納品先', { exact: true }).selectOption(uuid(1))
       await form.getByRole('button', { name: '出荷を登録' }).click()
       await page.getByRole('status').getByText('1件の出荷明細を登録しました。').waitFor()
       assert.equal(requests.length, 1)
       assert.equal(requests[0].p_items[0].crop_year, 2026)
-      for (const key of ['p_destination_id', 'p_transport_profile_id', 'p_driver_name', 'p_vehicle_no']) {
+      assert.equal(requests[0].p_destination_id, uuid(1))
+      for (const key of ['p_transport_profile_id', 'p_driver_name', 'p_vehicle_no']) {
         assert.equal(requests[0][key], null)
       }
 
@@ -91,10 +106,12 @@ try {
       await editor.getByLabel('種類').first().selectOption('米')
       await editor.getByRole('button', { name: '追加' }).click()
       assert.equal(await editor.locator('.record-item-row').count(), 2)
-      await form.getByLabel('納品先（任意）').selectOption('00000000-0000-0000-0000-000000000001')
+      assert.equal(await editor.getByLabel('産年').first().inputValue(), '8', 'Next detail defaults to this year without changing added items')
+      await form.getByLabel('納品先', { exact: true }).selectOption('00000000-0000-0000-0000-000000000001')
       await form.getByLabel('運送会社（任意）').selectOption('00000000-0000-0000-0000-000000000003')
       await form.getByLabel('ドライバー名（任意）').fill('山田')
       await form.getByLabel('車体番号（任意）').fill('青森 100')
+      if (process.env.QA_ARTIFACTS) await page.screenshot({ path: path.join(process.env.QA_ARTIFACTS, `shipment-details-below-fields-${width}.png`), fullPage: true })
       await form.getByRole('button', { name: '出荷を登録' }).click()
       await page.waitForFunction(() => document.querySelector('.shipment-registration-summary strong')?.textContent === '0件')
       assert.equal(requests.length, 2)
@@ -106,7 +123,12 @@ try {
         p_vehicle_no: '青森 100',
       })
       assert.deepEqual(errors, [])
+      await editor.getByLabel('産年').first().fill('7')
+      await form.getByRole('button', { name: '入力をクリア', exact: true }).click()
+      assert.equal(await editor.getByLabel('産年').first().inputValue(), '8')
       if (process.env.QA_ARTIFACTS) await page.screenshot({ path: path.join(process.env.QA_ARTIFACTS, `shipment-optional-fields-${width}.png`), fullPage: true })
+      // Preserve access to historical records that predate required destinations.
+      requests[0].p_destination_id = null
       await page.getByRole('button', { name: '出荷履歴', exact: true }).click()
       const table = page.locator('.shipment-table')
       await table.locator('thead th').first().getByText('操作').waitFor()
@@ -127,21 +149,30 @@ try {
       await history.locator('.shipment-item').first().getByRole('button', { name: '出荷履歴を編集' }).click()
       const dialog = page.getByRole('dialog', { name: '出荷履歴を編集' })
       assert.equal(await dialog.getByLabel('産年').last().inputValue(), '8')
-      assert.equal(await dialog.getByLabel('納品先（任意）').getAttribute('required'), null)
+      assert.notEqual(await dialog.getByLabel('納品先', { exact: true }).getAttribute('required'), null)
       assert.equal(await dialog.getByLabel('運送会社（任意）').getAttribute('required'), null)
       await dialog.getByLabel('ドライバー名（任意）').fill('田中')
       await dialog.getByLabel('車体番号（任意）').fill('青森 101')
       await dialog.getByLabel('産年').last().fill('7')
       await dialog.getByRole('button', { name: '変更を保存' }).click()
+      await page.getByRole('alert').getByText('納品先を選択してください。').waitFor()
+      assert.equal(updates.length, 0)
+      await dialog.getByLabel('納品先', { exact: true }).selectOption(uuid(1))
+      await dialog.getByRole('button', { name: '変更を保存' }).click()
       assert.equal(updates.length, 1)
-      assert.equal(updates[0].p_destination_id, null)
+      assert.equal(updates[0].p_destination_id, uuid(1))
       assert.equal(updates[0].p_transport_profile_id, null)
       assert.equal(updates[0].p_driver_name, '田中')
       assert.equal(updates[0].p_vehicle_no, '青森 101')
       assert.equal(updates[0].p_items[0].crop_year, 2025)
       await history.locator('.shipment-item').first().getByText('ドライバー：田中').waitFor()
+      await page.clock.setFixedTime('2027-01-01T00:01:00+09:00')
+      await page.getByRole('button', { name: '出荷記録', exact: true }).click()
+      assert.equal(await editor.getByLabel('産年').first().inputValue(), '9')
+      await page.getByRole('switch', { name: '西暦表示', exact: true }).click()
+      assert.equal(await editor.getByLabel('産年').first().inputValue(), '2027')
       assert.deepEqual(errors, [])
-      console.log(`PASS ${width}px: optional shipment destination and transport fields`)
+      console.log(`PASS ${width}px: details below shipment fields, required destination, optional transport, current-year defaults, rollover, registration and legacy editing`)
     } finally {
       await context.close()
     }

@@ -466,6 +466,7 @@ export function ShipmentHistory({ refreshKey, workerId, canEdit, isAdmin }: Prop
   const saveEdit = async (event: React.FormEvent) => {
     event.preventDefault()
     if (!editing || !canEdit) return
+    if (!destinationId) return setNotice({ type: 'error', text: '納品先を選択してください。' })
     setBusy(true)
     if (editing.shipment_kind === 'manual_record') {
       const recordError = validateShipmentRecordItems(recordItems, shipmentProducts, false)
@@ -495,7 +496,7 @@ export function ShipmentHistory({ refreshKey, workerId, canEdit, isAdmin }: Prop
     const commonValues = {
       p_worker_id: workerId,
       p_shipment_id: editing.id,
-      p_destination_id: editing.shipment_kind === 'manual_record' ? destinationId || null : destinationId,
+      p_destination_id: destinationId,
       p_transport_profile_id: editing.shipment_kind === 'manual_record' ? transportProfileId || null : transportProfileId,
       p_shipped_at: new Date(shippedAt).toISOString(),
       p_driver_name: editing.shipment_kind === 'manual_record' ? driverName.trim() || null : driverName.trim(),
@@ -774,7 +775,7 @@ export function ShipmentHistory({ refreshKey, workerId, canEdit, isAdmin }: Prop
               <button className="icon-button" type="button" title="閉じる" aria-label="編集画面を閉じる" onClick={() => setEditing(null)} disabled={busy}><X size={21} /></button>
             </div>
 
-            {notice?.type === 'error' && <div className="notice error">{notice.text}</div>}
+            {notice?.type === 'error' && <div className="notice error" role="alert">{notice.text}</div>}
 
             {editing.flexcon_shipment_items.length > 0 && <div className="lot-tags history-edit-lots">{editing.flexcon_shipment_items.map((item) => {
               const mixed = mixedShipmentByLot[item.lot_number]
@@ -786,9 +787,9 @@ export function ShipmentHistory({ refreshKey, workerId, canEdit, isAdmin }: Prop
               {(editing.shipment_kind === 'paper_bag' || editing.shipment_kind === 'other_rice') && <ManualShipmentItemsEditor key={editing.id} kind={editing.shipment_kind} items={manualItems} onChange={setManualItems} shipmentProducts={shipmentProducts} disabled={busy} />}
               <div className="form-grid two">
                 <label>出荷日時<JapaneseDateTimeInput value={shippedAt} onChange={setShippedAt} required /></label>
-                <label>{editing.shipment_kind === 'manual_record' ? '納品先（任意）' : '納品先'}
-                  <select value={destinationId} onChange={(e) => setDestinationId(e.target.value)} required={editing.shipment_kind !== 'manual_record'}>
-                    <option value="">{editing.shipment_kind === 'manual_record' ? '未設定' : '選択してください'}</option>
+                <label>納品先
+                  <select aria-label="納品先" className={!destinationId ? 'shipment-required-missing' : ''} value={destinationId} onChange={(e) => setDestinationId(e.target.value)} required>
+                    <option value="">選択してください</option>
                     {destinations.map((item) => <option key={item.id} value={item.id} disabled={!item.active}>{item.name}{item.active ? '' : '（無効）'}</option>)}
                   </select>
                 </label>

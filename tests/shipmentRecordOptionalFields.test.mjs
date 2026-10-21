@@ -7,7 +7,7 @@ const migration = readFileSync(new URL('../supabase/migrations/202609300001_opti
 const operatorEditMigration = readFileSync(new URL('../supabase/migrations/202609300002_operator_shipment_history_edit.sql', import.meta.url), 'utf8')
 const uuid = (number) => `00000000-0000-0000-0000-${String(number).padStart(12, '0')}`
 
-test('shipment records accept optional destination and transport details without relaxing other shipments', async (t) => {
+test('historical optional-destination migrations remain compatible before the required-destination rollout', async (t) => {
   const db = new PGlite()
   try {
     await db.exec(`
