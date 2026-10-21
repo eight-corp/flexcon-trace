@@ -29,7 +29,7 @@ try {
         } else if (resource === 'rpc/flexcon_register_inventory_record') {
           requests.push(route.request().postDataJSON())
           body = uuid(requests.length)
-        } else if (resource === 'rpc/flexcon_update_inventory_record') {
+        } else if (resource === 'rpc/flexcon_update_shipment_with_source') {
           const values = route.request().postDataJSON()
           updates.push(values)
           const index = requests.findIndex((_, i) => uuid(i + 1) === values.p_shipment_id)
@@ -39,6 +39,8 @@ try {
         } else if (resource === 'flexcon_shipments') {
           body = requests.map((values, index) => ({
             id: uuid(index + 1), destination_id: values.p_destination_id,
+            inventory_from_warehouse_id: values.p_from_warehouse_id,
+            source_warehouse: { name: '倉庫A' },
             transport_profile_id: values.p_transport_profile_id, shipped_at: values.p_shipped_at,
             carrier_name: values.p_transport_profile_id ? '運送会社A' : null,
             driver_name: values.p_driver_name, vehicle_no: values.p_vehicle_no,
@@ -163,6 +165,7 @@ try {
       await history.locator('.shipment-item').first().getByText('未設定', { exact: true }).waitFor()
       await history.locator('.shipment-item').first().getByRole('button', { name: '出荷履歴を編集' }).click()
       const dialog = page.getByRole('dialog', { name: '出荷履歴を編集' })
+      assert.equal(await dialog.getByLabel('出荷元（出庫元倉庫）', { exact: true }).inputValue(), '00000000-0000-0000-0000-000000000005')
       assert.equal(await dialog.getByLabel('産年').last().inputValue(), '8')
       assert.notEqual(await dialog.getByLabel('納品先', { exact: true }).getAttribute('required'), null)
       assert.equal(await dialog.getByLabel('運送会社（任意）').getAttribute('required'), null)
@@ -176,6 +179,7 @@ try {
       await dialog.getByRole('button', { name: '変更を保存' }).click()
       assert.equal(updates.length, 1)
       assert.equal(updates[0].p_destination_id, uuid(1))
+      assert.equal(updates[0].p_from_warehouse_id, '00000000-0000-0000-0000-000000000005')
       assert.equal(updates[0].p_transport_profile_id, null)
       assert.equal(updates[0].p_driver_name, '田中')
       assert.equal(updates[0].p_vehicle_no, '青森 101')

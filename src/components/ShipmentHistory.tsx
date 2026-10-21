@@ -210,12 +210,14 @@ export function ShipmentHistory({ active, refreshKey, workerId, canEdit, isAdmin
   const [destinations, setDestinations] = useState<Destination[]>([])
   const [transportProfiles, setTransportProfiles] = useState<TransportProfile[]>([])
   const [shipmentProducts, setShipmentProducts] = useState<InspectionOption[]>([])
+  const [warehouses, setWarehouses] = useState<InspectionOption[]>([])
   const [mixedShipmentByLot, setMixedShipmentByLot] = useState<Record<string, MixedShipmentInfo>>({})
   const [notice, setNotice] = useState<Notice>(null)
   const [localVersion, setLocalVersion] = useState(0)
   const [editing, setEditing] = useState<Shipment | null>(null)
   const [shippedAt, setShippedAt] = useState('')
   const [destinationId, setDestinationId] = useState('')
+  const [fromWarehouseId, setFromWarehouseId] = useState('')
   const [transportProfileId, setTransportProfileId] = useState('')
   const [driverName, setDriverName] = useState('')
   const [vehicleNo, setVehicleNo] = useState('')
@@ -237,7 +239,7 @@ export function ShipmentHistory({ active, refreshKey, workerId, canEdit, isAdmin
     if (!active) return
     let cancelled = false
     void Promise.all([
-      loadAllRows((from, to) => supabase.from('flexcon_shipments').select('id, destination_id, transport_profile_id, shipped_at, carrier_name, driver_name, vehicle_no, note, shipment_kind, origin_prefecture, product_name, quantity_count, purchase_price_per_bale, source_warehouse:flexcon_inspection_options!inventory_from_warehouse_id(name), flexcon_destinations(name), flexcon_shipment_items(lot_number, origin_prefecture, product_name, grade, moisture, reason), flexcon_manual_shipment_items(id, crop_year, origin_prefecture, product_name, quantity_count, unit, grade, moisture, reason, sort_order), workers(worker_name)').order('shipped_at', { ascending: false }).order('id').range(from, to)),
+      loadAllRows((from, to) => supabase.from('flexcon_shipments').select('id, destination_id, inventory_from_warehouse_id, transport_profile_id, shipped_at, carrier_name, driver_name, vehicle_no, note, shipment_kind, origin_prefecture, product_name, quantity_count, purchase_price_per_bale, source_warehouse:flexcon_inspection_options!inventory_from_warehouse_id(name), flexcon_destinations(name), flexcon_shipment_items(lot_number, origin_prefecture, product_name, grade, moisture, reason), flexcon_manual_shipment_items(id, crop_year, origin_prefecture, product_name, quantity_count, unit, grade, moisture, reason, sort_order), workers(worker_name)').order('shipped_at', { ascending: false }).order('id').range(from, to)),
       supabase.from('flexcon_mixed_flexcons').select('mixed_no, lot_number, flexcon_mixed_flexcon_members(sort_order, flexcon_authorizations(full_name))'),
     ]).then(([shipmentResult, mixedResult]) => {
       if (cancelled) return
@@ -270,13 +272,18 @@ export function ShipmentHistory({ active, refreshKey, workerId, canEdit, isAdmin
     void Promise.all([
       supabase.from('flexcon_destinations').select('*').order('active', { ascending: false }).order('name'),
       supabase.from('flexcon_transport_profiles').select('*').order('active', { ascending: false }).order('company_name'),
-      supabase.from('flexcon_inspection_options').select('*').in('option_type', ['shipment_product', 'brand', 'brand_aomori', 'brand_iwate', 'grade', 'grade_reason']).order('sort_order').order('name'),
+      supabase.from('flexcon_inspection_options').select('*').in('option_type', ['shipment_product', 'brand', 'brand_aomori', 'brand_iwate', 'grade', 'grade_reason', 'warehouse']).order('sort_order').order('name'),
     ]).then(([destinationResult, transportResult, productResult]) => {
       if (destinationResult.error) setNotice({ type: 'error', text: destinationResult.error.message })
       else setDestinations((destinationResult.data ?? []) as Destination[])
       if (transportResult.error) setNotice({ type: 'error', text: transportResult.error.message })
       else setTransportProfiles((transportResult.data ?? []) as TransportProfile[])
-      if (!productResult.error) setShipmentProducts((productResult.data ?? []) as InspectionOption[])
+      if (productResult.error) setNotice({ type: 'error', text: '出荷元などのマスタを取得できませんでした。' })
+      else {
+        const options = (productResult.data ?? []) as InspectionOption[]
+        setShipmentProducts(options.filter((item) => item.option_type !== 'warehouse'))
+        setWarehouses(options.filter((item) => item.option_type === 'warehouse'))
+      }
     })
   }, [active, canEdit])
 
@@ -413,6 +420,7 @@ export function ShipmentHistory({ active, refreshKey, workerId, canEdit, isAdmin
     setEditing(shipment)
     setShippedAt(toLocalDateTime(shipment.shipped_at))
     setDestinationId(shipment.destination_id ?? '')
+    setFromWarehouseId(shipment.inventory_from_warehouse_id ?? '')
     setTransportProfileId(
       shipment.transport_profile_id
       ?? transportProfiles.find((item) => item.company_name === shipment.carrier_name)?.id
@@ -460,6 +468,7 @@ export function ShipmentHistory({ active, refreshKey, workerId, canEdit, isAdmin
     event.preventDefault()
     if (!editing || !canEdit) return
     if (!destinationId) return setNotice({ type: 'error', text: '納品先を選択してください。' })
+    if (!fromWarehouseId && editing.inventory_from_warehouse_id) return setNotice({ type: 'error', text: '出荷元（出庫元倉庫）を選択してください。' })
     setBusy(true)
     if (editing.shipment_kind === 'manual_record') {
       const recordError = validateShipmentRecordItems(recordItems, shipmentProducts, false)
@@ -497,36 +506,25 @@ export function ShipmentHistory({ active, refreshKey, workerId, canEdit, isAdmin
       p_purchase_price_per_bale: purchasePrice.trim() === '' ? null : Number(purchasePrice),
       p_note: note.trim() || null,
     }
-    const { error } = editing.shipment_kind === 'manual_record'
-      ? await supabase.rpc('flexcon_update_inventory_record', {
-        ...commonValues,
-        p_items: recordItems.map((item) => ({
-          crop_year: item.cropYear ? Number(item.cropYear) : null,
-          origin_prefecture: item.originPrefecture,
-          product_name: item.productName,
-          quantity_count: Number(item.quantityCount),
-          grade: item.grade || null,
-          unit: item.unit,
-        })),
-      })
-      : editing.shipment_kind === 'qr_flexcon'
-      ? await supabase.rpc('flexcon_update_shipment', {
-        ...commonValues,
-        p_origin_prefecture: null,
-        p_product_name: null,
-        p_quantity_count: editing.quantity_count ?? editing.flexcon_shipment_items.length,
-      })
-      : await supabase.rpc('flexcon_update_manual_shipment', {
-        ...commonValues,
-        p_items: manualItems.map((item) => ({
-          origin_prefecture: item.originPrefecture,
-          product_name: item.productName,
-          quantity_count: Number(item.quantityCount),
-          grade: editing.shipment_kind === 'paper_bag' ? item.grade : null,
-          moisture: editing.shipment_kind === 'paper_bag' ? Number(item.moisture) : null,
-          reason: editing.shipment_kind === 'paper_bag' ? item.reason || null : null,
-        })),
-      })
+    const { error } = await supabase.rpc('flexcon_update_shipment_with_source', {
+      ...commonValues,
+      p_from_warehouse_id: fromWarehouseId || null,
+      p_items: editing.shipment_kind === 'manual_record' ? recordItems.map((item) => ({
+        crop_year: item.cropYear ? Number(item.cropYear) : null,
+        origin_prefecture: item.originPrefecture,
+        product_name: item.productName,
+        quantity_count: Number(item.quantityCount),
+        grade: item.grade || null,
+        unit: item.unit,
+      })) : editing.shipment_kind === 'qr_flexcon' ? null : manualItems.map((item) => ({
+        origin_prefecture: item.originPrefecture,
+        product_name: item.productName,
+        quantity_count: Number(item.quantityCount),
+        grade: editing.shipment_kind === 'paper_bag' ? item.grade : null,
+        moisture: editing.shipment_kind === 'paper_bag' ? Number(item.moisture) : null,
+        reason: editing.shipment_kind === 'paper_bag' ? item.reason || null : null,
+      })),
+    })
     if (error) {
       setNotice({ type: 'error', text: error.message })
     } else {
@@ -776,8 +774,15 @@ export function ShipmentHistory({ active, refreshKey, workerId, canEdit, isAdmin
             <form className="form-grid" noValidate onSubmit={(event) => void saveEdit(event)}>
               {editing.shipment_kind === 'manual_record' && <ShipmentRecordItemsEditor key={editing.id} items={recordItems} onChange={setRecordItems} options={shipmentProducts} disabled={busy} />}
               {(editing.shipment_kind === 'paper_bag' || editing.shipment_kind === 'other_rice') && <ManualShipmentItemsEditor key={editing.id} kind={editing.shipment_kind} items={manualItems} onChange={setManualItems} shipmentProducts={shipmentProducts} disabled={busy} />}
+              <label>出荷日時<JapaneseDateTimeInput value={shippedAt} onChange={setShippedAt} required /></label>
               <div className="form-grid two">
-                <label>出荷日時<JapaneseDateTimeInput value={shippedAt} onChange={setShippedAt} required /></label>
+                <label>出荷元（出庫元倉庫）
+                  <select aria-label="出荷元（出庫元倉庫）" value={fromWarehouseId} onChange={(event) => setFromWarehouseId(event.target.value)} required={Boolean(editing.inventory_from_warehouse_id)}>
+                    <option value="" disabled={Boolean(editing.inventory_from_warehouse_id)}>未設定</option>
+                    {editing.inventory_from_warehouse_id && !warehouses.some((item) => item.id === editing.inventory_from_warehouse_id) && <option value={editing.inventory_from_warehouse_id}>{editing.source_warehouse?.name ?? '設定済み倉庫'}</option>}
+                    {warehouses.filter((item) => item.active || item.id === editing.inventory_from_warehouse_id).map((item) => <option key={item.id} value={item.id}>{item.name}{item.active ? '' : '（無効）'}</option>)}
+                  </select>
+                </label>
                 <label>納品先
                   <select aria-label="納品先" className={!destinationId ? 'shipment-required-missing' : ''} value={destinationId} onChange={(e) => setDestinationId(e.target.value)} required>
                     <option value="">選択してください</option>
