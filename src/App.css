@@ -629,7 +629,8 @@
 .authorization-new-row-input[readonly] { background: #edf1ee; color: #334039; font-family: Consolas, monospace; font-weight: 700; }
 .authorization-row-save { margin: 0 auto; color: var(--green); }
 .authorization-table th:last-child, .authorization-table td:last-child { border-right: 0; }
-.authorization-modal { width: min(100%, 760px); }
+.modal-backdrop.authorization-edit-backdrop { padding-top: calc(var(--app-top-height, 64px) + 8px); }
+.authorization-modal { width: min(100%, 760px); max-height: calc(var(--visual-viewport-height, 100dvh) - var(--app-top-height, 64px) - 44px); }
 .authorization-import-modal { width: min(100%, 680px); }
 .authorization-import-modal .modal-header p { margin: 4px 0 0; color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
 .import-summary { display: flex; align-items: baseline; gap: 12px; padding: 14px; background: var(--green-soft); border: 1px solid #c8d9cc; border-radius: 7px; }

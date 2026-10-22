@@ -720,7 +720,7 @@ export function AuthorizationManager({ workerId, isAdmin, listState, onListState
       </div>
 
       {modalOpen && (
-        <div className="modal-backdrop" role="presentation">
+        <div className="modal-backdrop authorization-edit-backdrop" role="presentation">
           <section className="registration-modal authorization-modal" role="dialog" aria-modal="true" aria-labelledby="authorization-modal-title">
             <div className="modal-header">
               <div><h2 id="authorization-modal-title">{editingRecordId ? '委任状情報を編集' : '委任状情報を追加'}</h2></div>

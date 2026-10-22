@@ -8,7 +8,7 @@ const root = path.resolve('dist')
 const artifacts = process.env.QA_ARTIFACTS || process.argv[2]
 const browser = await chromium.launch({ channel: 'chrome', headless: true })
 try {
-  for (const width of [1440, 390]) {
+  for (const width of [1440, 1280, 390]) {
     const db = new PGlite()
     const context = await browser.newContext({ viewport: { width, height: 900 }, serviceWorkers: 'block' })
     const errors = []
