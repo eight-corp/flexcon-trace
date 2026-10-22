@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type Dispatch, type RefObject, type SetStateAction } from 'react'
-import { ArrowDown, ArrowUp, FileUp, FilterX, Plus, Save, Trash2, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, FileUp, FilterX, Pencil, Plus, Save, Trash2, X } from 'lucide-react'
 import type { CellValue } from 'read-excel-file/browser'
 import { supabase } from '../lib/supabase'
 import { authorizationAddError, sameAuthorizationPerson } from '../lib/authorizationValidation'
@@ -54,12 +54,6 @@ type FormState = {
 
 type EditableTextField = Exclude<keyof FormState, 'seed_purchase_slip' | 'farming_plan'>
 type EditableFlagField = 'seed_purchase_slip' | 'farming_plan'
-type EditingCell = {
-  recordId: string
-  field: EditableTextField
-  value: string
-}
-
 const EMPTY_FORM: FormState = {
   authorization_no: '',
   full_name: '',
@@ -186,7 +180,7 @@ export function AuthorizationManager({ workerId, isAdmin, listState, onListState
   const [notice, setNotice] = useState<Notice>(null)
   const [version, setVersion] = useState(0)
   const [modalOpen, setModalOpen] = useState(false)
-  const [editingCell, setEditingCell] = useState<EditingCell | null>(null)
+  const [editingRecordId, setEditingRecordId] = useState<string | null>(null)
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [rowForm, setRowForm] = useState<FormState>(EMPTY_FORM)
   const [busy, setBusy] = useState(false)
@@ -195,7 +189,6 @@ export function AuthorizationManager({ workerId, isAdmin, listState, onListState
   const [importRecords, setImportRecords] = useState<ImportRecord[]>([])
   const [importError, setImportError] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const openInspectionTimerRef = useRef<number | null>(null)
   const tableWrapRef = useRef<HTMLDivElement>(null)
   const [recordsLoaded, setRecordsLoaded] = useState(false)
   const deletingRef = useRef(false)
@@ -230,10 +223,6 @@ export function AuthorizationManager({ workerId, isAdmin, listState, onListState
       main?.removeEventListener('scroll', rememberListPosition)
     }
   }, [recordsLoaded, rememberListPosition])
-
-  useEffect(() => () => {
-    if (openInspectionTimerRef.current !== null) window.clearTimeout(openInspectionTimerRef.current)
-  }, [])
 
   useEffect(() => {
     void Promise.all([
@@ -308,6 +297,7 @@ export function AuthorizationManager({ workerId, isAdmin, listState, onListState
   }
 
   const beginAdd = () => {
+    setEditingRecordId(null)
     setForm({ ...EMPTY_FORM, authorization_no: nextAuthorizationNo(items) })
     setNotice(null)
     setModalOpen(true)
@@ -346,78 +336,32 @@ export function AuthorizationManager({ workerId, isAdmin, listState, onListState
     p_notes: record.notes?.trim() || null,
   })
 
-  const beginInlineEdit = (record: AuthorizationRecord, field: EditableTextField) => {
+  const beginEdit = (record: AuthorizationRecord) => {
     if (busy) return
-    if (openInspectionTimerRef.current !== null) {
-      window.clearTimeout(openInspectionTimerRef.current)
-      openInspectionTimerRef.current = null
-    }
+    rememberListPosition()
     setNotice(null)
-    setEditingCell({ recordId: record.id, field, value: record[field] ?? '' })
-  }
-
-  const scheduleOpenInspections = (record: AuthorizationRecord, event: React.MouseEvent<HTMLTableRowElement>) => {
-    if ((event.target as HTMLElement).closest('button, input, select, textarea')) return
-    if (openInspectionTimerRef.current !== null) window.clearTimeout(openInspectionTimerRef.current)
-    openInspectionTimerRef.current = window.setTimeout(() => {
-      rememberListPosition()
-      onOpenInspections(record.id)
-      openInspectionTimerRef.current = null
-    }, 240)
-  }
-
-  const saveInlineEdit = async () => {
-    if (!editingCell || busy) return
-    const record = items.find((item) => item.id === editingCell.recordId)
-    if (!record) {
-      setEditingCell(null)
-      return
-    }
-
-    const value = editingCell.value.trim()
-    if ((editingCell.field === 'authorization_no' || editingCell.field === 'full_name') && !value) {
-      setNotice({ type: 'error', text: editingCell.field === 'authorization_no' ? '№を入力してください。' : '氏名を入力してください。' })
-      return
-    }
-
-    const updatedRecord = {
-      ...record,
-      [editingCell.field]: value || null,
-    }
-
-    if ((editingCell.field === 'full_name' || editingCell.field === 'address') && !sameAuthorizationPerson(record, updatedRecord)) {
-      const duplicate = items.some((item) => (
-        item.id !== record.id && sameAuthorizationPerson(item, updatedRecord)
-      ))
-      if (duplicate) {
-        setNotice({ type: 'error', text: `氏名「${updatedRecord.full_name}」と住所が同じ委任状はすでに登録されています。` })
-        return
-      }
-    }
-
-    if (editingCell.field === 'address') {
-      const parts = extractAddressParts(value)
-      updatedRecord.prefecture = parts.prefecture ?? record.prefecture
-      updatedRecord.municipality = parts.municipality ?? record.municipality
-    }
-
-    setBusy(true)
-    setNotice(null)
-    const { error } = await supabase.rpc('flexcon_update_authorization', {
-      ...authorizationArgs(updatedRecord),
-      p_authorization_id: record.id,
+    setEditingRecordId(record.id)
+    setForm({
+      authorization_no: record.authorization_no,
+      full_name: record.full_name,
+      seed_purchase_slip: record.seed_purchase_slip,
+      farming_plan: record.farming_plan,
+      address: record.address ?? '',
+      prefecture: record.prefecture ?? '',
+      municipality: record.municipality ?? '',
+      phone: record.phone ?? '',
+      crop_type: record.crop_type ?? '',
+      feed_rice_variety: record.feed_rice_variety ?? '',
+      notes: record.notes ?? '',
     })
-
-    if (error) {
-      setNotice({ type: 'error', text: error.message })
-    } else {
-      setEditingCell(null)
-      setNotice({ type: 'success', text: '委任状情報を更新しました。' })
-      setVersion((value) => value + 1)
-    }
-    setBusy(false)
+    setModalOpen(true)
   }
 
+  const openInspections = (record: AuthorizationRecord, event: React.MouseEvent<HTMLTableRowElement>) => {
+    if (busy || (event.target as Element).closest('button, input, select, textarea')) return
+    rememberListPosition()
+    onOpenInspections(record.id)
+  }
   const toggleInlineFlag = async (record: AuthorizationRecord, field: EditableFlagField) => {
     if (busy) return
     const updatedRecord = { ...record, [field]: !record[field] }
@@ -439,15 +383,10 @@ export function AuthorizationManager({ workerId, isAdmin, listState, onListState
 
   const deleteAuthorization = async (record: AuthorizationRecord) => {
     if (busy || deletingRef.current || !deleteProtectedAuthorizationIds || deleteProtectedAuthorizationIds.has(record.id)) return
-    if (openInspectionTimerRef.current !== null) {
-      window.clearTimeout(openInspectionTimerRef.current)
-      openInspectionTimerRef.current = null
-    }
     if (!window.confirm(`委任状№${record.authorization_no}「${record.full_name}」を削除しますか？\n\nこの操作は元に戻せません。`)) return
     deletingRef.current = true
     setBusy(true)
     setNotice(null)
-    setEditingCell(null)
     try {
       const { error } = await supabase.rpc('flexcon_delete_authorization', {
         p_worker_id: workerId,
@@ -471,7 +410,7 @@ export function AuthorizationManager({ workerId, isAdmin, listState, onListState
     event.preventDefault()
     if (busy) return
     const fullName = form.full_name.trim()
-    const validationError = authorizationAddError(form, items)
+    const validationError = authorizationAddError(form, items.filter((item) => item.id !== editingRecordId))
     if (validationError) {
       setNotice({ type: 'error', text: validationError })
       return
@@ -487,18 +426,21 @@ export function AuthorizationManager({ workerId, isAdmin, listState, onListState
       p_seed_purchase_slip: form.seed_purchase_slip,
       p_farming_plan: form.farming_plan,
       p_address: form.address.trim() || null,
-      p_prefecture: addressParts.prefecture ?? (form.prefecture.trim() || null),
-      p_municipality: addressParts.municipality ?? (form.municipality.trim() || null),
+      p_prefecture: editingRecordId ? (form.prefecture.trim() || null) : addressParts.prefecture ?? (form.prefecture.trim() || null),
+      p_municipality: editingRecordId ? (form.municipality.trim() || null) : addressParts.municipality ?? (form.municipality.trim() || null),
       p_phone: form.phone.trim() || null,
       p_crop_type: form.crop_type.trim() || null,
       p_feed_rice_variety: form.feed_rice_variety.trim() || null,
       p_notes: form.notes.trim() || null,
     }
     try {
-      const { error } = await supabase.rpc('flexcon_add_authorization', args)
+      const { error } = editingRecordId
+        ? await supabase.rpc('flexcon_update_authorization', { ...args, p_authorization_id: editingRecordId })
+        : await supabase.rpc('flexcon_add_authorization', args)
       if (error) throw error
       setModalOpen(false)
-      setNotice({ type: 'success', text: '委任状情報を追加しました。' })
+      setNotice({ type: 'success', text: editingRecordId ? '委任状情報を更新しました。' : '委任状情報を追加しました。' })
+      setEditingRecordId(null)
       setVersion((value) => value + 1)
     } catch (error) {
       setNotice({ type: 'error', text: error && typeof error === 'object' && 'message' in error ? String(error.message) : '保存できませんでした。通信状態を確認して再試行してください。' })
@@ -657,55 +599,6 @@ export function AuthorizationManager({ workerId, isAdmin, listState, onListState
     }
     setBusy(false)
   }
-
-  const editableCell = (
-    record: AuthorizationRecord,
-    field: EditableTextField,
-    className?: string,
-  ) => {
-    const isEditing = editingCell?.recordId === record.id && editingCell.field === field
-    const value = record[field] ?? ''
-
-    return (
-      <td
-        className={`${className ?? ''} ${isEditing ? 'authorization-cell-editing' : 'authorization-editable-cell'}`.trim()}
-        tabIndex={0}
-        title="ダブルクリックして編集"
-        onDoubleClick={() => beginInlineEdit(record, field)}
-        onKeyDown={(event) => {
-          if (!isEditing && event.key === 'Enter') beginInlineEdit(record, field)
-        }}
-      >
-        {isEditing ? (
-          <input
-            className="authorization-cell-editor"
-            type={field === 'phone' ? 'tel' : 'text'}
-            value={editingCell.value}
-            autoFocus
-            onFocus={(event) => event.currentTarget.select()}
-            onChange={(event) => setEditingCell((current) => (
-              current ? { ...current, value: event.target.value } : current
-            ))}
-            onBlur={() => setEditingCell(null)}
-            onClick={(event) => event.stopPropagation()}
-            onDoubleClick={(event) => event.stopPropagation()}
-            onKeyDown={(event) => {
-              event.stopPropagation()
-              if (event.key === 'Enter') {
-                event.preventDefault()
-                void saveInlineEdit()
-              }
-              if (event.key === 'Escape') {
-                event.preventDefault()
-                setEditingCell(null)
-              }
-            }}
-          />
-        ) : value}
-      </td>
-    )
-  }
-
   return (
     <div className="authorization-page">
       <div className="page-heading"><p>登録済みの委任状情報を確認・更新します。</p></div>
@@ -737,9 +630,9 @@ export function AuthorizationManager({ workerId, isAdmin, listState, onListState
           </thead>
           <tbody>
             {displayRows.map((record) => record ? (
-              <tr className={`authorization-data-row ${inspectionTargetAuthorizationIds?.has(record.id) ? 'authorization-inspection-target' : ''}`} title={inspectionTargetAuthorizationIds?.has(record.id) ? '検査対象の米穀あり' : undefined} key={record.id} onClick={(event) => scheduleOpenInspections(record, event)}>
-                {editableCell(record, 'authorization_no', 'authorization-no')}
-                {editableCell(record, 'full_name', 'authorization-name')}
+              <tr className={`authorization-data-row ${inspectionTargetAuthorizationIds?.has(record.id) ? 'authorization-inspection-target' : ''}`} title={inspectionTargetAuthorizationIds?.has(record.id) ? '検査対象の米穀あり' : undefined} key={record.id} onClick={(event) => openInspections(record, event)}>
+                <td className="authorization-no">{record.authorization_no}</td>
+                <td className="authorization-name">{record.full_name}</td>
                 <td className="authorization-purchase-cell">{authorizationColumnValue(record, 'purchase_status', inspectionTargetAuthorizationIds)}</td>
                 <td className="flag-cell">
                   <ToggleSwitch
@@ -755,21 +648,30 @@ export function AuthorizationManager({ workerId, isAdmin, listState, onListState
                     onChange={() => void toggleInlineFlag(record, 'farming_plan')}
                   />
                 </td>
-                {editableCell(record, 'address')}
-                {editableCell(record, 'prefecture')}
-                {editableCell(record, 'municipality')}
-                {editableCell(record, 'phone')}
-                {editableCell(record, 'crop_type')}
-                {editableCell(record, 'feed_rice_variety')}
-                {editableCell(record, 'notes')}
+                <td>{record.address ?? ''}</td>
+                <td>{record.prefecture ?? ''}</td>
+                <td>{record.municipality ?? ''}</td>
+                <td>{record.phone ?? ''}</td>
+                <td>{record.crop_type ?? ''}</td>
+                <td>{record.feed_rice_variety ?? ''}</td>
+                <td>{record.notes ?? ''}</td>
                 <td className="authorization-register-cell">
-                  <button className="icon-button" type="button"
-                    title={!deleteProtectedAuthorizationIds ? '検査記録を確認中のため削除できません' : deleteProtectedAuthorizationIds.has(record.id) ? '検査記録があるため削除できません' : `委任状№${record.authorization_no}を削除`}
-                    aria-label={`委任状№${record.authorization_no}を削除`}
-                    disabled={busy || !deleteProtectedAuthorizationIds || deleteProtectedAuthorizationIds.has(record.id)}
-                    onClick={(event) => { event.stopPropagation(); void deleteAuthorization(record) }}>
-                    <Trash2 size={18} />
-                  </button>
+                  <div className="authorization-row-actions">
+                    <button className="icon-button" type="button"
+                      title={`委任状№${record.authorization_no}を編集`}
+                      aria-label={`委任状№${record.authorization_no}を編集`}
+                      disabled={busy}
+                      onClick={(event) => { event.stopPropagation(); beginEdit(record) }}>
+                      <Pencil size={18} />
+                    </button>
+                    <button className="icon-button" type="button"
+                      title={!deleteProtectedAuthorizationIds ? '検査記録を確認中のため削除できません' : deleteProtectedAuthorizationIds.has(record.id) ? '検査記録があるため削除できません' : `委任状№${record.authorization_no}を削除`}
+                      aria-label={`委任状№${record.authorization_no}を削除`}
+                      disabled={busy || !deleteProtectedAuthorizationIds || deleteProtectedAuthorizationIds.has(record.id)}
+                      onClick={(event) => { event.stopPropagation(); void deleteAuthorization(record) }}>
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
                 </td>
               </tr>
             ) : (
@@ -821,7 +723,7 @@ export function AuthorizationManager({ workerId, isAdmin, listState, onListState
         <div className="modal-backdrop" role="presentation">
           <section className="registration-modal authorization-modal" role="dialog" aria-modal="true" aria-labelledby="authorization-modal-title">
             <div className="modal-header">
-              <div><h2 id="authorization-modal-title">委任状情報を追加</h2></div>
+              <div><h2 id="authorization-modal-title">{editingRecordId ? '委任状情報を編集' : '委任状情報を追加'}</h2></div>
               <button className="icon-button" type="button" title="閉じる" aria-label="入力画面を閉じる" onClick={() => setModalOpen(false)} disabled={busy}><X size={21} /></button>
             </div>
 

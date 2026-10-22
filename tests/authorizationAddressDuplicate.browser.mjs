@@ -5,6 +5,7 @@ import { chromium } from 'playwright'
 import { PGlite } from '@electric-sql/pglite'
 
 const root = path.resolve('dist')
+const artifacts = process.env.QA_ARTIFACTS || process.argv[2]
 const browser = await chromium.launch({ channel: 'chrome', headless: true })
 try {
   for (const width of [1440, 390]) {
@@ -12,6 +13,7 @@ try {
     const context = await browser.newContext({ viewport: { width, height: 900 }, serviceWorkers: 'block' })
     const errors = []
     let writes = 0
+    let failNextUpdate = false
     try {
       await db.exec(`create role anon; create role authenticated;
         create table workers(worker_id text primary key);
@@ -37,10 +39,14 @@ try {
         let body = []
         try {
           if (resource === 'rpc/business_session') {
-            body = { ok: true, workerId: 'tester', workerName: 'Tester', permissions: { rice_shipping: 'admin' } }
+            body = { ok: true, workerId: 'tester', workerName: 'Tester', permissions: { rice_shipping: width === 1440 ? 'admin' : 'operator' } }
           } else if (resource === 'flexcon_authorizations') {
             body = (await db.query('select * from flexcon_authorizations')).rows
           } else if (['rpc/flexcon_add_authorization', 'rpc/flexcon_update_authorization'].includes(resource)) {
+            if (resource === 'rpc/flexcon_update_authorization' && failNextUpdate) {
+              failNextUpdate = false
+              return route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ message: 'テスト通信エラー' }) })
+            }
             writes++
             const args = Object.entries(route.request().postDataJSON())
             assert.equal(args.find(([key]) => key === 'p_worker_id')[1], 'tester')
@@ -82,17 +88,63 @@ try {
       assert.equal(writes, 2)
 
       const secondRow = rows.filter({ has: page.locator('.authorization-no', { hasText: /^2$/ }) })
-      await secondRow.locator('td').nth(5).dblclick()
-      const editor = page.locator('.authorization-cell-editor')
-      await editor.fill('青森県十和田市1-2')
-      await editor.press('Enter')
-      await page.getByRole('alert').filter({ hasText: '住所が同じ委任状' }).waitFor()
+      assert.equal(await rows.getByRole('button', { name: /を編集$/ }).count(), 3)
+      await secondRow.locator('td').nth(5).dispatchEvent('dblclick')
+      assert.equal(await page.locator('.authorization-cell-editor').count(), 0)
+      assert.equal(await dialog.count(), 0)
+      const edit = page.getByRole('button', { name: '委任状№2を編集', exact: true })
+      const editBox = await edit.boundingBox()
+      assert.ok(editBox.x >= 0 && editBox.x + editBox.width <= width, 'Edit stays visible without horizontal scrolling')
+      await edit.click()
+      await dialog.getByRole('heading', { name: '委任状情報を編集', exact: true }).waitFor()
+      const modalBox = await dialog.boundingBox()
+      const undoBox = await page.locator('.global-undo-button').boundingBox()
+      assert.ok(undoBox.x + undoBox.width <= modalBox.x || undoBox.x >= modalBox.x + modalBox.width || undoBox.y + undoBox.height <= modalBox.y || undoBox.y >= modalBox.y + modalBox.height, 'Global Undo never covers the editor')
+      assert.equal(await page.locator('.producer-inspection-page').count(), 0)
+      assert.equal(await dialog.getByLabel('№', { exact: true }).inputValue(), '2')
+      assert.equal(await dialog.getByLabel('氏名', { exact: true }).inputValue(), '山田太郎')
+      assert.equal(await dialog.getByLabel('住所', { exact: true }).inputValue(), '青森県十和田市3-4')
+      await dialog.getByLabel('電話番号', { exact: true }).fill('cancelled')
+      await dialog.getByRole('button', { name: '取消', exact: true }).click()
       assert.equal(writes, 2)
-      await editor.fill('青森県十和田市7-8')
-      await editor.press('Enter')
-      await editor.waitFor({ state: 'detached' })
+      await edit.click()
+      assert.equal(await dialog.getByLabel('電話番号', { exact: true }).inputValue(), '')
+      await dialog.getByLabel('№', { exact: true }).fill('1')
+      await dialog.getByRole('button', { name: '保存', exact: true }).click()
+      await dialog.getByRole('alert').filter({ hasText: 'すでに登録されています' }).waitFor()
+      assert.equal(writes, 2)
+      await dialog.getByLabel('№', { exact: true }).fill('2')
+      await dialog.getByLabel('住所', { exact: true }).fill('青森県十和田市1-2')
+      await dialog.getByRole('button', { name: '保存', exact: true }).click()
+      await dialog.getByRole('alert').filter({ hasText: '住所が同じ委任状' }).waitFor()
+      assert.equal(writes, 2)
+      await dialog.getByLabel('住所', { exact: true }).fill('青森県十和田市7-8')
+      await dialog.getByLabel('電話番号', { exact: true }).fill('0123-45-6789')
+      await dialog.getByLabel('備考', { exact: true }).fill('編集ボタンから更新')
+      await dialog.getByRole('switch', { name: '種子購入伝票', exact: true }).click()
+      if (artifacts) {
+        fs.mkdirSync(artifacts, { recursive: true })
+        await page.screenshot({ path: path.join(artifacts, `authorization-edit-dialog-${width}.png`) })
+      }
+      await dialog.getByRole('button', { name: '保存', exact: true }).click()
+      await dialog.waitFor({ state: 'detached' })
       assert.equal(writes, 3)
-      assert.equal((await db.query("select address from flexcon_authorizations where authorization_no='2'")).rows[0].address, '青森県十和田市7-8')
+      const edited = (await db.query("select * from flexcon_authorizations where authorization_no='2'")).rows[0]
+      assert.equal(edited.address, '青森県十和田市7-8')
+      assert.equal(edited.phone, '0123-45-6789')
+      assert.equal(edited.notes, '編集ボタンから更新')
+      assert.equal(edited.seed_purchase_slip, true)
+      assert.equal((await db.query("select address from flexcon_authorizations where authorization_no='1'")).rows[0].address, '青森県十和田市1-2')
+      await edit.click()
+      await dialog.getByLabel('電話番号', { exact: true }).fill('0987-65-4321')
+      failNextUpdate = true
+      await dialog.getByRole('button', { name: '保存', exact: true }).click()
+      await dialog.getByRole('alert').filter({ hasText: 'テスト通信エラー' }).waitFor()
+      assert.equal(await dialog.getByLabel('電話番号', { exact: true }).inputValue(), '0987-65-4321')
+      assert.equal(writes, 3)
+      await dialog.getByRole('button', { name: '保存', exact: true }).click()
+      await dialog.waitFor({ state: 'detached' })
+      assert.equal(writes, 4)
 
       // Import follows the same database rule and remains atomic on duplicates.
       const imported = [{ authorization_no: '4', full_name: '山田太郎', address: '青森県十和田市9-10' }]
@@ -101,9 +153,8 @@ try {
       await assert.rejects(db.query('select flexcon_import_authorizations($1,$2::jsonb)', ['tester', JSON.stringify([{ ...imported[0], authorization_no: '5', address: '青森県十和田市1-2' }])]), /氏名.*住所が同じ/)
       assert.equal((await db.query('select count(*)::int as count from flexcon_authorizations')).rows[0].count, 4)
       assert.deepEqual(errors, [])
-      if (process.env.QA_ARTIFACTS) {
-        fs.mkdirSync(process.env.QA_ARTIFACTS, { recursive: true })
-        await page.screenshot({ path: path.join(process.env.QA_ARTIFACTS, `authorization-address-${width}.png`) })
+      if (artifacts) {
+        await page.screenshot({ path: path.join(artifacts, `authorization-address-${width}.png`) })
       }
       await page.getByRole('button', { name: '検査記録', exact: true }).click()
       await page.getByRole('button', { name: '追加', exact: true }).click()
