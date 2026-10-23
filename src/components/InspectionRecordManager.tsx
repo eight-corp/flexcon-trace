@@ -1340,17 +1340,13 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
         moisture: item.moisture,
       })
       const records = [
-        ...targetFlexcons.map((item) => {
-          const standardWeightKg = isFeedRiceBrand(item.brand ?? '') ? weights.feed_rice : weights.branded_rice
-          const isBulk = flexconRecordKind(item, weights) === 'bulk'
-          return {
-            ...commonRecord(item),
-            kind: 'flexcon' as const,
-            quantityCount: 1,
-            quantityKg: isBulk ? item.quantity_kg : standardWeightKg,
-            weightKg: standardWeightKg,
-          }
-        }),
+        ...targetFlexcons.map((item) => ({
+          ...commonRecord(item),
+          kind: 'flexcon' as const,
+          quantityCount: 1,
+          quantityKg: item.quantity_kg,
+          weightKg: item.quantity_kg,
+        })),
         ...targetPaperBags.map((item) => ({
           ...commonRecord(item),
           kind: 'paper_bag' as const,
