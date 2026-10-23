@@ -18,6 +18,7 @@ import { navigateInspectionField } from '../lib/inspectionFieldNavigation'
 import { groupInspectionSummaryRecords, inspectionSummaryKindLabel, type InspectionSummaryKind } from '../lib/inspectionSummaryGroups'
 import { inspectionAggregateDisplayValue, inspectionAggregateGroupKey, matchesInspectionAggregateFilters, type InspectionAggregateColumn, type InspectionAggregateFilters, type InspectionAggregateRow as InspectionProgressRow } from '../lib/inspectionAggregateFilters'
 import { certificateDefaultRange } from '../lib/certificateDefaultRange'
+import { certificateQuantityConfirmation } from '../lib/certificateQuantityConfirmation'
 import { matchesInspectionPeriod, type InspectionPeriod } from '../lib/inspectionPeriod'
 import type { AuthorizationRecord, FlexconInspection, InspectionOption, InspectionRegistration, InspectionWeight, PaperBagInspection } from '../types'
 
@@ -503,12 +504,9 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
     .sort((left, right) => left.flexcon_no - right.flexcon_no)
   const selectedStandardFlexcons = selectedFlexcons.filter((item) => flexconRecordKind(item, weights) === 'standard')
   const selectedBulkFlexcons = selectedFlexcons.filter((item) => flexconRecordKind(item, weights) === 'bulk')
-  const standardCertificateFlexcons = selectedStandardFlexcons.filter((item) => (
-    isFeedRiceBrand(item.brand ?? '') || item.quantity_kg === weights.branded_rice
-  ))
   const selectedPaperBags = paperBags.filter((item) => item.authorization_id === selectedAuthorizationId)
   const selectedRegistration = registrations.find((item) => item.id === selectedRegistrationId) ?? null
-  const certificateFlexconsFor = (kind: CertificateKind) => kind === 'bulk' ? selectedBulkFlexcons : standardCertificateFlexcons
+  const certificateFlexconsFor = (kind: CertificateKind) => kind === 'bulk' ? selectedBulkFlexcons : selectedStandardFlexcons
   const selectedRegistrationRecords: Array<FlexconInspection | PaperBagInspection> = [...selectedFlexcons, ...selectedPaperBags]
   const batchMetadata = batchMetadataDraft.registration_id === selectedRegistrationId ? batchMetadataDraft : {
     registration_id: selectedRegistrationId,
@@ -1223,6 +1221,8 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
       setCertificateError(`開始№以降の印刷対象は${targets.length}枚です。枚数を${targets.length}以下にしてください。`)
       return
     }
+    const quantityConfirmation = certificateKind === 'standard' ? certificateQuantityConfirmation(targets, weights) : null
+    if (quantityConfirmation && !window.confirm(quantityConfirmation)) return
 
     const pdfWindow = window.open('', '_blank')
     if (pdfWindow) {

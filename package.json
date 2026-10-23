@@ -21,6 +21,7 @@
     "test:inspection-summary-groups-browser": "node tests/inspectionSummaryGroups.browser.mjs",
     "test:inspection-navigation-browser": "node tests/inspectionSummaryNavigation.browser.mjs",
     "test:inspection-ledger-browser": "node tests/inspectionLedgerQuantity.browser.mjs",
+    "test:certificate-quantity-browser": "node tests/certificateQuantityConfirmation.browser.mjs",
     "test:undo-browser": "node tests/operatorUndo.browser.mjs",
     "preview": "vite preview"
   },

@@ -478,14 +478,14 @@ try {
 
       await openProducer()
       await openCertificate('standard')
-      await checkCertificateRange('2', '19') // No. 1 has a non-certificate quantity.
+      await checkCertificateRange('1', '20') // Edited quantities remain certificate candidates.
       await closeCertificate()
       await openCertificate('bulk')
       await checkCertificateRange('1', '1')
       await closeCertificate()
       await backToList()
 
-      await db.exec("update flexcon_inspection_flexcons set certificate_print_count=1 where record_kind='standard' and flexcon_no between 2 and 10")
+      await db.exec("update flexcon_inspection_flexcons set certificate_print_count=1 where record_kind='standard' and flexcon_no between 1 and 10")
       await reloadList()
       await openProducer()
       await openCertificate('standard')
@@ -508,7 +508,7 @@ try {
       await closeCertificate()
       await backToList()
 
-      await db.exec("update flexcon_inspection_flexcons set certificate_print_count=1 where record_kind='standard' and flexcon_no between 2 and 20")
+      await db.exec("update flexcon_inspection_flexcons set certificate_print_count=1 where record_kind='standard' and flexcon_no between 1 and 20")
       await reloadList()
       await openProducer()
       await openCertificate('standard')
