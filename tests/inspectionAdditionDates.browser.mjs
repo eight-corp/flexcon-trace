@@ -1,24 +1,23 @@
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import path from 'node:path'
-import { PGlite } from '@electric-sql/pglite'
+import { undoDatabase } from './fixtures/undoDatabase.mjs'
 import { chromium } from 'playwright'
 
 const root = path.resolve('dist')
 const browser = await chromium.launch({ channel: 'chrome', headless: true })
 try {
-  for (const width of [1440, 390]) {
-    const db = new PGlite()
+  for (const width of [1920, 1600, 1440, 390]) {
+    const { db, rpc } = await undoDatabase()
     const context = await browser.newContext({ viewport: { width, height: 900 }, timezoneId: 'Asia/Tokyo', serviceWorkers: 'block' })
     const errors = []
     try {
-      await db.exec(fs.readFileSync('tests/fixtures/inspectionDatabase.sql', 'utf8'))
-      const original = fs.readFileSync('supabase/migrations/202609070007_inspection_registration_summary.sql', 'utf8')
-      const start = original.indexOf('create or replace function public.flexcon_split_inspection_paper_bags(')
-      assert.ok(start >= 0)
-      await db.exec(original.slice(start, original.indexOf('$$;', start) + 3))
-      await db.exec(fs.readFileSync('supabase/migrations/202609290001_consolidate_inspection_authorizations.sql', 'utf8'))
-      await db.exec("alter table flexcon_inspection_flexcons add column certificate_print_count integer not null default 0; insert into flexcon_inspection_options(option_type,name) values ('brand_aomori','Rice')")
+      for (const [type, name] of [['warehouse', 'B'], ['location', 'B'], ['brand_aomori', 'Rice'], ['brand_aomori', '飼料用玄米']]) {
+        if ((await db.query('select 1 from flexcon_inspection_options where option_type=$1 and name=$2', [type, name])).rows.length) continue
+        await rpc('admin', 'flexcon_save_inspection_option', { p_worker_id: 'admin', p_option_id: null, p_option_type: type, p_name: name })
+      }
+      await rpc('admin', 'flexcon_save_inspection_weights', { p_worker_id: 'admin', p_branded_rice_weight: 1035, p_feed_rice_weight: 1005 })
+      await rpc('tester', 'flexcon_add_authorization', { p_worker_id: 'tester', p_authorization_no: '2', p_full_name: 'New Producer', p_seed_purchase_slip: false, p_farming_plan: false, p_prefecture: '青森県', p_municipality: '青森市', p_address: 'Test', p_phone: '', p_crop_type: '', p_feed_rice_variety: '', p_notes: '' })
       await context.addInitScript(() => localStorage.setItem('business.session.v1', 'mock-session'))
       await context.route('**/*', route => route.abort())
       await context.route('https://inspection-dates.test/**', route => {
@@ -36,9 +35,7 @@ try {
             body = { ok: true, workerId: 'tester', workerName: 'Tester', permissions: { rice_shipping: 'admin' } }
           } else if (['rpc/flexcon_add_inspection_group_with_warehouse', 'rpc/flexcon_append_inspection_registration'].includes(resource)) {
             const params = route.request().postDataJSON()
-            const keys = Object.keys(params)
-            assert.ok(keys.every(key => /^p_[a-z_]+$/.test(key)))
-            body = (await db.query(`select public.${resource.slice(4)}(${keys.map((key, i) => `${key} => $${i + 1}`).join(',')}) as result`, keys.map(key => params[key]))).rows[0].result
+            body = await rpc('tester', resource.slice(4), params)
           } else if (resource.startsWith('rpc/')) {
             assert.equal(resource, 'rpc/flexcon_get_undo_status', `Unexpected RPC: ${resource}`)
             body = { operation_id: null }
@@ -81,7 +78,26 @@ try {
       await form.getByRole('option').filter({ hasText: 'No. 2' }).click()
       await form.getByLabel(/^検査場所/).selectOption('B')
       await form.getByLabel(/^銘柄/).selectOption('Rice')
+      const quantity = form.getByLabel('数量（kg/本）', { exact: true })
+      assert.equal(await quantity.inputValue(), '1,035')
+      await form.getByLabel(/^銘柄/).selectOption('飼料用玄米')
+      assert.equal(await quantity.inputValue(), '1,005')
+      await form.getByLabel(/^銘柄/).selectOption('Rice')
+      assert.equal(await quantity.inputValue(), '1,035')
+      assert.equal(await quantity.evaluate(input => input.closest('label').previousElementSibling.textContent), '推フレ数')
       await form.getByLabel('推フレ数', { exact: true }).fill('1')
+      await quantity.fill('')
+      await form.getByRole('button', { name: '追加', exact: true }).click()
+      await form.getByRole('alert').getByText('推フレの数量は1kg以上の整数で入力してください。', { exact: true }).waitFor()
+      assert.equal((await db.query('select count(*)::integer n from flexcon_inspection_registrations')).rows[0].n, 0)
+      await quantity.fill('1080')
+      const assertFieldFits = async field => {
+        const bounds = await field.boundingBox()
+        assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= width, JSON.stringify(bounds))
+      }
+      await assertFieldFits(quantity)
+      fs.mkdirSync('../../artifacts/inspection-add-quantity', { recursive: true })
+      await form.screenshot({ path: `../../artifacts/inspection-add-quantity/summary-${width}.png` })
       await form.getByRole('button', { name: '追加', exact: true }).click()
       await page.locator('.producer-inspection-page').waitFor()
       const savedDates = async settlement => (await db.query(`
@@ -89,6 +105,7 @@ try {
         union all select purchase_date::text, inspection_date::text from flexcon_inspection_paper_bags where settlement_no=$1
       `, [settlement])).rows
       assert.deepEqual(await savedDates('Retained draft'), [{ purchase_date: '2026-10-21', inspection_date: '2026-10-21' }])
+      assert.equal((await db.query("select quantity_kg from flexcon_inspection_flexcons where settlement_no='Retained draft'")).rows[0].quantity_kg, 1080)
 
       // The same long-lived detail view must use the current local date for every kind.
       for (const [index, kind] of ['standard', 'bulk', 'paper'].entries()) {
@@ -98,7 +115,16 @@ try {
         await section.getByRole('button', { name: '追加', exact: true }).click()
         const addition = page.locator('.inspection-detail-add-form')
         await assertDates(addition, date)
+        assert.equal(await addition.getByLabel('数量（kg/本）', { exact: true }).inputValue(), '1,035', 'defaults use the master, not the existing 1080kg row')
         await addition.getByLabel('仕切書№', { exact: true }).fill(kind)
+        if (kind === 'standard') {
+          await addition.getByLabel(/^銘柄/).selectOption('飼料用玄米')
+          assert.equal(await addition.getByLabel('数量（kg/本）', { exact: true }).inputValue(), '1,005')
+          await addition.getByLabel('数量（kg/本）', { exact: true }).fill('1030')
+          await addition.getByLabel('推フレ数', { exact: true }).fill('2')
+          await assertFieldFits(addition.getByLabel('数量（kg/本）', { exact: true }))
+          await addition.screenshot({ path: `../../artifacts/inspection-add-quantity/detail-${width}.png` })
+        }
         if (kind === 'bulk') await addition.getByLabel('バラ（kg）', { exact: true }).fill('75')
         if (kind === 'paper') {
           await addition.getByLabel('紙袋数', { exact: true }).fill('5')
@@ -112,7 +138,9 @@ try {
         }
         await addition.getByRole('button', { name: '追加', exact: true }).click()
         await addition.waitFor({ state: 'hidden' })
-        assert.deepEqual(await savedDates(kind), [{ purchase_date: kind === 'paper' ? '2026-10-10' : date, inspection_date: kind === 'paper' ? '2026-10-11' : date }])
+        assert.deepEqual(await savedDates(kind), Array.from({ length: kind === 'standard' ? 2 : 1 }, () => ({ purchase_date: kind === 'paper' ? '2026-10-10' : date, inspection_date: kind === 'paper' ? '2026-10-11' : date })))
+        if (kind === 'standard') assert.deepEqual((await db.query("select quantity_kg from flexcon_inspection_flexcons where settlement_no='standard'")).rows.map(row => row.quantity_kg), [1030, 1030])
+        if (kind === 'bulk') assert.equal((await db.query("select quantity_kg from flexcon_inspection_flexcons where settlement_no='bulk'")).rows[0].quantity_kg, 75)
       }
       assert.deepEqual(errors, [])
       console.log(`Inspection addition dates ${width}px: midnight, reopening, all detail kinds and explicit dates passed`)

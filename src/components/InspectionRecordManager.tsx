@@ -49,6 +49,7 @@ type AddGroupForm = {
   inspection_location: string
   brand: string
   flexcon_count: string
+  flexcon_quantity_kg: string | null
   paper_bag_count: string
   bulk_quantity_kg: string
 }
@@ -200,6 +201,7 @@ function emptyAddGroupForm(): AddGroupForm {
     inspection_location: '',
     brand: '',
     flexcon_count: '',
+    flexcon_quantity_kg: null,
     paper_bag_count: '',
     bulk_quantity_kg: '',
   }
@@ -798,6 +800,7 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
   const reasonOptions = inspectionOptions.filter((item) => item.active && item.option_type === 'grade_reason')
   const selectedBrandType = brandTypeForPrefecture(selectedAuthorization?.prefecture ?? null)
   const brandOptions = inspectionOptions.filter((item) => item.active && (item.option_type === selectedBrandType || item.option_type === 'brand'))
+  const additionFlexconQuantity = (form: AddGroupForm) => form.flexcon_quantity_kg ?? String(isFeedRiceBrand(form.brand) ? weights.feed_rice : weights.branded_rice)
   const addInspectionGroup = async (event: React.FormEvent) => {
     event.preventDefault()
     if (!addAuthorization || busy) return setNotice({ type: 'error', text: '委任状一覧に登録されている生産者名を選択してください。' })
@@ -812,7 +815,8 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
     if (!addGroupForm.brand) return setNotice({ type: 'error', text: '銘柄を選択してください。' })
     if (!Number.isInteger(bulkQuantityKg) || bulkQuantityKg < 0) return setNotice({ type: 'error', text: 'バラは0kg以上の整数で入力してください。' })
     if (flexconCount <= 0 && paperBagCount <= 0 && bulkQuantityKg <= 0) return setNotice({ type: 'error', text: 'フレコン本数、紙袋数、バラのいずれかを入力してください。' })
-    const flexconQuantity = addGroupForm.brand === '飼料用玄米' ? weights.feed_rice : weights.branded_rice
+    const flexconQuantity = Number(additionFlexconQuantity(addGroupForm))
+    if (flexconCount > 0 && (!Number.isInteger(flexconQuantity) || flexconQuantity < 1 || flexconQuantity > 2147483647)) return setNotice({ type: 'error', text: '推フレの数量は1kg以上の整数で入力してください。' })
     setBusy(true); setNotice(null)
     const { data, error } = await supabase.rpc('flexcon_add_inspection_group_with_warehouse', {
       p_worker_id: workerId,
@@ -826,7 +830,7 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
       p_brand: addGroupForm.brand,
       p_flexcon_count: flexconCount,
       p_paper_bag_count: paperBagCount,
-      p_flexcon_quantity_kg: flexconQuantity,
+      p_flexcon_quantity_kg: flexconCount > 0 ? flexconQuantity : null,
       p_bulk_quantity_kg: bulkQuantityKg,
     })
     setBusy(false)
@@ -1157,6 +1161,8 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
     if (!selectedRegistration || !detailAddition || detailAddition.registrationId !== selectedRegistration.id || busy) return
     const form = detailAddition.form
     const counts = [form.flexcon_count, form.paper_bag_count, form.bulk_quantity_kg].map((value) => Number(value || 0))
+    const flexconQuantity = Number(additionFlexconQuantity(form))
+    if (counts[0] > 0 && (!Number.isInteger(flexconQuantity) || flexconQuantity < 1 || flexconQuantity > 2147483647)) return setNotice({ type: 'error', text: '推フレの数量は1kg以上の整数で入力してください。' })
     if (counts.some((value) => !Number.isInteger(value) || value < 0) || counts.every((value) => value === 0)) return setNotice({ type: 'error', text: '推フレ数・紙袋数・バラは0以上の整数で、いずれかを1以上入力してください。' })
     if (!form.purchase_date) return setNotice({ type: 'error', text: '仕入日を入力してください。' })
     if (!form.brand) return setNotice({ type: 'error', text: '銘柄を選択してください。' })
@@ -1169,6 +1175,7 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
         p_settlement_no: form.settlement_no.trim(), p_inspection_date: form.inspection_date || null,
         p_inspection_location: form.inspection_location, p_brand: form.brand,
         p_flexcon_count: counts[0], p_paper_bag_count: counts[1], p_bulk_quantity_kg: counts[2],
+        p_flexcon_quantity_kg: counts[0] > 0 ? flexconQuantity : null,
       })
       if (error) throw error
       setDetailAddition(null)
@@ -1541,8 +1548,9 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
       <label>検査日<JapaneseDateInput value={form.inspection_date} onChange={(inspection_date) => change({ inspection_date })} /></label>
       <label>検査場所<select value={form.inspection_location} onChange={(event) => change({ inspection_location: event.target.value })} required><option value="">選択してください</option>{locationOptions.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}</select></label>
       <label>産地<input value={formatPrefectureName(authorization?.prefecture) || ''} readOnly aria-label="産地" /></label>
-      <label>銘柄<select value={form.brand} onChange={(event) => change({ brand: event.target.value })} required disabled={!authorization}><option value="">選択してください</option>{brands.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}</select></label>
+      <label>銘柄<select value={form.brand} onChange={(event) => change({ brand: event.target.value, flexcon_quantity_kg: null })} required disabled={!authorization}><option value="">選択してください</option>{brands.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}</select></label>
       <label>推フレ数<input type="number" min="0" max="999" step="1" value={form.flexcon_count} onChange={(event) => change({ flexcon_count: event.target.value })} placeholder="0" /></label>
+      <label>数量（kg/本）<InspectionNumberInput format="quantity" value={additionFlexconQuantity(form)} onValueChange={(flexcon_quantity_kg) => change({ flexcon_quantity_kg })} /></label>
       <label>紙袋数<input type="number" min="0" step="1" value={form.paper_bag_count} onChange={(event) => change({ paper_bag_count: event.target.value })} placeholder="0" /></label>
       <label>バラ（kg）<input type="number" min="0" step="1" value={form.bulk_quantity_kg} onChange={(event) => change({ bulk_quantity_kg: event.target.value })} placeholder="0" /></label>
     </>
@@ -1582,10 +1590,11 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
       </div>
       {summaryView === 'list' && <>
       {!readOnly && addGroupFormOpen && <form className="inspection-group-add inspection-summary-add section-band" noValidate onSubmit={(event) => void addInspectionGroup(event)}>
+        {notice?.type === 'error' && <div className="notice error" role="alert">{notice.text}</div>}
         <div className="inspection-producer-picker" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setProducerPickerOpen(false) }}>
-          <label>生産者名<input value={addGroupForm.producer_name} onFocus={() => setProducerPickerOpen(true)} onChange={(event) => { const producerName = event.target.value; const exactMatches = authorizations.filter((item) => item.full_name.trim() === producerName.trim()); setAddGroupForm((current) => ({ ...current, authorization_id: exactMatches.length === 1 ? exactMatches[0].id : '', producer_name: producerName, brand: '' })); setProducerPickerOpen(true) }} placeholder="氏名・委任状No.で絞り込み" autoComplete="off" role="combobox" aria-expanded={producerPickerOpen} aria-controls="inspection-producer-candidates" required /></label>
+          <label>生産者名<input value={addGroupForm.producer_name} onFocus={() => setProducerPickerOpen(true)} onChange={(event) => { const producerName = event.target.value; const exactMatches = authorizations.filter((item) => item.full_name.trim() === producerName.trim()); setAddGroupForm((current) => ({ ...current, authorization_id: exactMatches.length === 1 ? exactMatches[0].id : '', producer_name: producerName, brand: '', flexcon_quantity_kg: null })); setProducerPickerOpen(true) }} placeholder="氏名・委任状No.で絞り込み" autoComplete="off" role="combobox" aria-expanded={producerPickerOpen} aria-controls="inspection-producer-candidates" required /></label>
           {producerPickerOpen && <div id="inspection-producer-candidates" className="inspection-producer-candidates" role="listbox">
-            {producerCandidates.map((item) => <button type="button" role="option" aria-selected={item.id === addGroupForm.authorization_id} key={item.id} onClick={() => { setAddGroupForm((current) => ({ ...current, authorization_id: item.id, producer_name: item.full_name, brand: '' })); setProducerPickerOpen(false) }}><span>No. {item.authorization_no}</span><strong>{item.full_name}<small>{item.address?.trim() || [formatPrefectureName(item.prefecture), item.municipality].filter(Boolean).join(' ') || '住所未登録'}</small></strong></button>)}
+            {producerCandidates.map((item) => <button type="button" role="option" aria-selected={item.id === addGroupForm.authorization_id} key={item.id} onClick={() => { setAddGroupForm((current) => ({ ...current, authorization_id: item.id, producer_name: item.full_name, brand: '', flexcon_quantity_kg: null })); setProducerPickerOpen(false) }}><span>No. {item.authorization_no}</span><strong>{item.full_name}<small>{item.address?.trim() || [formatPrefectureName(item.prefecture), item.municipality].filter(Boolean).join(' ') || '住所未登録'}</small></strong></button>)}
             {producerCandidates.length === 0 && <span className="empty-state">該当する生産者がありません</span>}
           </div>}
         </div>
