@@ -240,6 +240,7 @@ try {
       assert.equal(await moisture.evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(255, 241, 191)')
       await moisture.fill('15.5')
       const batch = page.locator('.inspection-batch-metadata-form')
+      assert.deepEqual(await page.locator('.producer-inspection-page > section').evaluateAll(sections => sections.map(section => section.querySelector('h2')?.textContent)), ['推フレ', '一括設定', 'バラ', '紙袋'])
       assert.equal(await batch.getByLabel('上書きする').isChecked(), false)
       assert.equal(await batch.getByLabel('開始№', { exact: true }).isDisabled(), true)
       assert.equal(await batch.getByLabel('対象', { exact: true }).locator('option[value="bulk"]').count(), 0)

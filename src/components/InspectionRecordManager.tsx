@@ -1641,6 +1641,7 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
         <button className="secondary-button" type="button" onClick={() => void createGradingNoticePdf()} disabled={gradingNoticeBusy || inspectionLedgerBusy}><FileText size={18} />{gradingNoticeBusy ? 'PDF作成中...' : '格付結果通知票'}</button>
       </div>}
     </div>
+    {renderFlexconSection('推フレ', selectedStandardFlexcons, 'standard')}
     {!readOnly && selectedRegistration && <section className="section-band inspection-batch-metadata">
       <form className="inspection-batch-metadata-form" onSubmit={(event) => void applyBatchMetadata(event)}>
         <h2>一括設定</h2>
@@ -1655,7 +1656,6 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
         <button className="primary-button" type="submit" disabled={batchMetadataBusy}><Save size={16} />{batchMetadataBusy ? '設定中...' : 'まとめて反映'}</button>
       </form>
     </section>}
-    {renderFlexconSection('推フレ', selectedStandardFlexcons, 'standard')}
     {renderFlexconSection('バラ', selectedBulkFlexcons, 'bulk')}
     {(selectedPaperBags.length > 0 || (!readOnly && selectedRegistration)) && <section className="section-band inspection-detail-section">
       <div className="section-title"><div><h2>紙袋</h2><span>{selectedPaperBags.reduce((total, item) => total + item.bag_count, 0).toLocaleString()}袋 / {selectedPaperBags.length.toLocaleString()}件</span></div></div>
