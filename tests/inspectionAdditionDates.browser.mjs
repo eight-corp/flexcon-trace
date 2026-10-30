@@ -68,6 +68,7 @@ try {
       await heading.getByRole('button', { name: '追加', exact: true }).click()
       const form = page.locator('form.inspection-summary-add')
       await assertDates(form, '2026-10-20')
+      for (const name of ['推フレ数', '紙袋数', 'バラ（kg）']) assert.equal(await form.getByLabel(name, { exact: true }).inputValue(), '')
       const assertMissing = async (field, expected) => assert.equal(await field.evaluate(input => getComputedStyle(input).backgroundColor === 'rgb(255, 241, 191)'), expected)
       const assertAmountsMissing = async (target, expected) => {
         for (const name of ['推フレ数', '紙袋数', 'バラ（kg）']) await assertMissing(target.getByLabel(name, { exact: true }), expected)
@@ -160,7 +161,8 @@ try {
         await section.getByRole('button', { name: '追加', exact: true }).click()
         const addition = page.locator('.inspection-detail-add-form')
         await assertDates(addition, date)
-        await assertAmountsMissing(addition, kind !== 'standard')
+        await assertAmountsMissing(addition, true)
+        for (const name of ['推フレ数', '紙袋数', 'バラ（kg）']) assert.equal(await addition.getByLabel(name, { exact: true }).inputValue(), '')
         await assertMissing(addition.getByLabel(/^検査場所/), false)
         await assertMissing(addition.getByLabel(/^銘柄/), false)
         await addition.getByLabel(/^検査場所/).selectOption('')
@@ -199,6 +201,19 @@ try {
         if (kind === 'standard') assert.deepEqual((await db.query("select quantity_kg from flexcon_inspection_flexcons where settlement_no='standard'")).rows.map(row => row.quantity_kg), [1030, 1030])
         if (kind === 'bulk') assert.equal((await db.query("select quantity_kg from flexcon_inspection_flexcons where settlement_no='bulk'")).rows[0].quantity_kg, 75)
       }
+      // Opening from the standard section must not add a flexcon with a paper-only entry.
+      await page.locator('.inspection-detail-section').first().getByRole('button', { name: '追加', exact: true }).click()
+      const paperOnly = page.locator('.inspection-detail-add-form')
+      assert.equal(await paperOnly.getByLabel('推フレ数', { exact: true }).inputValue(), '')
+      await paperOnly.getByLabel('紙袋数', { exact: true }).fill('7')
+      await paperOnly.getByLabel('仕切書№', { exact: true }).fill('PAPER-ONLY')
+      fs.mkdirSync('../../artifacts/inspection-empty-counts', { recursive: true })
+      await paperOnly.screenshot({ path: `../../artifacts/inspection-empty-counts/paper-only-${width}.png` })
+      const flexconsBefore = (await db.query('select count(*)::integer n from flexcon_inspection_flexcons')).rows[0].n
+      await paperOnly.getByRole('button', { name: '追加', exact: true }).click()
+      await paperOnly.waitFor({ state: 'hidden' })
+      assert.equal((await db.query('select count(*)::integer n from flexcon_inspection_flexcons')).rows[0].n, flexconsBefore)
+      assert.deepEqual((await db.query("select bag_count from flexcon_inspection_paper_bags where settlement_no='PAPER-ONLY'")).rows, [{ bag_count: 7 }])
       assert.deepEqual(errors, [])
       console.log(`Inspection addition dates ${width}px: midnight, reopening, all detail kinds and explicit dates passed`)
     } finally {

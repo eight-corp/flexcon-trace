@@ -1527,7 +1527,6 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
       fiscal_year: base ? String(base.fiscal_year) : String(currentFiscalYear()),
       settlement_no: '',
       inspection_location: base?.inspection_location ?? '', brand: base?.brand ?? '',
-      flexcon_count: kind === 'standard' ? '1' : '',
     } })
   }
   const toggleAddGroupForm = () => {
