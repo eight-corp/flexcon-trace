@@ -1,2 +1,5 @@
 [functions.analyze-purchase-statement]
 verify_jwt = false
+
+[functions.purchase-statement-queue]
+verify_jwt = true

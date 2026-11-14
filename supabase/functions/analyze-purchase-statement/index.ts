@@ -326,41 +326,25 @@ const prompt = `
 明細ごとに数量×単価と金額を照合し、明細金額の合計、消費税額、税込合計金額の関係も確認する。不一致、読めない文字、確信の低い箇所は作り足さず、warningsへ日本語で記載する。
 `
 
-Deno.serve(async (request) => {
-  if (request.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders(request) })
-  if (request.method !== 'POST') return jsonResponse(request, { error: 'POSTで送信してください。' }, 405)
+export type AnalysisInput = { imageBase64?: string; headerRegionBase64?: string; taxRegionBase64?: string; paymentRegionBase64?: string; detailRegionBase64?: string; productMasterNames?: unknown; originMasterNames?: unknown; mimeType?: string }
 
-  try {
-    await requireRiceShippingOperator(request)
+export async function analyzePurchaseStatement(body: AnalysisInput) {
     const geminiApiKey = Deno.env.get('GEMINI_API_KEY')
-    if (!geminiApiKey) return jsonResponse(request, { error: 'Gemini画像読取りのAPIキーが設定されていません。' }, 503)
-
-    const body = await request.json() as { imageBase64?: string; headerRegionBase64?: string; taxRegionBase64?: string; paymentRegionBase64?: string; detailRegionBase64?: string; productMasterNames?: unknown; originMasterNames?: unknown; mimeType?: string }
+    if (!geminiApiKey) throw new Error('Gemini画像読取りのAPIキーが設定されていません。')
     const imageBase64 = body.imageBase64 ?? ''
     const headerRegionBase64 = body.headerRegionBase64 ?? ''
     const taxRegionBase64 = body.taxRegionBase64 ?? ''
     const paymentRegionBase64 = body.paymentRegionBase64 ?? ''
     const detailRegionBase64 = body.detailRegionBase64 ?? ''
-    const productMasterNames = Array.isArray(body.productMasterNames)
-      ? body.productMasterNames.filter((name): name is string => typeof name === 'string').map((name) => name.trim()).filter(Boolean).slice(0, 100)
-      : []
-    const originMasterNames = Array.isArray(body.originMasterNames)
-      ? body.originMasterNames.filter((name): name is string => typeof name === 'string').map((name) => name.trim()).filter(Boolean).slice(0, 100)
-      : []
-    const mimeType = body.mimeType ?? ''
-    if (!['image/jpeg', 'image/png', 'image/webp'].includes(mimeType)) return jsonResponse(request, { error: '対応していない画像形式です。' }, 400)
-    if (!imageBase64 || imageBase64.length > 12_000_000) return jsonResponse(request, { error: '画像が大きすぎます。撮影し直してください。' }, 413)
-    if (headerRegionBase64.length > 4_000_000) return jsonResponse(request, { error: '見出しの拡大画像が大きすぎます。撮影し直してください。' }, 413)
-    if (taxRegionBase64.length > 4_000_000) return jsonResponse(request, { error: '税区分の拡大画像が大きすぎます。撮影し直してください。' }, 413)
-    if (paymentRegionBase64.length > 4_000_000) return jsonResponse(request, { error: '支払方法の拡大画像が大きすぎます。撮影し直してください。' }, 413)
-    if (detailRegionBase64.length > 6_000_000) return jsonResponse(request, { error: '明細の拡大画像が大きすぎます。撮影し直してください。' }, 413)
-
+    const names = (value: unknown) => Array.isArray(value) ? value.filter((name): name is string => typeof name === 'string').map(name => name.trim()).filter(Boolean).slice(0, 100) : []
+    const productMasterNames = names(body.productMasterNames)
+    const originMasterNames = names(body.originMasterNames)
+    validateAnalysisInput(body)
+    const mimeType = body.mimeType!
     const primaryModel = Deno.env.get('GEMINI_MODEL') || 'gemini-3.1-flash-lite'
     const fallbackModel = Deno.env.get('GEMINI_FALLBACK_MODEL') || 'gemini-3.7-flash'
     const models = [...new Set([primaryModel, fallbackModel].filter(Boolean))]
-    let statementResult: PromiseSettledResult<unknown>
-    let taxResult: PromiseSettledResult<string> = { status: 'fulfilled', value: '' }
-    ;[statementResult, taxResult] = await Promise.allSettled([
+    const [statementResult, taxResult] = await Promise.allSettled([
       generateStatement(models, geminiApiKey, mimeType, imageBase64, headerRegionBase64, taxRegionBase64, paymentRegionBase64, detailRegionBase64, productMasterNames, originMasterNames),
       classifyTaxTreatment(models.at(-1) ?? models[0], geminiApiKey, mimeType, taxRegionBase64),
     ])
@@ -376,7 +360,24 @@ Deno.serve(async (request) => {
         statement.warnings.push('消費税区分は拡大画像の専用判定を優先しました。丸印を確認してください。')
       }
     }
-    return jsonResponse(request, { statement, provider: 'gemini', model: models[0] })
+    return { statement, provider: 'gemini', model: models[0] }
+}
+
+export function validateAnalysisInput(body: AnalysisInput) {
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(body.mimeType ?? '')) throw new Error('対応していない画像形式です。')
+  for (const [key, maximum] of Object.entries({ imageBase64: 12_000_000, headerRegionBase64: 4_000_000, taxRegionBase64: 4_000_000, paymentRegionBase64: 4_000_000, detailRegionBase64: 6_000_000 })) {
+    const value = body[key as keyof AnalysisInput] ?? ''
+    if (typeof value !== 'string' || value.length > maximum || (key === 'imageBase64' && !value)) throw new Error('画像が大きすぎるか、画像データがありません。撮影し直してください。')
+  }
+}
+
+if (import.meta.main) Deno.serve(async (request) => {
+  if (request.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders(request) })
+  if (request.method !== 'POST') return jsonResponse(request, { error: 'POSTで送信してください。' }, 405)
+
+  try {
+    await requireRiceShippingOperator(request)
+    return jsonResponse(request, await analyzePurchaseStatement(await request.json()))
   } catch (error) {
     const status = error instanceof GeminiUnavailableError ? 503 : 400
     return jsonResponse(request, { error: error instanceof Error ? error.message : '仕切書を解析できませんでした。' }, status)

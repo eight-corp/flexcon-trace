@@ -251,7 +251,8 @@ do $install$
 declare t record; f record; v_pk text[]; v_fk jsonb; v_impl text; v_types text; v_args text; v_app text; v_body text; v_source text;
 begin
   for t in select c.oid, c.relname from pg_class c join pg_namespace n on n.oid = c.relnamespace
-    where n.nspname = 'public' and c.relkind = 'r' and starts_with(c.relname, 'flexcon_') and c.relname <> 'flexcon_inspection_deletion_archives' loop
+    where n.nspname = 'public' and c.relkind = 'r' and starts_with(c.relname, 'flexcon_')
+      and c.relname not in ('flexcon_inspection_deletion_archives', 'flexcon_purchase_statement_jobs') loop
     select array_agg(a.attname::text order by k.ordinality) into v_pk from pg_index i,
       unnest(i.indkey::smallint[]) with ordinality k(attnum, ordinality) join pg_attribute a on a.attrelid = t.oid and a.attnum = k.attnum
       where i.indrelid = t.oid and i.indisprimary;

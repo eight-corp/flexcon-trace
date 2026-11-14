@@ -9,11 +9,22 @@ const browser = await chromium.launch({ channel: 'chrome', headless: true })
 try {
   for (const width of [1440, 390]) {
     const { db, rpc } = await purchaseStatementDatabase()
+    await db.exec(fs.readFileSync('supabase/migrations/202611140001_purchase_statement_queue.sql', 'utf8'))
+    const queueSecret = (await db.query('select secret from flexcon_queue_private.settings')).rows[0].secret
     const contexts = []
     const errors = []
     let reads = 0
     let failUpload = false
     let imageUrl = ''
+    const jobNumbers = new Map()
+    const finishQueue = async () => {
+      for (;;) {
+        const job = await rpc('reader', 'flexcon_purchase_queue_claim', { p_secret: queueSecret })
+        if (!job) break
+        await rpc('reader', 'flexcon_purchase_queue_complete', { p_job_id: job.id, p_lease_token: job.leaseToken,
+          p_header: validHeader(jobNumbers.get(job.id)), p_items: validItems(), p_warnings: ['元画像で数量を確認してください'] })
+      }
+    }
     const createPage = async actor => {
       const context = await browser.newContext({ viewport: { width, height: 900 }, serviceWorkers: 'block' })
       contexts.push(context)
@@ -31,7 +42,7 @@ try {
           let body
           if (name === 'business_session') body = { ok: true, workerId: actor, workerName: actor, permissions: { purchase_statements: actor === 'viewer' ? 'viewer' : 'operator' } }
           else if (name === 'flexcon_list_purchase_inventory_master') body = []
-          else if (['flexcon_list_purchase_statement_master', 'flexcon_list_purchase_statements', 'flexcon_list_pending_purchase_statements', 'flexcon_submit_purchase_statement', 'flexcon_find_purchase_statement_by_number', 'flexcon_confirm_purchase_statement'].includes(name)) body = await rpc(actor, name, args)
+          else if (['flexcon_list_purchase_statement_jobs', 'flexcon_retry_purchase_statement_job', 'flexcon_list_purchase_statement_master', 'flexcon_list_purchase_statements', 'flexcon_list_pending_purchase_statements', 'flexcon_submit_purchase_statement', 'flexcon_find_purchase_statement_by_number', 'flexcon_confirm_purchase_statement'].includes(name)) body = await rpc(actor, name, args)
           else throw new Error(`Unexpected RPC: ${name}`)
           await route.fulfill({ contentType: 'application/json', body: JSON.stringify(body) })
         } catch (error) {
@@ -43,9 +54,15 @@ try {
         const name = new URL(route.request().url()).pathname.split('/').at(-1)
         const args = route.request().postDataJSON()
         let body
-        if (name === 'analyze-purchase-statement') {
-          reads++
-          body = { statement: { ...validHeader(String(99 + reads)), lines: validItems(), warnings: ['元画像で数量を確認してください'] } }
+        if (name === 'purchase-statement-queue' && args.action === 'enqueue') {
+          if (!jobNumbers.has(args.jobId)) { reads++; jobNumbers.set(args.jobId, String(99 + reads)) }
+          await rpc(actor, 'flexcon_purchase_queue_reserve', { p_worker_id: actor, p_job_id: args.jobId, p_fingerprint: 'a'.repeat(64) })
+          if (failUpload) {
+            failUpload = false
+            return route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'test upload failure' }) })
+          }
+          await rpc(actor, 'flexcon_purchase_queue_ready', { p_worker_id: actor, p_job_id: args.jobId })
+          body = { jobId: args.jobId, status: 'queued' }
         } else if (name === 'purchase-statement-image' && args.action === 'upload') {
           if (failUpload) {
             failUpload = false
@@ -78,7 +95,7 @@ try {
       })
       const photo = { name: 'test.jpg', mimeType: 'image/jpeg', buffer: Buffer.from(imageUrl.split(',')[1], 'base64') }
       await reader.locator('input[type=file]').setInputFiles(photo)
-      await reader.getByRole('status').filter({ hasText: '読み取り成功。確認を依頼してください。' }).waitFor()
+      await reader.getByRole('status').filter({ hasText: '画像を保存し、解析待ちに追加しました。' }).waitFor()
       assert.equal(await reader.locator('.purchase-statement-editor').count(), 0)
       assert.equal((await db.query('select count(*)::int as n from flexcon_purchase_statements')).rows[0].n, 1)
       const nav = await reader.locator('nav button').allTextContents()
@@ -90,12 +107,25 @@ try {
       assert.equal(await reader.getByRole('button', { name: '次の仕切書を読み取る', exact: true }).isEnabled(), true)
       failUpload = true
       await reader.locator('input[type=file]').setInputFiles(photo)
-      await reader.getByRole('button', { name: '保存を再試行', exact: true }).waitFor()
+      await reader.getByRole('button', { name: '画像保存を再試行', exact: true }).waitFor()
+      assert.equal(await reader.getByRole('button', { name: '確認待ち', exact: true }).isEnabled(), false)
+      assert.equal(await reader.getByRole('button', { name: '直前の操作を取り消す', exact: true }).isEnabled(), false)
       assert.equal(await reader.getByRole('status').filter({ hasText: '読み取り成功。' }).count(), 0)
-      await reader.getByRole('button', { name: '保存を再試行', exact: true }).click()
-      await reader.getByRole('status').filter({ hasText: '読み取り成功。' }).waitFor()
+      await reader.getByRole('button', { name: '画像保存を再試行', exact: true }).click()
+      await reader.getByRole('status').filter({ hasText: '画像を保存し、解析待ちに追加しました。' }).waitFor()
       assert.equal(reads, 2)
-      assert.equal((await db.query('select count(*)::int as n from flexcon_purchase_statement_drafts')).rows[0].n, 2)
+      assert.equal((await rpc('reader', 'flexcon_list_pending_purchase_statements', { p_worker_id: 'reader' })).length, 0)
+      assert.equal((await db.query("select count(*)::int n from flexcon_purchase_statement_jobs where status='queued'")).rows[0].n, 2)
+      const anotherReader = await createPage('reviewer')
+      await anotherReader.locator('input[type=file]').setInputFiles(photo)
+      await anotherReader.getByRole('status').filter({ hasText: '画像を保存し、解析待ちに追加しました。' }).waitFor()
+      await reader.reload()
+      await reader.locator('.purchase-queue-table tbody tr').nth(2).waitFor()
+      assert.match(await reader.locator('.purchase-queue-table').innerText(), /Reviewer/)
+      assert.equal(await reader.getByRole('button', { name: '撮影・画像を選択', exact: true }).isEnabled(), true)
+      if (process.env.QA_ARTIFACTS) await reader.screenshot({ path: path.join(process.env.QA_ARTIFACTS, `statement-shared-queue-${width}.png`) })
+      await finishQueue()
+      assert.equal((await db.query('select count(*)::int as n from flexcon_purchase_statement_drafts')).rows[0].n, 3)
       await reader.getByRole('button', { name: '確認待ち', exact: true }).click()
       await reader.getByRole('button', { name: '100', exact: true }).click()
       await reader.getByRole('status').filter({ hasText: '読取者本人は確認できません' }).waitFor()

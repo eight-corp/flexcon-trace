@@ -5,7 +5,7 @@ import { useCalendarMode } from '../lib/calendarMode'
 import { JapaneseCropYearInput, JapaneseDateInput } from './JapaneseDateInput'
 
 type Mode = 'reader' | 'pending' | 'list' | 'master'
-type Props = { mode: Mode; workerId: string; canOperate: boolean; isAdmin: boolean }
+type Props = { mode: Mode; workerId: string; canOperate: boolean; isAdmin: boolean; onPhotoPendingChange?: (pending: boolean) => void }
 type SourceType = 'camera' | 'manual'
 type TaxTreatment = '' | 'exclusive' | 'inclusive'
 type HeaderForm = {
@@ -93,20 +93,9 @@ type PurchaseInventoryEdit = {
   keywords: string
 }
 type DuplicateStatement = { id: string; document_number: string; statement_date: string; issuer: string }
-type GeminiStatement = {
-  statement_date: string
-  document_number: string
-  recipient: string
-  issuer: string
-  payment_method: string
-  tax_treatment: string
-  tax_rate: number
-  tax_amount: number
-  total_amount: number
-  invoice_number: string
-  lines: Array<{ crop_year: string; origin: string; product_name: string; package_type: string; quantity: number; unit: string; unit_price: number; amount: number }>
-  warnings: string[]
-}
+type CaptureJob = { id: string; status: 'uploading' | 'queued' | 'processing' | 'succeeded' | 'failed' | 'cancelled'; reader_id: string; reader_name: string; created_at: string; attempts: number; error: string; document_number: string; confirmed: boolean }
+type PhotoUpload = { jobId: string; image: Awaited<ReturnType<typeof resizePhoto>> & { productMasterNames: string[]; originMasterNames: string[] } }
+const jobStatusLabels: Record<CaptureJob['status'], string> = { uploading: '画像保存待ち', queued: '解析待ち', processing: '解析中', succeeded: '確認待ち', failed: '解析失敗', cancelled: '取消済み' }
 const masterLabels: Record<MasterType, string> = { recipient: '担当者', origin: '産地', product: '在庫商品管理', category: '種別', storage_location: '保管場所', customer: '販売先管理' }
 const masterFieldLabels: Record<MasterType, string> = { recipient: '担当者', origin: '産地', product: '品名', category: '種別', storage_location: '保管場所名', customer: '販売先名' }
 
@@ -126,11 +115,6 @@ function emptyHeader(): HeaderForm {
 
 function emptyItem(): ItemForm {
   return { cropYear: '', origin: '', productName: '', packageType: '', quantity: '', unit: '', unitPrice: '', amount: '' }
-}
-
-function inputNumber(value: unknown) {
-  const number = Number(value)
-  return Number.isFinite(number) && number > 0 ? String(number) : ''
 }
 
 function groupedNumber(value: string | number) {
@@ -159,11 +143,6 @@ function MoneyInput({ value, onChange, readOnly = false, required = false }: { v
     readOnly={readOnly}
     required={required}
   />
-}
-
-function taxExemptAmount(value: unknown) {
-  const number = Number(value)
-  return Number.isFinite(number) && number !== 0 ? String(-Math.abs(number)) : ''
 }
 
 function nullableNumber(value: string) {
@@ -272,13 +251,13 @@ async function resizePhoto(file: File) {
       cropRegion(0.02, 0.7, 0.58, 0.22, 1000),
       cropRegion(0.05, 0.3, 0.9, 0.43, 1500),
     ])
-    return { imageBase64, headerRegionBase64, taxRegionBase64, paymentRegionBase64, detailRegionBase64, mimeType: 'image/jpeg', previewUrl: `data:image/jpeg;base64,${imageBase64}` }
+    return { imageBase64, headerRegionBase64, taxRegionBase64, paymentRegionBase64, detailRegionBase64, mimeType: 'image/jpeg' }
   } finally {
     URL.revokeObjectURL(objectUrl)
   }
 }
 
-export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin }: Props) {
+export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin, onPhotoPendingChange }: Props) {
   const { formatDate: formatJapaneseDate, formatCropYear: formatJapaneseCropYear } = useCalendarMode()
   const cameraRef = useRef<HTMLInputElement>(null)
   const [statements, setStatements] = useState<StoredStatement[]>([])
@@ -299,6 +278,10 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin }
   const [loadingStatements, setLoadingStatements] = useState(mode === 'list' || mode === 'pending')
   const [captureRetry, setCaptureRetry] = useState<Editor | null>(null)
   const [captureCount, setCaptureCount] = useState(0)
+  const [captureJobs, setCaptureJobs] = useState<CaptureJob[]>([])
+  const [uploadRetry, setUploadRetry] = useState<PhotoUpload | null>(null)
+  const [queueError, setQueueError] = useState('')
+  const [retryingJob, setRetryingJob] = useState('')
   const [notice, setNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [viewingImageUrl, setViewingImageUrl] = useState('')
 
@@ -333,6 +316,30 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin }
       keywords: item.statement_keywords.join('、'),
     }])))
   }, [workerId])
+
+  const loadCaptureJobs = useCallback(async () => {
+    const { data, error } = await supabase.rpc('flexcon_list_purchase_statement_jobs', { p_worker_id: workerId })
+    if (error) { setQueueError(error.message); return }
+    setQueueError('')
+    setCaptureJobs((data ?? []) as CaptureJob[])
+  }, [workerId])
+
+  useEffect(() => {
+    if (mode !== 'reader' && mode !== 'pending') return
+    // Polling also catches work submitted from another terminal without a Realtime grant.
+    const refresh = () => { void loadCaptureJobs(); if (mode === 'pending') void loadStatements() }
+    refresh()
+    const timer = window.setInterval(refresh, 5000)
+    window.addEventListener('focus', refresh)
+    return () => { window.clearInterval(timer); window.removeEventListener('focus', refresh) }
+  }, [loadCaptureJobs, loadStatements, mode])
+
+  useEffect(() => {
+    if (!uploadRetry) return
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = '' }
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [uploadRetry])
 
   useEffect(() => {
     // oxlint-disable-next-line react/set-state-in-effect -- RPC results synchronize this view with Supabase.
@@ -389,76 +396,62 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin }
 
   const preparePhoto = async (file: File) => {
     setBusy(true)
+    onPhotoPendingChange?.(true)
     setNotice(null)
+    let prepared = false
     try {
       const image = await resizePhoto(file)
       const productMasterNames = masters.filter((item) => item.value_type === 'product' && item.active).map((item) => item.name)
       const originMasterNames = masters.filter((item) => item.value_type === 'origin' && item.active).map((item) => item.name)
-      const { data, error } = await supabase.functions.invoke('analyze-purchase-statement', { body: {
-        imageBase64: image.imageBase64,
-        headerRegionBase64: image.headerRegionBase64,
-        taxRegionBase64: image.taxRegionBase64,
-        paymentRegionBase64: image.paymentRegionBase64,
-        detailRegionBase64: image.detailRegionBase64,
-        productMasterNames,
-        originMasterNames,
-        mimeType: image.mimeType,
-      } })
-      if (error) {
-        let message = error.message
-        const context = (error as { context?: Response }).context
-        if (context) try { message = ((await context.clone().json()) as { error?: string }).error ?? message } catch {}
-        throw new Error(message)
-      }
-      const statement = (data as { statement?: GeminiStatement } | null)?.statement
-      if (!statement || !Array.isArray(statement.lines) || statement.lines.length === 0) throw new Error('仕切書の明細を読み取れませんでした。')
-
-      let latestCropYear = ''
-      const warnings = [...(statement.warnings ?? [])]
-      const items = statement.lines.map((line, index) => {
-        const explicitYear = Number(line.crop_year)
-        if (Number.isInteger(explicitYear) && explicitYear >= 1900 && explicitYear <= 2100) latestCropYear = String(explicitYear)
-        else if (!latestCropYear) warnings.push(`${index + 1}行目の産年を読み取れず、直前の産年もありません。`)
-        return {
-          cropYear: latestCropYear,
-          origin: line.origin?.trim() ?? '',
-          productName: line.product_name?.trim() ?? '',
-          packageType: line.package_type?.trim() ?? '',
-          quantity: inputNumber(line.quantity),
-          unit: line.unit?.trim() ?? '',
-          unitPrice: inputNumber(line.unit_price),
-          amount: line.product_name?.trim() === '免税' ? taxExemptAmount(line.amount) : inputNumber(line.amount),
-        }
-      })
-      const capture: Editor = {
-        id: null,
-        submissionId: crypto.randomUUID(), pending: false, readerName: '',
-        sourceType: 'camera',
-        previewUrl: image.previewUrl,
-        imageBase64: image.imageBase64,
-        warnings: [...new Set(warnings.filter(Boolean))],
-        header: {
-          statementDate: statement.statement_date?.match(/^\d{4}-\d{2}-\d{2}$/)?.[0] ?? '',
-          documentNumber: statement.document_number?.trim() ?? '',
-          recipient: statement.recipient?.trim() ?? '',
-          issuer: statement.issuer?.trim() ?? '',
-          paymentMethod: statement.payment_method === 'cash' || statement.payment_method === 'transfer' ? statement.payment_method : '',
-          taxTreatment: statement.tax_treatment === 'exclusive' || statement.tax_treatment === 'inclusive' ? statement.tax_treatment : '',
-          taxRate: inputNumber(statement.tax_rate),
-          taxAmount: inputNumber(statement.tax_amount),
-          totalAmount: inputNumber(statement.total_amount),
-          invoiceNumber: statement.invoice_number?.trim() ?? '',
-        },
-        items,
-      }
-      setCaptureRetry(capture)
-      await submitDraft(capture)
+      const upload: PhotoUpload = { jobId: crypto.randomUUID(), image: { ...image, productMasterNames, originMasterNames } }
+      setUploadRetry(upload)
+      prepared = true
+      await enqueuePhoto(upload)
     } catch (error) {
+      if (!prepared) onPhotoPendingChange?.(false)
       setNotice({ type: 'error', text: error && typeof error === 'object' && 'message' in error ? String(error.message) : '仕切書画像の読取・保存を完了できませんでした。' })
     } finally {
       setBusy(false)
       if (cameraRef.current) cameraRef.current.value = ''
     }
+  }
+
+  const enqueuePhoto = async (upload: PhotoUpload) => {
+    const { data, error } = await supabase.functions.invoke('purchase-statement-queue', { body: { action: 'enqueue', ...upload } })
+    if (error || !(data as { jobId?: string } | null)?.jobId) throw new Error('画像を保存できませんでした。「画像保存を再試行」で再送信してください。')
+    setUploadRetry(null)
+    onPhotoPendingChange?.(false)
+    if ((data as { status?: string }).status === 'cancelled') {
+      setNotice({ type: 'error', text: 'この読取は取り消されています。撮影し直してください。' })
+      await loadCaptureJobs()
+      return
+    }
+    setCaptureCount(count => count + 1)
+    setNotice({ type: 'success', text: '画像を保存し、解析待ちに追加しました。' })
+    await loadCaptureJobs()
+  }
+
+  const retryPhotoUpload = async () => {
+    if (!uploadRetry || busy) return
+    setBusy(true)
+    try { await enqueuePhoto(uploadRetry) } catch (error) {
+      setNotice({ type: 'error', text: error instanceof Error ? error.message : '画像を保存できませんでした。' })
+    } finally { setBusy(false) }
+  }
+
+  const retryJob = async (job: CaptureJob) => {
+    if (retryingJob) return
+    setRetryingJob(job.id)
+    const { error } = await supabase.rpc('flexcon_retry_purchase_statement_job', { p_worker_id: workerId, p_job_id: job.id })
+    if (error) setNotice({ type: 'error', text: error.message })
+    else await loadCaptureJobs()
+    setRetryingJob('')
+  }
+
+  const openJobImage = async (job: CaptureJob) => {
+    const { data, error } = await supabase.functions.invoke('purchase-statement-queue', { body: { action: 'signed-url', jobId: job.id } })
+    if (error || !(data as { signedUrl?: string } | null)?.signedUrl) return setNotice({ type: 'error', text: '保存画像を開けませんでした。' })
+    setViewingImageUrl((data as { signedUrl: string }).signedUrl)
   }
 
   const editStatement = (statement: StoredStatement) => {
@@ -835,10 +828,24 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin }
     {notice && <div className={`notice ${notice.type}`} role={notice.type === 'error' ? 'alert' : 'status'}>{notice.text}</div>}
     {mode === 'reader' && canOperate && <>
       <input ref={cameraRef} className="visually-hidden" type="file" accept="image/*" capture="environment" onChange={(event) => { const file = event.target.files?.[0]; if (file) void preparePhoto(file) }} />
-      <section className="section-band purchase-statement-actions"><div><h2>仕切書読込み</h2>{captureCount > 0 && <p>今回の登録：{captureCount}件</p>}</div><div><button className="primary-button" type="button" onClick={() => cameraRef.current?.click()} disabled={busy || Boolean(captureRetry)}><Camera size={20} />{busy ? '読取・保存中...' : captureCount > 0 ? '次の仕切書を読み取る' : '撮影・画像を選択'}</button><button className="secondary-button" type="button" onClick={startManual} disabled={busy || Boolean(captureRetry)}><Keyboard size={20} />手入力</button></div></section>
+      <section className="section-band purchase-statement-actions"><div><h2>仕切書読込み</h2>{captureCount > 0 && <p>今回の受付：{captureCount}件</p>}</div><div><button className="primary-button" type="button" onClick={() => cameraRef.current?.click()} disabled={busy || Boolean(captureRetry) || Boolean(uploadRetry)}><Camera size={20} />{busy ? '画像保存中...' : captureCount > 0 ? '次の仕切書を読み取る' : '撮影・画像を選択'}</button><button className="secondary-button" type="button" onClick={startManual} disabled={busy || Boolean(captureRetry) || Boolean(uploadRetry)}><Keyboard size={20} />手入力</button></div></section>
+      {uploadRetry && !busy && <div className="purchase-statement-retry"><button className="secondary-button" type="button" onClick={() => void retryPhotoUpload()}><RefreshCw size={18} />画像保存を再試行</button><span role="alert">この画像はまだ保存が完了していません。</span></div>}
       {captureRetry && !busy && <div className="purchase-statement-retry"><button className="secondary-button" type="button" onClick={() => void retryCapture()}><RefreshCw size={18} />保存を再試行</button></div>}
       {editorForm}
     </>}
+    {(mode === 'reader' || mode === 'pending') && <section className="purchase-queue-section" aria-label="画像解析の待ち行列">
+      <div className="purchase-statement-section-heading"><h2>画像解析</h2><button className="icon-button" type="button" title="解析状況を再読込" aria-label="解析状況を再読込" onClick={() => void loadCaptureJobs()}><RefreshCw size={18} /></button></div>
+      {queueError && <p className="notice error" role="alert">解析状況を取得できませんでした。{queueError}</p>}
+      <div className="purchase-queue-counts" role="status">解析待ち {captureJobs.filter(job => job.status === 'queued').length}件 ／ 解析中 {captureJobs.filter(job => job.status === 'processing').length}件 ／ 失敗 {captureJobs.filter(job => job.status === 'failed').length}件</div>
+      <div className="purchase-queue-wrap"><table className="purchase-queue-table"><thead><tr><th>保存日時</th><th>読取者</th><th>状態</th><th>仕切書</th><th>画像</th><th>操作</th></tr></thead><tbody>
+        {captureJobs.filter(job => mode === 'reader' || !['succeeded', 'cancelled'].includes(job.status)).map(job => <tr key={job.id} data-status={job.status}>
+          <td>{new Date(job.created_at).toLocaleString('ja-JP')}</td><td>{job.reader_name}</td><td><strong>{job.confirmed ? '確認済み' : jobStatusLabels[job.status]}</strong>{job.error && <small>{job.error}</small>}</td><td>{job.document_number || '―'}</td>
+          <td><button className="icon-button" type="button" title="保存画像を表示" aria-label={`${job.reader_name}の保存画像を表示`} disabled={job.status === 'uploading'} onClick={() => void openJobImage(job)}><FileImage size={18} /></button></td>
+          <td>{job.status === 'failed' && canOperate && <button className="secondary-button" type="button" disabled={Boolean(retryingJob)} onClick={() => void retryJob(job)}><RefreshCw size={16} />再試行</button>}</td>
+        </tr>)}
+        {captureJobs.filter(job => mode === 'reader' || !['succeeded', 'cancelled'].includes(job.status)).length === 0 && <tr><td colSpan={6} className="empty-state">{mode === 'pending' ? '解析待ちの画像はありません' : '保存した画像はありません'}</td></tr>}
+      </tbody></table></div>
+    </section>}
     {(mode === 'list' || mode === 'pending') && <>
       {selectedStatement ? statementDetail : <>
         <div className="search-row"><div className="search-input-wrap"><Search size={18} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="日付・仕切書№・担当者・仕入先・産地・品名を検索" /></div><button className="secondary-button" type="button" onClick={() => void loadStatements()} disabled={loadingStatements}><RefreshCw size={17} />{loadingStatements ? '読込中' : '再読込'}</button></div>

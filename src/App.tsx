@@ -37,6 +37,7 @@ function App() {
   const [tab, setTab] = useState<Tab>(initialTab)
   const [historyVersion, setHistoryVersion] = useState(0)
   const [undoVersion, setUndoVersion] = useState(0)
+  const [statementPhotoPending, setStatementPhotoPending] = useState(false)
   const [reportingPeriod, setReportingPeriod] = useState(() => {
     try {
       const stored: unknown = JSON.parse(sessionStorage.getItem(REPORTING_PERIOD_STORAGE_KEY) ?? 'null')
@@ -179,17 +180,17 @@ function App() {
           </div>
         </div>
         <div className="header-actions">
-          {canOperate && <UndoButton workerId={worker.worker_id} onUndone={() => { setUndoVersion((version) => version + 1); setHistoryVersion((version) => version + 1) }} />}
+          {canOperate && <UndoButton workerId={worker.worker_id} disabled={statementPhotoPending} onUndone={() => { setUndoVersion((version) => version + 1); setHistoryVersion((version) => version + 1) }} />}
           <div className="calendar-mode-control" aria-label="日付表示">
             <span>和暦</span>
             <button className="toggle-switch" type="button" role="switch" aria-label="西暦表示" aria-checked={calendarMode === 'seireki'} title={calendarMode === 'wareki' ? '西暦に切り替え' : '和暦に切り替え'} onClick={() => setCalendarMode(calendarMode === 'wareki' ? 'seireki' : 'wareki')}><span /></button>
             <span>西暦</span>
           </div>
-          <button className="menu-button" type="button" title="業務管理メニューへ" aria-label="業務管理メニューへ" onClick={returnToMenu}>
+          <button className="menu-button" type="button" title="業務管理メニューへ" aria-label="業務管理メニューへ" onClick={returnToMenu} disabled={statementPhotoPending}>
             <House size={20} />
             <span>メニュー</span>
           </button>
-          <button className="icon-button" type="button" title="ログアウト" aria-label="ログアウト" onClick={() => void logout()}>
+          <button className="icon-button" type="button" title="ログアウト" aria-label="ログアウト" onClick={() => void logout()} disabled={statementPhotoPending}>
             <LogOut size={20} />
           </button>
         </div>
@@ -224,7 +225,7 @@ function App() {
         )}
         {!statementApplication && tab === 'inventory-history' && <InventoryManager view="history" workerId={worker.worker_id} workerName={worker.worker_name} canOperate={canOperate} isAdmin={isAdmin} />}
         {!statementApplication && tab === 'inventory' && <InventoryManager view="balance" workerId={worker.worker_id} workerName={worker.worker_name} canOperate={canOperate} isAdmin={isAdmin} />}
-        {statementApplication && tab === 'statement-reader' && canOperate && <PurchaseStatementManager mode="reader" workerId={worker.worker_id} canOperate={canOperate} isAdmin={isAdmin} />}
+        {statementApplication && tab === 'statement-reader' && canOperate && <PurchaseStatementManager mode="reader" workerId={worker.worker_id} canOperate={canOperate} isAdmin={isAdmin} onPhotoPendingChange={setStatementPhotoPending} />}
         {statementApplication && tab === 'statement-pending' && <PurchaseStatementManager mode="pending" workerId={worker.worker_id} canOperate={canOperate} isAdmin={isAdmin} />}
         {statementApplication && tab === 'statement-list' && <PurchaseStatementManager mode="list" workerId={worker.worker_id} canOperate={canOperate} isAdmin={isAdmin} />}
         {statementApplication && tab === 'statement-master' && isAdmin && <PurchaseStatementManager mode="master" workerId={worker.worker_id} canOperate={canOperate} isAdmin={isAdmin} />}
@@ -280,13 +281,13 @@ function App() {
           {canOperate && <button className={tab === 'statement-reader' ? 'active' : ''} onClick={() => setTab('statement-reader')}>
             <Camera size={22} /><span>仕切書読込</span>
           </button>}
-          <button className={tab === 'statement-pending' ? 'active' : ''} onClick={() => setTab('statement-pending')}>
+          <button className={tab === 'statement-pending' ? 'active' : ''} onClick={() => setTab('statement-pending')} disabled={statementPhotoPending}>
             <ClipboardCheck size={22} /><span>確認待ち</span>
           </button>
-          <button className={tab === 'statement-list' ? 'active' : ''} onClick={() => setTab('statement-list')}>
+          <button className={tab === 'statement-list' ? 'active' : ''} onClick={() => setTab('statement-list')} disabled={statementPhotoPending}>
             <List size={22} /><span>仕切書一覧</span>
           </button>
-          {isAdmin && <button className={tab === 'statement-master' ? 'active' : ''} onClick={() => setTab('statement-master')}>
+          {isAdmin && <button className={tab === 'statement-master' ? 'active' : ''} onClick={() => setTab('statement-master')} disabled={statementPhotoPending}>
             <Settings2 size={22} /><span>マスタ</span>
           </button>}
         </> : <>

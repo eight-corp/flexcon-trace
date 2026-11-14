@@ -7,7 +7,7 @@ import { useCalendarMode } from '../lib/calendarMode'
 
 type UndoStatus = { available: boolean; operationId?: string; action?: string; createdAt?: string; reason?: string }
 
-export function UndoButton({ workerId, onUndone }: { workerId: string; onUndone: () => void }) {
+export function UndoButton({ workerId, onUndone, disabled = false }: { workerId: string; onUndone: () => void; disabled?: boolean }) {
   const { formatDateTime } = useCalendarMode()
   const [writes, setWrites] = useState(pendingBusinessWrites)
   const [busy, setBusy] = useState(false)
@@ -40,7 +40,7 @@ export function UndoButton({ workerId, onUndone }: { workerId: string; onUndone:
   }, [])
 
   const prepare = async () => {
-    if (busy || writes) return
+    if (busy || writes || disabled) return
     setBusy(true); setNotice(null)
     try {
       if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
@@ -72,7 +72,7 @@ export function UndoButton({ workerId, onUndone }: { workerId: string; onUndone:
 
   return <>
     <span className="global-undo-slot" ref={anchorRef} aria-hidden="true" />
-    {position && createPortal(<button style={position} className="icon-button global-undo-button" type="button" title="直前の操作を取り消す" aria-label="直前の操作を取り消す" disabled={busy || writes > 0} onPointerDown={(event) => event.preventDefault()} onClick={() => void prepare()}><Undo2 size={20} /></button>, document.body)}
+    {position && createPortal(<button style={position} className="icon-button global-undo-button" type="button" title="直前の操作を取り消す" aria-label="直前の操作を取り消す" disabled={disabled || busy || writes > 0} onPointerDown={(event) => event.preventDefault()} onClick={() => void prepare()}><Undo2 size={20} /></button>, document.body)}
     {notice && createPortal(<div className={`notice ${notice.type} global-undo-notice`} role={notice.type === 'error' ? 'alert' : 'status'}><span>{notice.text}</span><button className="icon-button" type="button" aria-label="通知を閉じる" title="閉じる" onClick={() => setNotice(null)}><X size={16} /></button></div>, document.body)}
     {target && createPortal(<div className="modal-backdrop global-undo-backdrop"><section className="registration-modal global-undo-modal" role="dialog" aria-modal="true" aria-labelledby="undo-title" onKeyDown={(event) => {
       if (event.key === 'Escape' && !busy) { event.preventDefault(); event.stopPropagation(); setTarget(null) }
