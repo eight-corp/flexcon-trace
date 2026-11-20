@@ -40,6 +40,8 @@ try {
         try {
           if (resource === 'rpc/business_session') {
             body = { ok: true, workerId: 'tester', workerName: 'Tester', permissions: { rice_shipping: width === 1440 ? 'admin' : 'operator' } }
+          } else if (resource === 'rpc/flexcon_list_inspection_document_print_status') {
+            body = {}
           } else if (resource === 'flexcon_authorizations') {
             body = (await db.query('select * from flexcon_authorizations')).rows
           } else if (['rpc/flexcon_add_authorization', 'rpc/flexcon_update_authorization'].includes(resource)) {

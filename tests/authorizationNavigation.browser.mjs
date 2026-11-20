@@ -46,6 +46,9 @@ try {
         let body = []
         if (resource === 'rpc/business_session') {
           body = { ok: true, workerId: 'tester', workerName: 'Tester', permissions: { rice_shipping: 'admin' } }
+        } else if (['rpc/flexcon_list_inspection_document_print_status', 'rpc/flexcon_inspection_document_print_status'].includes(resource)) {
+          assert.equal(route.request().postDataJSON().p_printed_document, undefined)
+          body = {}
         } else if (resource === 'flexcon_authorizations') {
           await new Promise(resolve => setTimeout(resolve, 80))
           body = currentRecords
