@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, Camera, Check, ChevronDown, ChevronUp, FileImage, Keyboard, Pencil, Plus, RefreshCw, Save, Search, Trash2, X } from 'lucide-react'
+import { ArrowLeft, Camera, Check, ChevronDown, ChevronUp, FileImage, Keyboard, Minus, Pencil, Plus, RefreshCw, Save, Search, Trash2, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useCalendarMode } from '../lib/calendarMode'
 import { JapaneseCropYearInput, JapaneseDateInput } from './JapaneseDateInput'
@@ -299,6 +299,8 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin, 
   const [notice, setNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [viewingImageUrl, setViewingImageUrl] = useState('')
   const [imageDisplayFailed, setImageDisplayFailed] = useState(false)
+  const [imageAspectRatio, setImageAspectRatio] = useState(0)
+  const [imageZoom, setImageZoom] = useState(100)
   const imageDialogRef = useRef<HTMLDialogElement>(null)
   const imageTriggerRef = useRef<HTMLButtonElement | null>(null)
 
@@ -861,7 +863,10 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin, 
       <div className="purchase-queue-wrap"><table className="purchase-queue-table"><thead><tr><th>保存日時</th><th>読取者</th><th>状態</th><th>仕切書</th><th>画像</th><th>操作</th></tr></thead><tbody>
         {captureJobs.filter(job => mode === 'reader' || !['succeeded', 'cancelled'].includes(job.status)).map(job => <tr key={job.id} data-status={job.status}>
           <td>{new Date(job.created_at).toLocaleString('ja-JP')}</td><td>{job.reader_name}</td><td><strong>{job.confirmed ? '確認済み' : jobStatusLabels[job.status]}</strong>{job.error && <small>{job.error}</small>}</td><td>{job.document_number || '―'}</td>
-          <td><button className="icon-button" type="button" title="保存画像を表示" aria-label={`${job.reader_name}の保存画像を表示`} disabled={job.status === 'uploading'} onClick={() => void openJobImage(job)}><FileImage size={18} /></button></td>
+          <td><button className="icon-button" type="button" title="保存画像を表示" aria-label={`${job.reader_name}の保存画像を表示`} disabled={job.status === 'uploading'} onClick={(event) => {
+            imageTriggerRef.current = event.currentTarget
+            void openJobImage(job)
+          }}><FileImage size={18} /></button></td>
           <td>{job.status === 'failed' && canOperate && <button className="secondary-button" type="button" disabled={Boolean(retryingJob)} onClick={() => void retryJob(job)}><RefreshCw size={16} />再試行</button>}</td>
         </tr>)}
         {captureJobs.filter(job => mode === 'reader' || !['succeeded', 'cancelled'].includes(job.status)).length === 0 && <tr><td colSpan={6} className="empty-state">{mode === 'pending' ? '解析待ちの画像はありません' : '保存した画像はありません'}</td></tr>}
@@ -923,13 +928,28 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin, 
       onClose={() => {
         setViewingImageUrl('')
         setImageDisplayFailed(false)
+        setImageAspectRatio(0)
+        setImageZoom(100)
         imageTriggerRef.current?.focus({ preventScroll: true })
         imageTriggerRef.current = null
       }}
       onClick={(event) => { if (event.target === event.currentTarget) event.currentTarget.close() }}>
       <div className="modal-header"><h2>保存した仕切書画像</h2><button className="secondary-button" type="button" aria-label="画像を閉じる" onClick={() => imageDialogRef.current?.close()}><X size={18} />閉じる</button></div>
       {imageDisplayFailed ? <div className="notice error" role="alert">画像を表示できませんでした。閉じてから「画像を表示」をもう一度押してください。</div>
-        : <img src={viewingImageUrl} alt="保存した仕切書" onError={() => setImageDisplayFailed(true)} />}
+        : <>
+          <div className="purchase-statement-image-controls" role="group" aria-label="画像の拡大・縮小">
+            <button className="secondary-button" type="button" aria-label="画像を縮小" disabled={!imageAspectRatio || imageZoom === 100} onClick={() => setImageZoom((zoom) => Math.max(100, zoom - 50))}><Minus size={18} />縮小</button>
+            <output aria-live="polite">{imageZoom}%</output>
+            <button className="secondary-button" type="button" aria-label="画像を拡大" disabled={!imageAspectRatio || imageZoom === 400} onClick={() => setImageZoom((zoom) => Math.min(400, zoom + 50))}><Plus size={18} />拡大</button>
+            <button className="secondary-button" type="button" disabled={!imageAspectRatio || imageZoom === 100} onClick={() => setImageZoom(100)}>全体表示</button>
+          </div>
+          <div className="purchase-statement-image-viewport" role="region" aria-label="仕切書画像の表示範囲" tabIndex={0}>
+            <img src={viewingImageUrl} alt="保存した仕切書"
+              style={imageAspectRatio ? { width: `min(${imageZoom}%, calc(var(--statement-image-area-height) * ${imageAspectRatio * imageZoom / 100}))` } : undefined}
+              onLoad={(event) => setImageAspectRatio(event.currentTarget.naturalWidth / event.currentTarget.naturalHeight)}
+              onError={() => setImageDisplayFailed(true)} />
+          </div>
+        </>}
     </dialog>}
   </div>
 }

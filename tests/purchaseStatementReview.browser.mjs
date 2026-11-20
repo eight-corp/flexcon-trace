@@ -67,6 +67,8 @@ try {
           }
           await rpc(actor, 'flexcon_purchase_queue_ready', { p_worker_id: actor, p_job_id: args.jobId })
           body = { jobId: args.jobId, status: 'queued' }
+        } else if (name === 'purchase-statement-queue' && args.action === 'signed-url') {
+          body = { signedUrl: imageUrl }
         } else if (name === 'purchase-statement-image' && args.action === 'upload') {
           if (failUpload) {
             failUpload = false
@@ -113,6 +115,15 @@ try {
         await reader.screenshot({ path: path.join(process.env.QA_ARTIFACTS, `statement-reader-${width}.png`) })
       }
       assert.equal(await reader.getByRole('button', { name: '次の仕切書を読み取る', exact: true }).isEnabled(), true)
+      await reader.getByRole('button', { name: 'Readerの保存画像を表示', exact: true }).click()
+      const queuePopup = reader.getByRole('dialog', { name: '保存した仕切書画像', exact: true })
+      const queueImage = queuePopup.getByRole('img', { name: '保存した仕切書', exact: true })
+      await queueImage.waitFor()
+      const queueFitWidth = (await queueImage.boundingBox()).width
+      await queuePopup.getByRole('button', { name: '画像を拡大', exact: true }).click()
+      assert.ok((await queueImage.boundingBox()).width > queueFitWidth * 1.4)
+      await queuePopup.getByRole('button', { name: '画像を閉じる', exact: true }).click()
+      await queuePopup.waitFor({ state: 'detached' })
       failUpload = true
       await reader.locator('input[type=file]').setInputFiles(photo)
       await reader.getByRole('button', { name: '画像保存を再試行', exact: true }).waitFor()
@@ -169,6 +180,25 @@ try {
       const popupImage = reviewPopup.getByRole('img', { name: '保存した仕切書', exact: true })
       await popupImage.waitFor()
       assert.equal(await popupImage.evaluate((image) => image.decode().then(() => image.naturalWidth > 0)), true)
+      const zoomIn = reviewPopup.getByRole('button', { name: '画像を拡大', exact: true })
+      const zoomOut = reviewPopup.getByRole('button', { name: '画像を縮小', exact: true })
+      await zoomIn.waitFor()
+      assert.equal(await zoomOut.isEnabled(), false)
+      const fitWidth = (await popupImage.boundingBox()).width
+      await zoomIn.click()
+      assert.ok((await popupImage.boundingBox()).width > fitWidth * 1.4)
+      await reviewPopup.getByText('150%', { exact: true }).waitFor()
+      const scrollPosition = await reviewPopup.getByRole('region', { name: '仕切書画像の表示範囲' }).evaluate((area) => {
+        area.scrollLeft = area.scrollWidth
+        return area.scrollLeft
+      })
+      assert.ok(scrollPosition > 0)
+      await zoomOut.click()
+      await reviewPopup.getByText('100%', { exact: true }).waitFor()
+      assert.ok(Math.abs((await popupImage.boundingBox()).width - fitWidth) < 2)
+      await zoomIn.click()
+      await reviewPopup.getByRole('button', { name: '全体表示', exact: true }).click()
+      await reviewPopup.getByText('100%', { exact: true }).waitFor()
       await reviewPopup.getByRole('button', { name: '画像を閉じる', exact: true }).click()
       await reviewPopup.waitFor({ state: 'detached' })
       await dialog.waitFor()
