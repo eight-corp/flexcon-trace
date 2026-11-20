@@ -10,6 +10,7 @@ try {
   for (const width of [1440, 390]) {
     const { db, rpc } = await purchaseStatementDatabase()
     await db.exec(fs.readFileSync('supabase/migrations/202611140001_purchase_statement_queue.sql', 'utf8'))
+    await db.exec(fs.readFileSync('supabase/migrations/202611200003_purchase_statement_reader_name.sql', 'utf8'))
     const queueSecret = (await db.query('select secret from flexcon_queue_private.settings')).rows[0].secret
     const contexts = []
     const errors = []
@@ -21,8 +22,10 @@ try {
       for (;;) {
         const job = await rpc('reader', 'flexcon_purchase_queue_claim', { p_secret: queueSecret })
         if (!job) break
+        const number = jobNumbers.get(job.id)
+        const date = { 100: '2024-10-07', 101: '2025-10-07', 102: '2027-10-07' }[number]
         await rpc('reader', 'flexcon_purchase_queue_complete', { p_job_id: job.id, p_lease_token: job.leaseToken,
-          p_header: validHeader(jobNumbers.get(job.id)), p_items: validItems(), p_warnings: ['元画像で数量を確認してください'] })
+          p_header: { ...validHeader(number), statement_date: date }, p_items: validItems(), p_warnings: ['元画像で数量を確認してください'] })
       }
     }
     const createPage = async actor => {
@@ -76,6 +79,7 @@ try {
         await route.fulfill({ contentType: 'application/json', body: JSON.stringify(body) })
       })
       const page = await context.newPage()
+      await page.clock.setFixedTime(new Date('2026-11-20T12:00:00+09:00'))
       page.on('pageerror', error => errors.push(error.message))
       await page.goto('https://purchase-review.test/?app=statements')
       return page
@@ -134,9 +138,13 @@ try {
       const reviewer = await createPage('reviewer')
       await reviewer.getByRole('button', { name: '確認待ち', exact: true }).click()
       const row = reviewer.locator('.purchase-statement-pending-rows').filter({ has: reviewer.getByRole('button', { name: '100', exact: true }) })
+      await row.locator('.purchase-statement-date-warning').waitFor()
+      assert.equal(await reviewer.locator('.purchase-statement-pending-rows .purchase-statement-date-warning').count(), 1)
       await row.locator('td').first().click()
       const dialog = reviewer.getByRole('dialog', { name: '仕切書を確認', exact: true })
       await dialog.waitFor()
+      await dialog.locator('.purchase-statement-date-warning input[type=text]').waitFor()
+      assert.equal(await dialog.getByLabel('担当者', { exact: true }).inputValue(), 'Reader')
       await reviewer.waitForFunction(() => {
         const img = document.querySelector('.purchase-statement-preview')
         return img?.complete && img.naturalWidth > 0

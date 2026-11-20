@@ -95,7 +95,7 @@ async function generateStatement(
             { inlineData: { mimeType, data: taxRegionBase64 } },
           ] : []),
           ...(paymentRegionBase64 ? [
-            { text: '同じ画像の左下側を拡大した補助画像。「現金払い・振込払い」の手書きの囲みは、この画像だけを優先して支払方法として判定する:' },
+            { text: '同じ画像の左下側を拡大した補助画像。「現金払い・振込払い」のどちらを囲む筆跡か、この画像を優先して見比べる。文字が見切れている場合は全体画像で補う:' },
             { inlineData: { mimeType, data: paymentRegionBase64 } },
           ] : []),
           ...(detailRegionBase64 ? [
@@ -185,7 +185,6 @@ const responseSchema = {
   properties: {
     statement_date: { type: 'STRING' },
     document_number: { type: 'STRING' },
-    recipient: { type: 'STRING' },
     issuer: { type: 'STRING' },
     payment_method: { type: 'STRING' },
     tax_treatment: { type: 'STRING' },
@@ -212,7 +211,7 @@ const responseSchema = {
     },
     warnings: { type: 'ARRAY', items: { type: 'STRING' } },
   },
-  required: ['statement_date', 'document_number', 'recipient', 'issuer', 'payment_method', 'tax_treatment', 'tax_rate', 'tax_amount', 'total_amount', 'invoice_number', 'lines', 'warnings'],
+  required: ['statement_date', 'document_number', 'issuer', 'payment_method', 'tax_treatment', 'tax_rate', 'tax_amount', 'total_amount', 'invoice_number', 'lines', 'warnings'],
 }
 
 function looksLikePackageDescription(value: string) {
@@ -295,13 +294,14 @@ const prompt = `
 この画像は日本の仕切書です。画像に書かれている情報だけを読み取り、指定されたJSON形式で返してください。
 
 位置を使う項目は、文字列だけでなく罫線で区切られた列と手書きの囲みを拡大して確認する。薄い、途切れている、下線とつながっている手書きの楕円も丸印として扱う。
+担当者名はアプリ側で設定するため、画像の担当者・宛先の名前は読み取らず、結果やwarningsにも含めない。
+日付、番号、産年、数量、単価、金額などの数字に手書きの横線・二重線が重なって取り消されている場合、その数字は無視する。同じ欄の上・下・横に直し書きされた数字があれば、取り消されていない直近の訂正後の数字だけを採用する。訂正後の値が判別できなければ空欄扱いにしてwarningsに記載する。罫線、単なる下線、日付の区切り、負号は訂正線として扱わない。明細の訂正値はその行・列に対応するものだけを使う。
 
 共通項目:
-- statement_date: 日付を YYYY-MM-DD 形式で返す。見えなければ空文字。
+- statement_date: 書類の日付を YYYY-MM-DD 形式で返す。令和・平成などの和暦は対応する西暦へ正確に変換する。現年から離れていても、読めた年を現在の年に書き換えない。見えなければ空文字。
 - document_number: 伝票番号。見えなければ空文字。
-- recipient: 宛先欄の「担当者」と「様」の間に記載された名称だけを返す。敬称は含めない。見えなければ空文字。
 - issuer: 右上の「№」欄と「登録番号」欄の間にある「仕入先」欄の会社名または氏名だけを返す。発行元の社名・印影や宛先欄の名称を混同しない。見えなければ空文字。
-- payment_method: 仕切書の左下に印刷された「（現金払い・振込払い）」だけを確認する。税抜・税込の丸は支払方法と無関係である。左下の拡大画像で、手書きの丸または下線を伴う囲みが現金払いに付いていればcash、振込払いに付いていればtransferを返す。丸が文字全体を閉じていなくても、片方だけを明確に囲む筆跡なら選択済みとする。両方・印なし・判別不能なら空文字にしてwarningsへ確認事項を追加する。
+- payment_method: 仕切書の左下に印刷された「（現金払い・振込払い）」の二択を確認する。どちらの語の周りに手書きの筆跡が回り込んでいるか見比べる。丸の形は問わない。いびつな楕円、角張った囲み、途切れた線、文字に重なる線、下線から回り込む線でも、片方を囲んでいると判断できれば選択する。現金払いならcash、振込払いならtransfer。印刷の括弧、税抜・税込の印、囲みを伴わない単なる下線は対象外。両方・印なし・判別不能なら空文字にしてwarningsへ確認事項を追加する。
 - tax_treatment: 明細表の最上段右端にある金額列の見出し「金額（税抜・税込）」だけを拡大して確認する。「税抜」「税込」の文字そのものを囲む手書きの楕円を探す。税込を囲んでいればinclusive（内税）、税抜を囲んでいればexclusive（外税）を返す。下部の「税込合計金額」という印刷文字は判定に使わない。括弧や印刷文字を丸印と誤認せず、金額計算から推測しない。両方・丸なし・判別不能なら空文字にしてwarningsへ確認事項を追加する。
 - tax_rate: 税率をパーセントの数値で返す（10%なら10）。見えなければ0。
 - tax_amount: 消費税額を数値だけで返す。見えなければ0。
@@ -352,6 +352,7 @@ export async function analyzePurchaseStatement(body: AnalysisInput) {
     const responseText = (statementResult.value as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> }).candidates?.[0]?.content?.parts?.find((part) => part.text)?.text ?? ''
     if (!responseText) throw new Error('Geminiから読取結果が返りませんでした。')
     const statement = normalizeStatementLines(JSON.parse(responseText) as Record<string, unknown>, originMasterNames)
+    delete statement.recipient
     const taxTreatment = taxResult.status === 'fulfilled' ? taxResult.value : ''
     if (taxTreatment) {
       const originalTaxTreatment = statement.tax_treatment

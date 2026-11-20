@@ -9,6 +9,7 @@ test('queue edge saves images before AI, authenticates every action, retries upl
   const { db, rpc } = await purchaseStatementDatabase()
   try {
     await db.exec(fs.readFileSync('supabase/migrations/202611140001_purchase_statement_queue.sql', 'utf8'))
+    await db.exec(fs.readFileSync('supabase/migrations/202611200003_purchase_statement_reader_name.sql', 'utf8'))
     const secret = (await db.query('select secret from flexcon_queue_private.settings')).rows[0].secret
     const objects = new Map(), tasks = [], calls = []
     let handler, failPayload = true, providerFailure = false
@@ -68,13 +69,16 @@ test('queue edge saves images before AI, authenticates every action, retries upl
     const draft = (await rpc('reviewer', 'flexcon_list_pending_purchase_statements', { p_worker_id: 'reviewer' }))[0]
     assert.equal(draft.id, id)
     assert.equal(draft.created_by_worker_id, 'reader')
+    assert.equal(draft.recipient, 'Reader', 'Use the original logged-in reader rather than the OCR name or reviewer')
     assert.equal(draft.tax_treatment, 'inclusive')
     assert.equal(draft.items[1].amount, -30)
     assert.equal(draft.items[1].crop_year, '2026')
     assert.ok(draft.warnings.includes('確認事項'))
     const providerCalls = calls.filter(call => call.url.hostname === 'generativelanguage.googleapis.com')
     const prompt = providerCalls.find(call => call.body.generationConfig.responseSchema.properties.lines).body.contents[0].parts[0].text
-    for (const rule of ['数量列', '仕入先', '品名マスタ候補', '青天のへきれき']) assert.ok(prompt.includes(rule))
+    for (const rule of ['数量列', '仕入先', '品名マスタ候補', '青天のへきれき', '訂正後の数字', '角張った囲み', '和暦']) assert.ok(prompt.includes(rule))
+    const schema = providerCalls.find(call => call.body.generationConfig.responseSchema.properties.lines).body.generationConfig.responseSchema
+    assert.equal(Object.hasOwn(schema.properties, 'recipient'), false)
     assert.equal((await invoke({ action: 'signed-url', jobId: id }, 'viewer')).status, 200)
     providerFailure = true
     const failedId = crypto.randomUUID()

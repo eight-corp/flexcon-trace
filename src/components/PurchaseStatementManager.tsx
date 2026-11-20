@@ -109,6 +109,11 @@ function today() {
   return date.toISOString().slice(0, 10)
 }
 
+function isReadDateOutsideRange(date: string, sourceType: SourceType, currentYear: number) {
+  const year = date.match(/^(\d{4})-\d{2}-\d{2}$/)?.[1]
+  return sourceType === 'camera' && year !== undefined && Math.abs(Number(year) - currentYear) > 1
+}
+
 function emptyHeader(): HeaderForm {
   return { statementDate: today(), documentNumber: '', recipient: '', issuer: '', paymentMethod: '', taxTreatment: '', taxRate: '', taxAmount: '', totalAmount: '', invoiceNumber: '' }
 }
@@ -259,6 +264,15 @@ async function resizePhoto(file: File) {
 
 export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin, onPhotoPendingChange }: Props) {
   const { formatDate: formatJapaneseDate, formatCropYear: formatJapaneseCropYear } = useCalendarMode()
+  const currentYear = Number(new Intl.DateTimeFormat('ja-JP-u-ca-gregory', { year: 'numeric', timeZone: 'Asia/Tokyo' }).formatToParts(new Date()).find((part) => part.type === 'year')?.value)
+  const dateWarning = '仕切書の日付が現在の年の前後1年を超えています。原画像を確認してください。'
+  const renderStatementDate = (statement: StoredStatement) => {
+    if (!statement.statement_date) return '未読取'
+    const date = formatJapaneseDate(statement.statement_date)
+    return isReadDateOutsideRange(statement.statement_date, statement.source_type, currentYear)
+      ? <span className="purchase-statement-date-warning" title={dateWarning}>{date}</span>
+      : date
+  }
   const cameraRef = useRef<HTMLInputElement>(null)
   const [statements, setStatements] = useState<StoredStatement[]>([])
   const [masters, setMasters] = useState<MasterValue[]>([])
@@ -783,7 +797,9 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin, 
     {editor.previewUrl && <img className="purchase-statement-preview" src={editor.previewUrl} alt="撮影した仕切書" onError={() => { setNotice({ type: 'error', text: '読取画像を表示できませんでした。再度開いてください。' }); if (editor.pending) setEditor((current) => current ? { ...current, previewUrl: '' } : current) }} />}
     {editor.warnings.length > 0 && <div className="notice warning"><strong>確認が必要な項目</strong>{editor.warnings.map((warning) => <span key={warning}>{warning}</span>)}</div>}
     <section className="purchase-statement-common"><h3>共通項目</h3><div className="purchase-statement-common-grid">
-      <label>日付<JapaneseDateInput value={editor.header.statementDate} onChange={(value) => updateHeader('statementDate', value)} required /></label>
+      <label>日付<JapaneseDateInput value={editor.header.statementDate} onChange={(value) => updateHeader('statementDate', value)} className={isReadDateOutsideRange(editor.header.statementDate, editor.sourceType, currentYear) ? 'purchase-statement-date-warning' : undefined} required />
+        {isReadDateOutsideRange(editor.header.statementDate, editor.sourceType, currentYear) && <small className="purchase-statement-date-warning">{dateWarning}</small>}
+      </label>
       <label>仕切書№<input value={editor.header.documentNumber} onChange={(event) => updateHeader('documentNumber', event.target.value)} required /></label>
       <label>担当者<input list="statement-recipient-list" value={editor.header.recipient} onChange={(event) => updateHeader('recipient', event.target.value)} /></label>
       <label>仕入先<input value={editor.header.issuer} onChange={(event) => updateHeader('issuer', event.target.value)} /></label>
@@ -817,8 +833,8 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin, 
   const statementDetail = selectedStatement && <section className="purchase-statement-detail-screen">
     {selectedStatement.pending && <div className="notice warning" role="status">{selectedStatement.created_by_worker_id === workerId ? '読取者本人は確認できません。別の担当者に確認を依頼してください。' : '確認待ち'}</div>}
     {selectedStatement.pending && <p className="purchase-statement-reader-info">読取者：{selectedStatement.created_by_worker_name}　読取日時：{new Date(selectedStatement.created_at).toLocaleString('ja-JP')}</p>}
-    <div className="purchase-statement-detail-heading"><button className="secondary-button" type="button" onClick={() => setSelectedStatement(null)}><ArrowLeft size={18} />一覧に戻る</button><div><h2>仕切書№ {selectedStatement.document_number}</h2><p>{formatJapaneseDate(selectedStatement.statement_date)}　{selectedStatement.issuer || '仕入先未入力'}</p></div></div>
-    <dl className="purchase-statement-detail-summary"><div><dt>日付</dt><dd>{formatJapaneseDate(selectedStatement.statement_date)}</dd></div><div><dt>担当者</dt><dd>{selectedStatement.recipient || '―'}</dd></div><div><dt>仕入先</dt><dd>{selectedStatement.issuer || '―'}</dd></div><div><dt>支払方法</dt><dd>{paymentMethodLabel(selectedStatement.payment_method)}</dd></div><div><dt>消費税区分</dt><dd>{taxTreatmentLabel(selectedStatement.tax_treatment)}</dd></div><div><dt>税率</dt><dd>{selectedStatement.tax_rate == null ? '―' : `${selectedStatement.tax_rate}%`}</dd></div><div><dt>消費税額</dt><dd>{formatMoney(selectedStatement.tax_amount) || '―'}</dd></div><div><dt>金額（税込）</dt><dd>{formatMoney(selectedStatement.total_amount) || '―'}</dd></div><div><dt>登録番号</dt><dd>{selectedStatement.invoice_number || '―'}</dd></div></dl>
+    <div className="purchase-statement-detail-heading"><button className="secondary-button" type="button" onClick={() => setSelectedStatement(null)}><ArrowLeft size={18} />一覧に戻る</button><div><h2>仕切書№ {selectedStatement.document_number}</h2><p>{renderStatementDate(selectedStatement)}　{selectedStatement.issuer || '仕入先未入力'}</p></div></div>
+    <dl className="purchase-statement-detail-summary"><div><dt>日付</dt><dd>{renderStatementDate(selectedStatement)}</dd></div><div><dt>担当者</dt><dd>{selectedStatement.recipient || '―'}</dd></div><div><dt>仕入先</dt><dd>{selectedStatement.issuer || '―'}</dd></div><div><dt>支払方法</dt><dd>{paymentMethodLabel(selectedStatement.payment_method)}</dd></div><div><dt>消費税区分</dt><dd>{taxTreatmentLabel(selectedStatement.tax_treatment)}</dd></div><div><dt>税率</dt><dd>{selectedStatement.tax_rate == null ? '―' : `${selectedStatement.tax_rate}%`}</dd></div><div><dt>消費税額</dt><dd>{formatMoney(selectedStatement.tax_amount) || '―'}</dd></div><div><dt>金額（税込）</dt><dd>{formatMoney(selectedStatement.total_amount) || '―'}</dd></div><div><dt>登録番号</dt><dd>{selectedStatement.invoice_number || '―'}</dd></div></dl>
     <div className="purchase-statement-table-wrap"><table><thead><tr><th>産年</th><th>産地</th><th>品名</th><th>荷姿</th><th>数量</th><th>単価</th><th>金額</th></tr></thead><tbody>{selectedStatement.items.map((item) => <tr key={item.id}><td>{formatJapaneseCropYear(item.crop_year)}</td><td>{item.origin}</td><td>{item.product_name}</td><td>{item.package_type}</td><td>{item.quantity == null ? '' : Number(item.quantity).toLocaleString('ja-JP')}{item.unit}</td><td>{formatMoney(item.unit_price)}</td><td>{formatMoney(item.amount)}</td></tr>)}</tbody></table></div>
     <div className="purchase-statement-detail-actions">{selectedStatement.image_path && <button className="secondary-button" type="button" onClick={() => void openStatementImage(selectedStatement)} disabled={busy}><FileImage size={17} />元画像を表示</button>}{canOperate && (!selectedStatement.pending || selectedStatement.created_by_worker_id !== workerId) && <button className="secondary-button" type="button" onClick={() => selectedStatement.pending ? void openPendingStatement(selectedStatement) : editStatement(selectedStatement)} disabled={busy}><Pencil size={17} />{selectedStatement.pending ? '確認・修正' : '編集'}</button>}{isAdmin && <button className="danger-button" type="button" onClick={() => void deleteStatement(selectedStatement)} disabled={busy}><Trash2 size={17} />削除</button>}</div>
   </section>
@@ -857,7 +873,7 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin, 
               {itemIndex === 0 && mode === 'pending' && <><td rowSpan={rows.length}>{statement.created_by_worker_name}</td><td rowSpan={rows.length}>{new Date(statement.created_at).toLocaleString('ja-JP')}</td><td rowSpan={rows.length}>{statement.source_type === 'manual' ? '手入力' : statement.image_path ? '保存済み' : '保存未完了'}</td></>}
               {itemIndex === 0 && <td rowSpan={rows.length}><button className="purchase-statement-number-link" type="button" onClick={(event) => { event.stopPropagation(); if (mode === 'pending') void openPendingStatement(statement); else setSelectedStatement(statement) }}>{statement.document_number || '№未読取'}</button></td>}
               <td>{item ? [formatJapaneseCropYear(item.crop_year), item.origin, item.product_name].filter(Boolean).join(' ') : ''}</td><td className="number-cell">{item?.quantity == null ? '' : `${Number(item.quantity).toLocaleString('ja-JP')}${item.unit ? ` ${item.unit}` : ''}`}</td><td className="number-cell">{item?.unit_price == null ? '' : Number(item.unit_price).toLocaleString('ja-JP')}</td>
-              {itemIndex === 0 && <><td rowSpan={rows.length}>{statement.statement_date ? formatJapaneseDate(statement.statement_date) : '未読取'}</td><td rowSpan={rows.length}>{statement.recipient || '―'}</td><td className="number-cell" rowSpan={rows.length}>{statement.total_amount == null ? '―' : Number(statement.total_amount).toLocaleString('ja-JP')}</td><td rowSpan={rows.length}>{statement.issuer || '―'}</td></>}
+              {itemIndex === 0 && <><td rowSpan={rows.length}>{renderStatementDate(statement)}</td><td rowSpan={rows.length}>{statement.recipient || '―'}</td><td className="number-cell" rowSpan={rows.length}>{statement.total_amount == null ? '―' : Number(statement.total_amount).toLocaleString('ja-JP')}</td><td rowSpan={rows.length}>{statement.issuer || '―'}</td></>}
             </tr>)}</tbody>
           })}
         </table></div>

@@ -70,7 +70,7 @@ export function reviewPayload(statement: Record<string, unknown>) {
   })
   return { header: {
     statement_date: text(statement.statement_date).match(/^\d{4}-\d{2}-\d{2}$/)?.[0] ?? '',
-    document_number: text(statement.document_number), recipient: text(statement.recipient), issuer: text(statement.issuer),
+    document_number: text(statement.document_number), issuer: text(statement.issuer),
     payment_method: ['cash', 'transfer'].includes(text(statement.payment_method)) ? text(statement.payment_method) : '',
     tax_treatment: ['exclusive', 'inclusive'].includes(text(statement.tax_treatment)) ? text(statement.tax_treatment) : '',
     tax_rate: positive(statement.tax_rate), tax_amount: positive(statement.tax_amount), total_amount: positive(statement.total_amount), invoice_number: text(statement.invoice_number),

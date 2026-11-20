@@ -214,6 +214,8 @@
 .purchase-statement-common-grid small, .purchase-statement-table-wrap small { display: block; margin-top: 3px; font-size: 12px; }
 .purchase-statement-editor .calculation-mismatch, .purchase-statement-editor .calculation-mismatch input { color: #b91c1c; font-weight: 900; }
 .purchase-statement-editor .calculation-mismatch input { border-color: #b91c1c; background: #fff5f5; }
+.purchase-statement-date-warning, .purchase-statement-date-warning input { color: #b91c1c; font-weight: 700; }
+.purchase-statement-date-warning input { border-color: #b91c1c; }
 .purchase-statement-table-wrap { overflow: auto; border: 1px solid var(--line); border-radius: 6px; }
 .purchase-statement-table-wrap table { width: 100%; min-width: 940px; border-collapse: collapse; }
 .purchase-statement-detail-screen .purchase-statement-table-wrap table { width: max-content; min-width: 0; }
