@@ -17,6 +17,7 @@ try {
     let reads = 0
     let failUpload = false
     let imageUrl = ''
+    let imageRequests = 0
     const jobNumbers = new Map()
     const finishQueue = async () => {
       for (;;) {
@@ -74,7 +75,10 @@ try {
           assert.equal(actor, 'reader')
           await db.query("update flexcon_purchase_statement_drafts set image_path=id::text||'/original.jpg' where id=$1", [args.statementId])
           body = { imagePath: `${args.statementId}/original.jpg` }
-        } else if (name === 'purchase-statement-image' && args.action === 'signed-url') body = { signedUrl: imageUrl }
+        } else if (name === 'purchase-statement-image' && args.action === 'signed-url') {
+          imageRequests++
+          body = { signedUrl: imageUrl }
+        }
         else { errors.push(`Unexpected function: ${name}`); body = {} }
         await route.fulfill({ contentType: 'application/json', body: JSON.stringify(body) })
       })
@@ -134,6 +138,14 @@ try {
       await reader.getByRole('button', { name: '100', exact: true }).click()
       await reader.getByRole('status').filter({ hasText: '読取者本人は確認できません' }).waitFor()
       assert.equal(await reader.getByRole('button', { name: '確認して確定', exact: true }).count(), 0)
+      assert.equal(imageRequests, 0)
+      const detailImage = reader.locator('.purchase-statement-detail-heading').getByRole('button', { name: '画像を表示', exact: true })
+      await detailImage.click()
+      const readerPopup = reader.getByRole('dialog', { name: '保存した仕切書画像', exact: true })
+      await readerPopup.getByRole('img', { name: '保存した仕切書', exact: true }).waitFor()
+      await reader.keyboard.press('Escape')
+      await readerPopup.waitFor({ state: 'detached' })
+      assert.equal(await detailImage.evaluate((button) => document.activeElement === button), true)
 
       const reviewer = await createPage('reviewer')
       await reviewer.getByRole('button', { name: '確認待ち', exact: true }).click()
@@ -145,13 +157,22 @@ try {
       await dialog.waitFor()
       await dialog.locator('.purchase-statement-date-warning input[type=text]').waitFor()
       assert.equal(await dialog.getByLabel('担当者', { exact: true }).inputValue(), 'Reader')
-      await reviewer.waitForFunction(() => {
-        const img = document.querySelector('.purchase-statement-preview')
-        return img?.complete && img.naturalWidth > 0
-      })
+      assert.equal(await dialog.locator('img').count(), 0)
+      assert.equal(imageRequests, 1)
       assert.equal(await dialog.getByText('元画像で数量を確認してください', { exact: true }).count(), 1)
       const items = dialog.locator('.purchase-statement-details tbody tr').first()
-      await items.locator('td[data-label="数量"] input').fill('2')
+      const quantity = items.locator('td[data-label="数量"] input')
+      await quantity.fill('2')
+      const editorImage = dialog.locator('.purchase-statement-editor-heading').getByRole('button', { name: '画像を表示', exact: true })
+      await editorImage.click()
+      const reviewPopup = reviewer.getByRole('dialog', { name: '保存した仕切書画像', exact: true })
+      const popupImage = reviewPopup.getByRole('img', { name: '保存した仕切書', exact: true })
+      await popupImage.waitFor()
+      assert.equal(await popupImage.evaluate((image) => image.decode().then(() => image.naturalWidth > 0)), true)
+      await reviewPopup.getByRole('button', { name: '画像を閉じる', exact: true }).click()
+      await reviewPopup.waitFor({ state: 'detached' })
+      await dialog.waitFor()
+      assert.equal(await quantity.inputValue(), '2')
       const amount = items.locator('td[data-label="金額"] input')
       await amount.click(); await amount.fill('2000')
       const tax = dialog.getByLabel('消費税額', { exact: true })

@@ -30,7 +30,7 @@ type ItemForm = {
   unitPrice: string
   amount: string
 }
-type Editor = { id: string | null; submissionId: string; pending: boolean; readerName: string; sourceType: SourceType; header: HeaderForm; items: ItemForm[]; previewUrl: string; imageBase64: string; warnings: string[] }
+type Editor = { id: string | null; submissionId: string; pending: boolean; readerName: string; sourceType: SourceType; header: HeaderForm; items: ItemForm[]; imageBase64: string; warnings: string[] }
 type StoredItem = {
   id: string
   line_no: number
@@ -298,6 +298,14 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin, 
   const [retryingJob, setRetryingJob] = useState('')
   const [notice, setNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [viewingImageUrl, setViewingImageUrl] = useState('')
+  const [imageDisplayFailed, setImageDisplayFailed] = useState(false)
+  const imageDialogRef = useRef<HTMLDialogElement>(null)
+  const imageTriggerRef = useRef<HTMLButtonElement | null>(null)
+
+  useEffect(() => {
+    const dialog = imageDialogRef.current
+    if (viewingImageUrl && dialog && !dialog.open) dialog.showModal()
+  }, [viewingImageUrl])
 
   const loadStatements = useCallback(async () => {
     setLoadingStatements(true)
@@ -378,7 +386,7 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin, 
 
   const startManual = () => {
     setNotice(null)
-    setEditor({ id: null, submissionId: crypto.randomUUID(), pending: false, readerName: '', sourceType: 'manual', header: emptyHeader(), items: [emptyItem()], previewUrl: '', imageBase64: '', warnings: [] })
+    setEditor({ id: null, submissionId: crypto.randomUUID(), pending: false, readerName: '', sourceType: 'manual', header: emptyHeader(), items: [emptyItem()], imageBase64: '', warnings: [] })
   }
 
   const submitDraft = async (capture: Editor) => {
@@ -474,7 +482,6 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin, 
       id: statement.id,
       submissionId: statement.id, pending: Boolean(statement.pending), readerName: statement.created_by_worker_name,
       sourceType: statement.source_type,
-      previewUrl: '',
       imageBase64: '',
       warnings: statement.warnings ?? [],
       header: {
@@ -602,24 +609,12 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin, 
     setViewingImageUrl(signedUrl)
   }
 
-  const openPendingStatement = async (statement: StoredStatement) => {
+  const openPendingStatement = (statement: StoredStatement) => {
     if (busy) return
     setSelectedStatement(statement)
     setNotice(null)
     if (!canOperate || statement.created_by_worker_id === workerId) return
     editStatement(statement)
-    if (!statement.image_path) return
-    setBusy(true)
-    try {
-      const { data, error } = await supabase.functions.invoke('purchase-statement-image', { body: { action: 'signed-url', statementId: statement.id } })
-      if (error) throw error
-      const url = (data as { signedUrl?: string } | null)?.signedUrl
-      if (!url) throw new Error('読取画像を開けませんでした。')
-      setEditor((current) => current?.id === statement.id ? { ...current, previewUrl: url } : current)
-    } catch {
-      setNotice({ type: 'error', text: '読取画像を開けませんでした。一覧に戻って再度開いてください。' })
-      setEditor(null)
-    } finally { setBusy(false) }
   }
 
   const deleteStatement = async (statement: StoredStatement) => {
@@ -791,10 +786,20 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin, 
   const scrapTypeOptions = productOptions.filter((item) => item.is_variety_rice)
   const standardMasterTypes: MasterType[] = ['recipient', 'origin', 'category', 'storage_location', 'customer']
 
+  const statementImageButton = (statement: StoredStatement, label = '画像を表示') => (
+    <button className="secondary-button" type="button" onClick={(event) => {
+      imageTriggerRef.current = event.currentTarget
+      void openStatementImage(statement)
+    }} disabled={busy}><FileImage size={17} />{label}</button>
+  )
   const editorForm = editor && <form className="purchase-statement-editor" noValidate onSubmit={(event) => void saveStatement(event)}>
-    <div className="purchase-statement-editor-heading"><div><h2>{editor.pending ? '仕切書を確認' : editor.id ? '仕切書を編集' : '仕切書を手入力'}</h2>{editor.pending && <p>読取者：{editor.readerName}</p>}</div><button className="icon-button" type="button" title="入力を閉じる" aria-label="入力を閉じる" onClick={() => { setEditor(null); setSelectedStatement(null) }} disabled={busy}><X size={20} /></button></div>
+    <div className="purchase-statement-editor-heading"><div><h2>{editor.pending ? '仕切書を確認' : editor.id ? '仕切書を編集' : '仕切書を手入力'}</h2>{editor.pending && <p>読取者：{editor.readerName}</p>}</div>
+      <div className="purchase-statement-heading-actions">
+        {editor.pending && selectedStatement?.image_path && statementImageButton(selectedStatement)}
+        <button className="icon-button" type="button" title="入力を閉じる" aria-label="入力を閉じる" onClick={() => { setEditor(null); setSelectedStatement(null) }} disabled={busy}><X size={20} /></button>
+      </div>
+    </div>
     {mode !== 'reader' && notice?.type === 'error' && <div className="notice error" role="alert">{notice.text}</div>}
-    {editor.previewUrl && <img className="purchase-statement-preview" src={editor.previewUrl} alt="撮影した仕切書" onError={() => { setNotice({ type: 'error', text: '読取画像を表示できませんでした。再度開いてください。' }); if (editor.pending) setEditor((current) => current ? { ...current, previewUrl: '' } : current) }} />}
     {editor.warnings.length > 0 && <div className="notice warning"><strong>確認が必要な項目</strong>{editor.warnings.map((warning) => <span key={warning}>{warning}</span>)}</div>}
     <section className="purchase-statement-common"><h3>共通項目</h3><div className="purchase-statement-common-grid">
       <label>日付<JapaneseDateInput value={editor.header.statementDate} onChange={(value) => updateHeader('statementDate', value)} className={isReadDateOutsideRange(editor.header.statementDate, editor.sourceType, currentYear) ? 'purchase-statement-date-warning' : undefined} required />
@@ -824,7 +829,7 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin, 
         <td><button className="icon-button delete-icon" type="button" title="明細を削除" aria-label={`${index + 1}行目を削除`} onClick={() => removeItem(index)} disabled={busy || editor.items.length === 1}><Trash2 size={17} /></button></td>
       </tr>)}</tbody></table></div>
     </section>
-    <div className="modal-actions"><button className="secondary-button" type="button" onClick={() => { setEditor(null); setSelectedStatement(null) }} disabled={busy}>取消</button><button className="primary-button" type="submit" disabled={busy || (editor.pending && editor.sourceType === 'camera' && !editor.previewUrl)}>{editor.pending ? <Check size={18} /> : <Save size={18} />}{busy ? '保存中...' : editor.pending ? '確認して確定' : editor.id ? '仕切書を保存' : '確認待ちに保存'}</button></div>
+    <div className="modal-actions"><button className="secondary-button" type="button" onClick={() => { setEditor(null); setSelectedStatement(null) }} disabled={busy}>取消</button><button className="primary-button" type="submit" disabled={busy || (editor.pending && editor.sourceType === 'camera' && !selectedStatement?.image_path)}>{editor.pending ? <Check size={18} /> : <Save size={18} />}{busy ? '保存中...' : editor.pending ? '確認して確定' : editor.id ? '仕切書を保存' : '確認待ちに保存'}</button></div>
     <datalist id="statement-recipient-list">{suggestions('recipient').map((value) => <option value={value} key={value} />)}</datalist>
     <datalist id="statement-origin-list">{suggestions('origin').map((value) => <option value={value} key={value} />)}</datalist>
     <datalist id="statement-product-list">{suggestions('product').map((value) => <option value={value} key={value} />)}</datalist>
@@ -833,10 +838,10 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin, 
   const statementDetail = selectedStatement && <section className="purchase-statement-detail-screen">
     {selectedStatement.pending && <div className="notice warning" role="status">{selectedStatement.created_by_worker_id === workerId ? '読取者本人は確認できません。別の担当者に確認を依頼してください。' : '確認待ち'}</div>}
     {selectedStatement.pending && <p className="purchase-statement-reader-info">読取者：{selectedStatement.created_by_worker_name}　読取日時：{new Date(selectedStatement.created_at).toLocaleString('ja-JP')}</p>}
-    <div className="purchase-statement-detail-heading"><button className="secondary-button" type="button" onClick={() => setSelectedStatement(null)}><ArrowLeft size={18} />一覧に戻る</button><div><h2>仕切書№ {selectedStatement.document_number}</h2><p>{renderStatementDate(selectedStatement)}　{selectedStatement.issuer || '仕入先未入力'}</p></div></div>
+    <div className="purchase-statement-detail-heading"><button className="secondary-button" type="button" onClick={() => setSelectedStatement(null)}><ArrowLeft size={18} />一覧に戻る</button><div><h2>仕切書№ {selectedStatement.document_number}</h2><p>{renderStatementDate(selectedStatement)}　{selectedStatement.issuer || '仕入先未入力'}</p></div>{selectedStatement.pending && selectedStatement.image_path && statementImageButton(selectedStatement)}</div>
     <dl className="purchase-statement-detail-summary"><div><dt>日付</dt><dd>{renderStatementDate(selectedStatement)}</dd></div><div><dt>担当者</dt><dd>{selectedStatement.recipient || '―'}</dd></div><div><dt>仕入先</dt><dd>{selectedStatement.issuer || '―'}</dd></div><div><dt>支払方法</dt><dd>{paymentMethodLabel(selectedStatement.payment_method)}</dd></div><div><dt>消費税区分</dt><dd>{taxTreatmentLabel(selectedStatement.tax_treatment)}</dd></div><div><dt>税率</dt><dd>{selectedStatement.tax_rate == null ? '―' : `${selectedStatement.tax_rate}%`}</dd></div><div><dt>消費税額</dt><dd>{formatMoney(selectedStatement.tax_amount) || '―'}</dd></div><div><dt>金額（税込）</dt><dd>{formatMoney(selectedStatement.total_amount) || '―'}</dd></div><div><dt>登録番号</dt><dd>{selectedStatement.invoice_number || '―'}</dd></div></dl>
     <div className="purchase-statement-table-wrap"><table><thead><tr><th>産年</th><th>産地</th><th>品名</th><th>荷姿</th><th>数量</th><th>単価</th><th>金額</th></tr></thead><tbody>{selectedStatement.items.map((item) => <tr key={item.id}><td>{formatJapaneseCropYear(item.crop_year)}</td><td>{item.origin}</td><td>{item.product_name}</td><td>{item.package_type}</td><td>{item.quantity == null ? '' : Number(item.quantity).toLocaleString('ja-JP')}{item.unit}</td><td>{formatMoney(item.unit_price)}</td><td>{formatMoney(item.amount)}</td></tr>)}</tbody></table></div>
-    <div className="purchase-statement-detail-actions">{selectedStatement.image_path && <button className="secondary-button" type="button" onClick={() => void openStatementImage(selectedStatement)} disabled={busy}><FileImage size={17} />元画像を表示</button>}{canOperate && (!selectedStatement.pending || selectedStatement.created_by_worker_id !== workerId) && <button className="secondary-button" type="button" onClick={() => selectedStatement.pending ? void openPendingStatement(selectedStatement) : editStatement(selectedStatement)} disabled={busy}><Pencil size={17} />{selectedStatement.pending ? '確認・修正' : '編集'}</button>}{isAdmin && <button className="danger-button" type="button" onClick={() => void deleteStatement(selectedStatement)} disabled={busy}><Trash2 size={17} />削除</button>}</div>
+    <div className="purchase-statement-detail-actions">{!selectedStatement.pending && selectedStatement.image_path && statementImageButton(selectedStatement, '元画像を表示')}{canOperate && (!selectedStatement.pending || selectedStatement.created_by_worker_id !== workerId) && <button className="secondary-button" type="button" onClick={() => selectedStatement.pending ? openPendingStatement(selectedStatement) : editStatement(selectedStatement)} disabled={busy}><Pencil size={17} />{selectedStatement.pending ? '確認・修正' : '編集'}</button>}{isAdmin && <button className="danger-button" type="button" onClick={() => void deleteStatement(selectedStatement)} disabled={busy}><Trash2 size={17} />削除</button>}</div>
   </section>
 
   return <div className="purchase-statement-page">
@@ -869,9 +874,9 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin, 
         <div className="purchase-statement-overview-wrap"><table className="purchase-statement-overview"><thead><tr>{mode === 'pending' && <><th>読取者</th><th>読取日時</th><th>画像</th></>}<th>仕切書№</th><th>内容</th><th>数量</th><th>単価</th><th>日付</th><th>担当者</th><th>金額（税込）</th><th>仕入先</th></tr></thead>
           {displayedStatements.map((statement, statementIndex) => {
             const rows: Array<StoredItem | null> = statement.items.length > 0 ? statement.items : [null]
-            return <tbody className={`${statementIndex % 2 === 0 ? 'statement-even' : 'statement-odd'} ${mode === 'pending' ? 'purchase-statement-pending-rows' : ''}`} key={statement.id}>{rows.map((item, itemIndex) => <tr key={item?.id ?? statement.id} onClick={mode === 'pending' ? () => void openPendingStatement(statement) : undefined}>
+            return <tbody className={`${statementIndex % 2 === 0 ? 'statement-even' : 'statement-odd'} ${mode === 'pending' ? 'purchase-statement-pending-rows' : ''}`} key={statement.id}>{rows.map((item, itemIndex) => <tr key={item?.id ?? statement.id} onClick={mode === 'pending' ? () => openPendingStatement(statement) : undefined}>
               {itemIndex === 0 && mode === 'pending' && <><td rowSpan={rows.length}>{statement.created_by_worker_name}</td><td rowSpan={rows.length}>{new Date(statement.created_at).toLocaleString('ja-JP')}</td><td rowSpan={rows.length}>{statement.source_type === 'manual' ? '手入力' : statement.image_path ? '保存済み' : '保存未完了'}</td></>}
-              {itemIndex === 0 && <td rowSpan={rows.length}><button className="purchase-statement-number-link" type="button" onClick={(event) => { event.stopPropagation(); if (mode === 'pending') void openPendingStatement(statement); else setSelectedStatement(statement) }}>{statement.document_number || '№未読取'}</button></td>}
+              {itemIndex === 0 && <td rowSpan={rows.length}><button className="purchase-statement-number-link" type="button" onClick={(event) => { event.stopPropagation(); if (mode === 'pending') openPendingStatement(statement); else setSelectedStatement(statement) }}>{statement.document_number || '№未読取'}</button></td>}
               <td>{item ? [formatJapaneseCropYear(item.crop_year), item.origin, item.product_name].filter(Boolean).join(' ') : ''}</td><td className="number-cell">{item?.quantity == null ? '' : `${Number(item.quantity).toLocaleString('ja-JP')}${item.unit ? ` ${item.unit}` : ''}`}</td><td className="number-cell">{item?.unit_price == null ? '' : Number(item.unit_price).toLocaleString('ja-JP')}</td>
               {itemIndex === 0 && <><td rowSpan={rows.length}>{renderStatementDate(statement)}</td><td rowSpan={rows.length}>{statement.recipient || '―'}</td><td className="number-cell" rowSpan={rows.length}>{statement.total_amount == null ? '―' : Number(statement.total_amount).toLocaleString('ja-JP')}</td><td rowSpan={rows.length}>{statement.issuer || '―'}</td></>}
             </tr>)}</tbody>
@@ -914,7 +919,18 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin, 
       </section>
     </div>}
     {duplicateStatement && editor && <div className="modal-backdrop" role="presentation"><section className="registration-modal purchase-statement-duplicate-modal" role="dialog" aria-modal="true" aria-labelledby="purchase-statement-duplicate-title"><div className="modal-header"><div><h2 id="purchase-statement-duplicate-title">同じ仕切書№が登録されています</h2><p>仕切書№「{duplicateStatement.document_number}」は{formatJapaneseDate(duplicateStatement.statement_date)}に登録済みです。</p></div></div><p>現在の内容で既存の仕切書を上書きしますか？</p><div className="modal-actions"><button className="secondary-button" type="button" onClick={() => setDuplicateStatement(null)} disabled={busy}>キャンセル</button><button className="primary-button" type="button" onClick={() => void persistStatement(duplicateStatement.id)} disabled={busy}><Save size={18} />{busy ? '上書き中...' : '上書き'}</button></div></section></div>}
-    {viewingImageUrl && <div className="modal-backdrop purchase-statement-image-backdrop" role="presentation" onClick={() => setViewingImageUrl('')}><section className="registration-modal purchase-statement-image-modal" role="dialog" aria-modal="true" aria-label="保存した仕切書画像" onClick={(event) => event.stopPropagation()}><div className="modal-header"><h2>保存した仕切書画像</h2><button className="icon-button" type="button" title="閉じる" aria-label="画像を閉じる" onClick={() => setViewingImageUrl('')}><X size={20} /></button></div><img src={viewingImageUrl} alt="保存した仕切書" /></section></div>}
+    {viewingImageUrl && <dialog ref={imageDialogRef} className="registration-modal purchase-statement-image-modal" aria-label="保存した仕切書画像"
+      onClose={() => {
+        setViewingImageUrl('')
+        setImageDisplayFailed(false)
+        imageTriggerRef.current?.focus({ preventScroll: true })
+        imageTriggerRef.current = null
+      }}
+      onClick={(event) => { if (event.target === event.currentTarget) event.currentTarget.close() }}>
+      <div className="modal-header"><h2>保存した仕切書画像</h2><button className="secondary-button" type="button" aria-label="画像を閉じる" onClick={() => imageDialogRef.current?.close()}><X size={18} />閉じる</button></div>
+      {imageDisplayFailed ? <div className="notice error" role="alert">画像を表示できませんでした。閉じてから「画像を表示」をもう一度押してください。</div>
+        : <img src={viewingImageUrl} alt="保存した仕切書" onError={() => setImageDisplayFailed(true)} />}
+    </dialog>}
   </div>
 }
 

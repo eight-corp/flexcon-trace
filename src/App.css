@@ -204,7 +204,8 @@
 .purchase-statement-editor-heading, .purchase-statement-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .purchase-statement-editor-heading h2, .purchase-statement-editor-heading p, .purchase-statement-section-heading h3 { margin: 0; }
 .purchase-statement-editor-heading p { margin-top: 3px; color: var(--muted); }
-.purchase-statement-preview { width: min(100%, 680px); max-height: 52vh; justify-self: center; border: 1px solid var(--line); border-radius: 6px; object-fit: contain; background: #f4f5f4; }
+.purchase-statement-heading-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 6px; }
+.purchase-statement-heading-actions button { white-space: nowrap; }
 .purchase-statement-editor .notice.warning { display: grid; gap: 3px; border-color: #d9b26d; background: #fff8e8; color: #704d15; }
 .purchase-statement-common, .purchase-statement-details { display: grid; gap: 9px; }
 .purchase-statement-common h3 { margin: 0; }
@@ -261,7 +262,10 @@
 .purchase-statement-detail-summary dt { color: var(--muted); font-weight: 700; }
 .purchase-statement-detail-summary dd { min-width: 0; margin: 0; overflow-wrap: anywhere; }
 .purchase-statement-detail-actions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
-.purchase-statement-image-modal { width: min(100%, 980px); }
+.registration-modal.purchase-statement-image-modal { width: min(calc(100% - 24px), 980px); margin: auto; border: 0; border-radius: 8px; }
+.purchase-statement-image-modal:not([open]) { display: none; }
+.purchase-statement-image-modal::backdrop { background: rgba(17, 24, 19, .72); }
+.purchase-statement-image-modal .modal-header button { white-space: nowrap; }
 .purchase-statement-image-modal img { width: 100%; max-height: calc(var(--visual-viewport-height, 100dvh) - 120px); object-fit: contain; border: 1px solid var(--line); border-radius: 6px; background: #f4f5f4; }
 .purchase-statement-edit-modal { width: min(96vw, 1220px); max-height: calc(var(--visual-viewport-height, 100dvh) - 28px); padding: 10px; }
 .purchase-statement-edit-modal .purchase-statement-editor { width: 100%; min-width: 0; border: 0; box-shadow: none; }
