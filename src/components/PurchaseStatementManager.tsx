@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, Camera, Check, ChevronDown, ChevronUp, FileImage, Keyboard, Minus, Pencil, Plus, RefreshCw, Save, Search, Trash2, X } from 'lucide-react'
+import { ArrowLeft, Camera, Check, ChevronDown, ChevronUp, FileImage, Keyboard, Pencil, Plus, RefreshCw, Save, Search, Trash2, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useCalendarMode } from '../lib/calendarMode'
 import { JapaneseCropYearInput, JapaneseDateInput } from './JapaneseDateInput'
+import { PurchaseStatementImageViewer } from './PurchaseStatementImageViewer'
 
 type Mode = 'reader' | 'pending' | 'list' | 'master'
 type Props = { mode: Mode; workerId: string; canOperate: boolean; isAdmin: boolean; onPhotoPendingChange?: (pending: boolean) => void }
@@ -299,8 +300,6 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin, 
   const [notice, setNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [viewingImageUrl, setViewingImageUrl] = useState('')
   const [imageDisplayFailed, setImageDisplayFailed] = useState(false)
-  const [imageAspectRatio, setImageAspectRatio] = useState(0)
-  const [imageZoom, setImageZoom] = useState(100)
   const imageDialogRef = useRef<HTMLDialogElement>(null)
   const imageTriggerRef = useRef<HTMLButtonElement | null>(null)
 
@@ -928,28 +927,13 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin, 
       onClose={() => {
         setViewingImageUrl('')
         setImageDisplayFailed(false)
-        setImageAspectRatio(0)
-        setImageZoom(100)
         imageTriggerRef.current?.focus({ preventScroll: true })
         imageTriggerRef.current = null
       }}
       onClick={(event) => { if (event.target === event.currentTarget) event.currentTarget.close() }}>
       <div className="modal-header"><h2>保存した仕切書画像</h2><button className="secondary-button" type="button" aria-label="画像を閉じる" onClick={() => imageDialogRef.current?.close()}><X size={18} />閉じる</button></div>
       {imageDisplayFailed ? <div className="notice error" role="alert">画像を表示できませんでした。閉じてから「画像を表示」をもう一度押してください。</div>
-        : <>
-          <div className="purchase-statement-image-controls" role="group" aria-label="画像の拡大・縮小">
-            <button className="secondary-button" type="button" aria-label="画像を縮小" disabled={!imageAspectRatio || imageZoom === 100} onClick={() => setImageZoom((zoom) => Math.max(100, zoom - 50))}><Minus size={18} />縮小</button>
-            <output aria-live="polite">{imageZoom}%</output>
-            <button className="secondary-button" type="button" aria-label="画像を拡大" disabled={!imageAspectRatio || imageZoom === 400} onClick={() => setImageZoom((zoom) => Math.min(400, zoom + 50))}><Plus size={18} />拡大</button>
-            <button className="secondary-button" type="button" disabled={!imageAspectRatio || imageZoom === 100} onClick={() => setImageZoom(100)}>全体表示</button>
-          </div>
-          <div className="purchase-statement-image-viewport" role="region" aria-label="仕切書画像の表示範囲" tabIndex={0}>
-            <img src={viewingImageUrl} alt="保存した仕切書"
-              style={imageAspectRatio ? { width: `min(${imageZoom}%, calc(var(--statement-image-area-height) * ${imageAspectRatio * imageZoom / 100}))` } : undefined}
-              onLoad={(event) => setImageAspectRatio(event.currentTarget.naturalWidth / event.currentTarget.naturalHeight)}
-              onError={() => setImageDisplayFailed(true)} />
-          </div>
-        </>}
+        : <PurchaseStatementImageViewer key={viewingImageUrl} url={viewingImageUrl} onError={() => setImageDisplayFailed(true)} />}
     </dialog>}
   </div>
 }

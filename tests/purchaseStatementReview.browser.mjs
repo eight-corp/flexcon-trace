@@ -5,6 +5,50 @@ import { chromium } from 'playwright'
 import { purchaseStatementDatabase, validHeader, validItems } from './fixtures/purchaseStatementDatabase.mjs'
 
 const root = path.resolve('dist')
+
+async function checkTouchImageZoom(page, popup) {
+  const viewport = popup.getByRole('region', { name: '仕切書画像の表示範囲' })
+  const image = popup.getByRole('img', { name: '保存した仕切書' })
+  await image.evaluate((element) => element.decode())
+  const bounds = await viewport.boundingBox()
+  const heading = await popup.getByRole('heading').boundingBox()
+  const fitWidth = (await image.boundingBox()).width
+  const x = Math.round(bounds.x + bounds.width / 2)
+  const y = Math.round(bounds.y + bounds.height / 2)
+  const cdp = await page.context().newCDPSession(page)
+  const touch = (type, offsets, offsetY = 0) => cdp.send('Input.dispatchTouchEvent', {
+    type,
+    touchPoints: offsets.map((offset, id) => ({ x: x + offset, y: y + offsetY, id })),
+  })
+  try {
+    assert.equal(await popup.getByRole('button', { name: '画像を拡大', exact: true }).count(), 0)
+    await touch('touchStart', [-22, 22])
+    await touch('touchMove', [-38, 38])
+    await touch('touchMove', [-62, 62])
+    await touch('touchEnd', [])
+    assert.ok((await image.boundingBox()).width > fitWidth * 2)
+    assert.deepEqual(await popup.getByRole('heading').boundingBox(), heading)
+    assert.equal(await page.evaluate(() => window.visualViewport.scale), 1)
+
+    const getScroll = () => viewport.evaluate((element) => ({ x: element.scrollLeft, y: element.scrollTop }))
+    const scrollBefore = await getScroll()
+    await touch('touchStart', [0])
+    await touch('touchMove', [-30], -18)
+    await touch('touchMove', [-68], -48)
+    await touch('touchEnd', [])
+    const scrollAfter = await getScroll()
+    assert.ok(scrollAfter.x > scrollBefore.x && scrollAfter.y > scrollBefore.y)
+
+    await touch('touchStart', [-62, 62])
+    await touch('touchMove', [-38, 38])
+    await touch('touchMove', [-20, 20])
+    await touch('touchEnd', [])
+    assert.ok(Math.abs((await image.boundingBox()).width - fitWidth) < 2)
+  } finally {
+    await cdp.detach()
+  }
+}
+
 const browser = await chromium.launch({ channel: 'chrome', headless: true })
 try {
   for (const width of [1440, 390]) {
@@ -30,7 +74,7 @@ try {
       }
     }
     const createPage = async actor => {
-      const context = await browser.newContext({ viewport: { width, height: 900 }, serviceWorkers: 'block' })
+      const context = await browser.newContext({ viewport: { width, height: 900 }, hasTouch: width === 390, isMobile: width === 390, serviceWorkers: 'block' })
       contexts.push(context)
       await context.addInitScript(() => localStorage.setItem('business.session.v1', 'test-session'))
       await context.route('**/*', route => route.abort())
@@ -119,9 +163,13 @@ try {
       const queuePopup = reader.getByRole('dialog', { name: '保存した仕切書画像', exact: true })
       const queueImage = queuePopup.getByRole('img', { name: '保存した仕切書', exact: true })
       await queueImage.waitFor()
-      const queueFitWidth = (await queueImage.boundingBox()).width
-      await queuePopup.getByRole('button', { name: '画像を拡大', exact: true }).click()
-      assert.ok((await queueImage.boundingBox()).width > queueFitWidth * 1.4)
+      if (width === 390) {
+        await checkTouchImageZoom(reader, queuePopup)
+      } else {
+        const queueFitWidth = (await queueImage.boundingBox()).width
+        await queuePopup.getByRole('button', { name: '画像を拡大', exact: true }).click()
+        assert.ok((await queueImage.boundingBox()).width > queueFitWidth * 1.4)
+      }
       await queuePopup.getByRole('button', { name: '画像を閉じる', exact: true }).click()
       await queuePopup.waitFor({ state: 'detached' })
       failUpload = true
@@ -180,25 +228,29 @@ try {
       const popupImage = reviewPopup.getByRole('img', { name: '保存した仕切書', exact: true })
       await popupImage.waitFor()
       assert.equal(await popupImage.evaluate((image) => image.decode().then(() => image.naturalWidth > 0)), true)
-      const zoomIn = reviewPopup.getByRole('button', { name: '画像を拡大', exact: true })
-      const zoomOut = reviewPopup.getByRole('button', { name: '画像を縮小', exact: true })
-      await zoomIn.waitFor()
-      assert.equal(await zoomOut.isEnabled(), false)
-      const fitWidth = (await popupImage.boundingBox()).width
-      await zoomIn.click()
-      assert.ok((await popupImage.boundingBox()).width > fitWidth * 1.4)
-      await reviewPopup.getByText('150%', { exact: true }).waitFor()
-      const scrollPosition = await reviewPopup.getByRole('region', { name: '仕切書画像の表示範囲' }).evaluate((area) => {
-        area.scrollLeft = area.scrollWidth
-        return area.scrollLeft
-      })
-      assert.ok(scrollPosition > 0)
-      await zoomOut.click()
-      await reviewPopup.getByText('100%', { exact: true }).waitFor()
-      assert.ok(Math.abs((await popupImage.boundingBox()).width - fitWidth) < 2)
-      await zoomIn.click()
-      await reviewPopup.getByRole('button', { name: '全体表示', exact: true }).click()
-      await reviewPopup.getByText('100%', { exact: true }).waitFor()
+      if (width === 390) {
+        await checkTouchImageZoom(reviewer, reviewPopup)
+      } else {
+        const zoomIn = reviewPopup.getByRole('button', { name: '画像を拡大', exact: true })
+        const zoomOut = reviewPopup.getByRole('button', { name: '画像を縮小', exact: true })
+        await zoomIn.waitFor()
+        assert.equal(await zoomOut.isEnabled(), false)
+        const fitWidth = (await popupImage.boundingBox()).width
+        await zoomIn.click()
+        assert.ok((await popupImage.boundingBox()).width > fitWidth * 1.4)
+        await reviewPopup.getByText('150%', { exact: true }).waitFor()
+        const scrollPosition = await reviewPopup.getByRole('region', { name: '仕切書画像の表示範囲' }).evaluate((area) => {
+          area.scrollLeft = area.scrollWidth
+          return area.scrollLeft
+        })
+        assert.ok(scrollPosition > 0)
+        await zoomOut.click()
+        await reviewPopup.getByText('100%', { exact: true }).waitFor()
+        assert.ok(Math.abs((await popupImage.boundingBox()).width - fitWidth) < 2)
+        await zoomIn.click()
+        await reviewPopup.getByRole('button', { name: '全体表示', exact: true }).click()
+        await reviewPopup.getByText('100%', { exact: true }).waitFor()
+      }
       await reviewPopup.getByRole('button', { name: '画像を閉じる', exact: true }).click()
       await reviewPopup.waitFor({ state: 'detached' })
       await dialog.waitFor()

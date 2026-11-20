@@ -270,8 +270,11 @@
 .purchase-statement-image-controls { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
 .purchase-statement-image-controls button { white-space: nowrap; }
 .purchase-statement-image-controls output { min-width: 4ch; text-align: center; font-variant-numeric: tabular-nums; }
-.purchase-statement-image-viewport { min-height: 0; max-height: var(--statement-image-area-height); overflow: auto; overscroll-behavior: contain; border: 1px solid var(--line); border-radius: 6px; background: #f4f5f4; }
+.purchase-statement-image-viewport { flex: none; width: 100%; min-height: 0; max-height: var(--statement-image-area-height); overflow: auto; overscroll-behavior: contain; touch-action: none; user-select: none; border: 1px solid var(--line); border-radius: 6px; background: #f4f5f4; }
 .purchase-statement-image-viewport img { display: block; width: 100%; max-width: none; height: auto; margin-inline: auto; }
+@media (hover: none) and (pointer: coarse) {
+  .purchase-statement-image-controls { display: none; }
+}
 .purchase-statement-edit-modal { width: min(96vw, 1220px); max-height: calc(var(--visual-viewport-height, 100dvh) - 28px); padding: 10px; }
 .purchase-statement-edit-modal .purchase-statement-editor { width: 100%; min-width: 0; border: 0; box-shadow: none; }
 .purchase-statement-master-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
