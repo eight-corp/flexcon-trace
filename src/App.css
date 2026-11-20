@@ -835,6 +835,7 @@
 .producer-inspection-heading h1 { margin: 0; }
 .producer-inspection-heading p { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
 .producer-inspection-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; justify-self: end; gap: 8px; }
+.inspection-document-status { font-size: .8rem; white-space: nowrap; }
 .inspection-batch-metadata { padding: 10px 12px; border-color: #9dbca7; background: #f6fbf7; overflow-x: auto; }
 .inspection-batch-metadata-form { display: flex; flex-wrap: nowrap; width: max-content; min-width: 100%; max-width: none; align-items: center; gap: 8px; }
 .inspection-batch-metadata-form h2 { margin: 0; font-size: 14px; white-space: nowrap; }

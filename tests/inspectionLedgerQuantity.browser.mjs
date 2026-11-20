@@ -25,7 +25,7 @@ const browser = await chromium.launch({ channel: 'chrome', headless: true })
 try {
   for (const width of [1440, 390]) {
     const context = await browser.newContext({ viewport: { width, height: 900 }, timezoneId: 'Asia/Tokyo', serviceWorkers: 'block' })
-    const errors = [], mutations = []
+    const errors = [], mutations = [], printCounts = {}
     try {
       await context.addInitScript(() => {
         localStorage.setItem('business.session.v1', 'mock-session')
@@ -54,6 +54,13 @@ try {
         let body = []
         if (resource === 'rpc/business_session') body = { ok: true, workerId: 'tester', workerName: '確認用', permissions: { rice_shipping: 'operator' } }
         else if (resource === 'rpc/flexcon_get_undo_status') body = { operation_id: null }
+        else if (resource === 'rpc/flexcon_inspection_document_print_status') {
+          const params = route.request().postDataJSON()
+          assert.equal(params.p_authorization_id, 'a')
+          const kind = params.p_printed_document
+          if (kind) printCounts[kind] = (printCounts[kind] ?? 0) + 1
+          body = printCounts
+        }
         else if (route.request().method() !== 'GET') mutations.push(resource)
         else body = data[resource] || []
         await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) })
@@ -65,7 +72,7 @@ try {
       await page.getByRole('button', { name: '委任状一覧', exact: true }).click()
       await page.locator('.authorization-data-row').first().click()
       await page.locator('.producer-inspection-page').waitFor()
-      await page.getByRole('button', { name: '検査請求者別検査台帳', exact: true }).click()
+      await page.getByRole('button', { name: '検査請求者別検査台帳 未印刷' }).click()
       await page.waitForFunction(() => !!window.ledgerPdf)
       const draws = await page.evaluate(() => window.ledgerDraws)
       const rows = draws.filter(d => d.text.endsWith('kg')).map(weight => ({
@@ -84,6 +91,17 @@ try {
       const pdf = await PDFDocument.load(bytes)
       assert.equal(pdf.getPageCount(), 1)
       assert.deepEqual(mutations, [], 'Ledger generation must not modify inspection records or defaults')
+      assert.deepEqual(printCounts, {}, 'PDF generation alone must not set print status')
+      await page.getByRole('button', { name: '印刷完了', exact: true }).click()
+      await page.getByRole('button', { name: '検査請求者別検査台帳 印刷済み（1回）' }).waitFor()
+      await page.getByRole('button', { name: '格付結果通知票 未印刷' }).click()
+      await page.getByRole('dialog', { name: '格付結果通知票', exact: true }).getByRole('button', { name: '印刷完了', exact: true }).click()
+      await page.getByRole('button', { name: '格付結果通知票 印刷済み（1回）' }).waitFor()
+      await page.getByRole('button', { name: '委任状一覧へ戻る' }).click()
+      await page.locator('.authorization-data-row').first().click()
+      await page.getByRole('button', { name: '検査請求者別検査台帳 印刷済み（1回）' }).waitFor()
+      await page.getByRole('button', { name: '格付結果通知票 印刷済み（1回）' }).waitFor()
+      assert.deepEqual(printCounts, { inspection_ledger: 1, grading_notice: 1 })
       assert.deepEqual(errors, [])
       if (artifacts) {
         fs.mkdirSync(artifacts, { recursive: true })

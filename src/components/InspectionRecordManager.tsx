@@ -258,6 +258,12 @@ function incompleteInspectionFields(item: FlexconInspection | PaperBagInspection
   if (grade && grade !== '1等' && grade !== '合格' && !item.reason?.trim()) fields.push('理由')
   return fields
 }
+const INSPECTION_DOCUMENT_NAMES = {
+  grading_notice: '格付結果通知票',
+  inspection_ledger: '検査請求者別検査台帳',
+} as const
+type InspectionDocument = keyof typeof INSPECTION_DOCUMENT_NAMES
+
 function gradingNoticeFailureFor(items: Array<FlexconInspection | PaperBagInspection>): GradingNoticeFailure {
   if (items.length === 0) {
     return {
@@ -411,7 +417,26 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
   const [certificateError, setCertificateError] = useState('')
   const [generatedCertificate, setGeneratedCertificate] = useState<GeneratedCertificate | null>(null)
   const [gradingNoticeBusy, setGradingNoticeBusy] = useState(false)
+  const [documentPrintStatus, setDocumentPrintStatus] = useState<{ authorizationId: string; counts?: Partial<Record<InspectionDocument, number>> } | null>(null)
+  const [generatedDocument, setGeneratedDocument] = useState<{ authorizationId: string; kind: InspectionDocument; url: string; pageCount: number } | null>(null)
+  const [documentPrintBusy, setDocumentPrintBusy] = useState(false)
+  const [documentPrintError, setDocumentPrintError] = useState('')
   const [gradingNoticeFailure, setGradingNoticeFailure] = useState<GradingNoticeFailure | null>(null)
+
+  useEffect(() => {
+    if (!readOnly || !selectedAuthorizationId) return
+    let cancelled = false
+    const loadPrintStatus = async () => {
+      setDocumentPrintStatus(null)
+      const { data, error } = await supabase.rpc('flexcon_inspection_document_print_status', {
+        p_worker_id: workerId,
+        p_authorization_id: selectedAuthorizationId,
+      })
+      if (!cancelled) setDocumentPrintStatus({ authorizationId: selectedAuthorizationId, counts: error ? undefined : data })
+    }
+    void loadPrintStatus()
+    return () => { cancelled = true }
+  }, [readOnly, selectedAuthorizationId, workerId, version])
   const [inspectionLedgerBusy, setInspectionLedgerBusy] = useState(false)
   const [inspectionLedgerFailure, setInspectionLedgerFailure] = useState<GradingNoticeFailure | null>(null)
   const detailDraftsRef = useRef<Record<string, InlineDetailDraft>>({})
@@ -1381,7 +1406,8 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
         anchor.click()
       }
       window.setTimeout(() => URL.revokeObjectURL(url), 300_000)
-      setNotice({ type: 'success', text: `${pageCount}ページの検査請求者別検査台帳PDFを作成しました。PDF画面で印刷するページを指定できます。` })
+      setDocumentPrintError('')
+      setGeneratedDocument({ authorizationId: selectedAuthorization.id, kind: 'inspection_ledger', url, pageCount })
     } catch (error) {
       if (pdfWindow) pdfWindow.close()
       setInspectionLedgerFailure({
@@ -1463,7 +1489,8 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
         anchor.click()
       }
       window.setTimeout(() => URL.revokeObjectURL(url), 300_000)
-      setNotice({ type: 'success', text: `${pageCount}ページの格付結果通知票PDFを作成しました。PDF画面で印刷するページを指定できます。` })
+      setDocumentPrintError('')
+      setGeneratedDocument({ authorizationId: selectedAuthorization.id, kind: 'grading_notice', url, pageCount })
     } catch (error) {
       if (pdfWindow) pdfWindow.close()
       setGradingNoticeFailure({
@@ -1473,6 +1500,34 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
     } finally {
       setGradingNoticeBusy(false)
     }
+  }
+
+  const markInspectionDocumentPrinted = async () => {
+    if (!generatedDocument || documentPrintBusy) return
+    setDocumentPrintBusy(true)
+    setDocumentPrintError('')
+    try {
+      const { data, error } = await supabase.rpc('flexcon_inspection_document_print_status', {
+        p_worker_id: workerId,
+        p_authorization_id: generatedDocument.authorizationId,
+        p_printed_document: generatedDocument.kind,
+      })
+      if (error) throw error
+      setDocumentPrintStatus({ authorizationId: generatedDocument.authorizationId, counts: data })
+      setGeneratedDocument(null)
+      setNotice({ type: 'success', text: `${INSPECTION_DOCUMENT_NAMES[generatedDocument.kind]}の印刷を記録しました。` })
+    } catch (error) {
+      setDocumentPrintError(typeof error === 'object' && error && 'message' in error ? String(error.message) : '印刷を記録できませんでした。')
+    } finally {
+      setDocumentPrintBusy(false)
+    }
+  }
+
+  const documentPrintLabel = (kind: InspectionDocument) => {
+    if (documentPrintStatus?.authorizationId !== selectedAuthorizationId) return '確認中'
+    if (!documentPrintStatus?.counts) return '状態取得エラー'
+    const count = documentPrintStatus.counts[kind] ?? 0
+    return count ? `印刷済み（${count}回）` : '未印刷'
   }
 
   const openInspectionDetail = (row: InspectionDetailRow) => {
@@ -1636,8 +1691,8 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
       <button className="icon-button" type="button" title={readOnly ? '委任状一覧へ戻る' : '検査記録へ戻る'} aria-label={readOnly ? '委任状一覧へ戻る' : '検査記録へ戻る'} onClick={onBack}><ArrowLeft size={21} /></button>
       <div><h1>{selectedAuthorization.full_name}</h1><p>委任状№ {selectedAuthorization.authorization_no}　{[selectedAuthorization.prefecture, selectedAuthorization.municipality].filter(Boolean).join(' ')}{!readOnly && selectedRegistration ? `　登録No. ${selectedRegistration.registration_no}` : ''}　全期間の明細</p></div>
       {readOnly && <div className="producer-inspection-actions">
-        <button className="secondary-button" type="button" onClick={() => void createInspectionLedgerPdf()} disabled={inspectionLedgerBusy || gradingNoticeBusy}><ClipboardList size={18} />{inspectionLedgerBusy ? 'PDF作成中...' : '検査請求者別検査台帳'}</button>
-        <button className="secondary-button" type="button" onClick={() => void createGradingNoticePdf()} disabled={gradingNoticeBusy || inspectionLedgerBusy}><FileText size={18} />{gradingNoticeBusy ? 'PDF作成中...' : '格付結果通知票'}</button>
+        <button className="secondary-button" type="button" onClick={() => void createInspectionLedgerPdf()} disabled={inspectionLedgerBusy || gradingNoticeBusy}><ClipboardList size={18} />{inspectionLedgerBusy ? 'PDF作成中...' : INSPECTION_DOCUMENT_NAMES.inspection_ledger}<span className="inspection-document-status">{documentPrintLabel('inspection_ledger')}</span></button>
+        <button className="secondary-button" type="button" onClick={() => void createGradingNoticePdf()} disabled={gradingNoticeBusy || inspectionLedgerBusy}><FileText size={18} />{gradingNoticeBusy ? 'PDF作成中...' : INSPECTION_DOCUMENT_NAMES.grading_notice}<span className="inspection-document-status">{documentPrintLabel('grading_notice')}</span></button>
       </div>}
     </div>
     {renderFlexconSection('推フレ', selectedStandardFlexcons, 'standard')}
@@ -1691,6 +1746,18 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
         <div className="paper-split-total">合計 {(Number(splitCounts.first) || 0) + (Number(splitCounts.second) || 0)} / {splitPaper.bag_count}袋</div>
         <div className="modal-actions"><button className="primary-button" type="submit" disabled={busy}><TableRowsSplit size={18} />{busy ? '分割中...' : '分割する'}</button><button className="secondary-button" type="button" onClick={() => setSplitPaper(null)} disabled={busy}>取り消し</button></div>
       </form>
+    </section></div>}
+    {readOnly && generatedDocument && generatedDocument.authorizationId === selectedAuthorization.id && <div className="modal-backdrop"><section className="registration-modal" role="dialog" aria-modal="true" aria-labelledby="inspection-document-title">
+      <div className="modal-header"><h2 id="inspection-document-title">{INSPECTION_DOCUMENT_NAMES[generatedDocument.kind]}</h2></div>
+      <div className="certificate-created-panel">
+        <div className="certificate-created-message"><FileText size={28} /><div><strong>{generatedDocument.pageCount}ページのPDFを作成しました</strong><span>PDF画面で印刷し、完了したら「印刷完了」を押してください。</span></div></div>
+        {documentPrintError && <div className="inline-error" role="alert">{documentPrintError}</div>}
+        <div className="modal-actions">
+          <button className="secondary-button" type="button" onClick={() => window.open(generatedDocument.url, '_blank', 'noopener')}><ExternalLink size={18} />PDFを開く</button>
+          <button className="primary-button" type="button" onClick={() => void markInspectionDocumentPrinted()} disabled={documentPrintBusy}><Printer size={18} />{documentPrintBusy ? '記録中...' : '印刷完了'}</button>
+          <button className="secondary-button" type="button" onClick={() => setGeneratedDocument(null)} disabled={documentPrintBusy}>閉じる</button>
+        </div>
+      </div>
     </section></div>}
     {gradingNoticeFailure && <div className="modal-backdrop"><section className="registration-modal grading-notice-failure-modal" role="alertdialog" aria-modal="true" aria-labelledby="grading-notice-failure-title" aria-describedby="grading-notice-failure-description">
       <div className="modal-header"><div><h2 id="grading-notice-failure-title"><CircleAlert size={22} />格付結果通知票を作成できません</h2></div><button className="icon-button" type="button" title="閉じる" aria-label="閉じる" onClick={() => setGradingNoticeFailure(null)}><X size={20} /></button></div>
