@@ -54,6 +54,7 @@ try {
         let body = []
         if (resource === 'rpc/business_session') body = { ok: true, workerId: 'tester', workerName: '確認用', permissions: { rice_shipping: 'operator' } }
         else if (resource === 'rpc/flexcon_get_undo_status') body = { operation_id: null }
+        else if (resource === 'rpc/flexcon_list_inspection_document_print_status') body = { a: printCounts }
         else if (resource === 'rpc/flexcon_inspection_document_print_status') {
           const params = route.request().postDataJSON()
           assert.equal(params.p_authorization_id, 'a')
@@ -70,6 +71,11 @@ try {
       await page.clock.setFixedTime('2026-10-23T12:00:00+09:00')
       await page.goto('https://ledger.test/')
       await page.getByRole('button', { name: '委任状一覧', exact: true }).click()
+      await page.getByRole('columnheader', { name: '格付結果通知票', exact: true }).waitFor()
+      await page.getByRole('columnheader', { name: '検査請求者別検査台帳', exact: true }).waitFor()
+      const listStatus = page.locator('.authorization-data-row').first().locator('.authorization-print-column')
+      await listStatus.nth(0).getByText('未印刷', { exact: true }).waitFor()
+      await listStatus.nth(1).getByText('未印刷', { exact: true }).waitFor()
       await page.locator('.authorization-data-row').first().click()
       await page.locator('.producer-inspection-page').waitFor()
       await page.getByRole('button', { name: '検査請求者別検査台帳 未印刷' }).click()
@@ -98,6 +104,8 @@ try {
       await page.getByRole('dialog', { name: '格付結果通知票', exact: true }).getByRole('button', { name: '印刷完了', exact: true }).click()
       await page.getByRole('button', { name: '格付結果通知票 印刷済み（1回）' }).waitFor()
       await page.getByRole('button', { name: '委任状一覧へ戻る' }).click()
+      await listStatus.nth(0).getByText('印刷済み（1回）', { exact: true }).waitFor()
+      await listStatus.nth(1).getByText('印刷済み（1回）', { exact: true }).waitFor()
       await page.locator('.authorization-data-row').first().click()
       await page.getByRole('button', { name: '検査請求者別検査台帳 印刷済み（1回）' }).waitFor()
       await page.getByRole('button', { name: '格付結果通知票 印刷済み（1回）' }).waitFor()

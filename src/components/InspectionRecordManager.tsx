@@ -9,6 +9,7 @@ import { useCalendarMode } from '../lib/calendarMode'
 import { matchesFilterText } from '../lib/tableFilters'
 import { JapaneseDateInput, JapaneseFiscalYearInput } from './JapaneseDateInput'
 import { InspectionNumberInput } from './InspectionNumberInput'
+import { INSPECTION_DOCUMENT_NAMES, InspectionPrintStatus, type InspectionDocument, type InspectionPrintCounts } from './InspectionPrintStatus'
 import { TableColumnFilter } from './TableColumnFilter'
 import { ToggleSwitch } from './ToggleSwitch'
 import { formatPrefectureName } from '../lib/prefecture'
@@ -258,12 +259,6 @@ function incompleteInspectionFields(item: FlexconInspection | PaperBagInspection
   if (grade && grade !== '1等' && grade !== '合格' && !item.reason?.trim()) fields.push('理由')
   return fields
 }
-const INSPECTION_DOCUMENT_NAMES = {
-  grading_notice: '格付結果通知票',
-  inspection_ledger: '検査請求者別検査台帳',
-} as const
-type InspectionDocument = keyof typeof INSPECTION_DOCUMENT_NAMES
-
 function gradingNoticeFailureFor(items: Array<FlexconInspection | PaperBagInspection>): GradingNoticeFailure {
   if (items.length === 0) {
     return {
@@ -417,7 +412,7 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
   const [certificateError, setCertificateError] = useState('')
   const [generatedCertificate, setGeneratedCertificate] = useState<GeneratedCertificate | null>(null)
   const [gradingNoticeBusy, setGradingNoticeBusy] = useState(false)
-  const [documentPrintStatus, setDocumentPrintStatus] = useState<{ authorizationId: string; counts?: Partial<Record<InspectionDocument, number>> } | null>(null)
+  const [documentPrintStatus, setDocumentPrintStatus] = useState<{ authorizationId: string; counts?: InspectionPrintCounts } | null>(null)
   const [generatedDocument, setGeneratedDocument] = useState<{ authorizationId: string; kind: InspectionDocument; url: string; pageCount: number } | null>(null)
   const [documentPrintBusy, setDocumentPrintBusy] = useState(false)
   const [documentPrintError, setDocumentPrintError] = useState('')
@@ -1523,11 +1518,9 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
     }
   }
 
-  const documentPrintLabel = (kind: InspectionDocument) => {
-    if (documentPrintStatus?.authorizationId !== selectedAuthorizationId) return '確認中'
-    if (!documentPrintStatus?.counts) return '状態取得エラー'
-    const count = documentPrintStatus.counts[kind] ?? 0
-    return count ? `印刷済み（${count}回）` : '未印刷'
+  const documentPrintCount = (kind: InspectionDocument) => {
+    if (documentPrintStatus?.authorizationId !== selectedAuthorizationId) return null
+    return documentPrintStatus?.counts ? documentPrintStatus.counts[kind] ?? 0 : undefined
   }
 
   const openInspectionDetail = (row: InspectionDetailRow) => {
@@ -1691,8 +1684,8 @@ export function InspectionRecordManager({ workerId, isAdmin, readOnly, selectedA
       <button className="icon-button" type="button" title={readOnly ? '委任状一覧へ戻る' : '検査記録へ戻る'} aria-label={readOnly ? '委任状一覧へ戻る' : '検査記録へ戻る'} onClick={onBack}><ArrowLeft size={21} /></button>
       <div><h1>{selectedAuthorization.full_name}</h1><p>委任状№ {selectedAuthorization.authorization_no}　{[selectedAuthorization.prefecture, selectedAuthorization.municipality].filter(Boolean).join(' ')}{!readOnly && selectedRegistration ? `　登録No. ${selectedRegistration.registration_no}` : ''}　全期間の明細</p></div>
       {readOnly && <div className="producer-inspection-actions">
-        <button className="secondary-button" type="button" onClick={() => void createInspectionLedgerPdf()} disabled={inspectionLedgerBusy || gradingNoticeBusy}><ClipboardList size={18} />{inspectionLedgerBusy ? 'PDF作成中...' : INSPECTION_DOCUMENT_NAMES.inspection_ledger}<span className="inspection-document-status">{documentPrintLabel('inspection_ledger')}</span></button>
-        <button className="secondary-button" type="button" onClick={() => void createGradingNoticePdf()} disabled={gradingNoticeBusy || inspectionLedgerBusy}><FileText size={18} />{gradingNoticeBusy ? 'PDF作成中...' : INSPECTION_DOCUMENT_NAMES.grading_notice}<span className="inspection-document-status">{documentPrintLabel('grading_notice')}</span></button>
+        <button className="secondary-button inspection-document-button" type="button" onClick={() => void createInspectionLedgerPdf()} disabled={inspectionLedgerBusy || gradingNoticeBusy}><ClipboardList size={18} />{inspectionLedgerBusy ? 'PDF作成中...' : INSPECTION_DOCUMENT_NAMES.inspection_ledger}<InspectionPrintStatus count={documentPrintCount('inspection_ledger')} prominent /></button>
+        <button className="secondary-button inspection-document-button" type="button" onClick={() => void createGradingNoticePdf()} disabled={gradingNoticeBusy || inspectionLedgerBusy}><FileText size={18} />{gradingNoticeBusy ? 'PDF作成中...' : INSPECTION_DOCUMENT_NAMES.grading_notice}<InspectionPrintStatus count={documentPrintCount('grading_notice')} prominent /></button>
       </div>}
     </div>
     {renderFlexconSection('推フレ', selectedStandardFlexcons, 'standard')}

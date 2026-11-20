@@ -7,6 +7,9 @@ import { AUTHORIZATION_COLUMNS, AUTHORIZATION_NO_COLLATOR, authorizationColumnVa
 import type { AuthorizationRecord } from '../types'
 import { ToggleSwitch } from './ToggleSwitch'
 import { TableColumnFilter } from './TableColumnFilter'
+import { INSPECTION_DOCUMENT_NAMES, InspectionPrintStatus, type InspectionDocument, type InspectionPrintCounts } from './InspectionPrintStatus'
+
+const PRINT_COLUMNS: InspectionDocument[] = ['grading_notice', 'inspection_ledger']
 
 type Props = {
   workerId: string
@@ -179,6 +182,7 @@ export function AuthorizationManager({ workerId, isAdmin, listState, onListState
   const hasColumnFilters = Object.keys(columnFilters).length > 0 || Object.values(columnTextFilters).some(Boolean)
   const [notice, setNotice] = useState<Notice>(null)
   const [version, setVersion] = useState(0)
+  const [printCounts, setPrintCounts] = useState<Record<string, InspectionPrintCounts> | null | undefined>(null)
   const [modalOpen, setModalOpen] = useState(false)
   const [editingRecordId, setEditingRecordId] = useState<string | null>(null)
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
@@ -266,6 +270,14 @@ export function AuthorizationManager({ workerId, isAdmin, listState, onListState
       ]))
     })
   }, [version])
+
+  useEffect(() => {
+    let cancelled = false
+    void supabase.rpc('flexcon_list_inspection_document_print_status', { p_worker_id: workerId }).then(({ data, error }) => {
+      if (!cancelled) setPrintCounts(error ? undefined : data)
+    })
+    return () => { cancelled = true }
+  }, [version, workerId])
 
   const filterValues = useMemo(() => Object.fromEntries(AUTHORIZATION_COLUMNS.map(({ key }) => [
     key,
@@ -624,7 +636,12 @@ export function AuthorizationManager({ workerId, isAdmin, listState, onListState
         <table className="authorization-table">
           <thead>
             <tr>
-              {AUTHORIZATION_COLUMNS.map((column) => <AuthorizationColumnHeader key={column.key} column={column} sort={sort} values={filterValues[column.key]} selectedValues={columnFilters[column.key]} textValue={columnTextFilters[column.key] ?? ''} onSort={changeSort} onFilterChange={changeColumnFilter} onTextChange={changeColumnTextFilter} />)}
+              {AUTHORIZATION_COLUMNS.flatMap((column) => {
+                const heading = <AuthorizationColumnHeader key={column.key} column={column} sort={sort} values={filterValues[column.key]} selectedValues={columnFilters[column.key]} textValue={columnTextFilters[column.key] ?? ''} onSort={changeSort} onFilterChange={changeColumnFilter} onTextChange={changeColumnTextFilter} />
+                return column.key === 'farming_plan' ? [heading, ...PRINT_COLUMNS.map((kind) => (
+                  <th key={kind} scope="col" className="authorization-print-column">{INSPECTION_DOCUMENT_NAMES[kind]}</th>
+                ))] : [heading]
+              })}
               <th className="authorization-register-header">操作</th>
             </tr>
           </thead>
@@ -648,6 +665,9 @@ export function AuthorizationManager({ workerId, isAdmin, listState, onListState
                     onChange={() => void toggleInlineFlag(record, 'farming_plan')}
                   />
                 </td>
+                {PRINT_COLUMNS.map((kind) => <td key={kind} className="authorization-print-column">
+                  <InspectionPrintStatus count={printCounts ? printCounts[record.id]?.[kind] ?? 0 : printCounts} />
+                </td>)}
                 <td>{record.address ?? ''}</td>
                 <td>{record.prefecture ?? ''}</td>
                 <td>{record.municipality ?? ''}</td>
@@ -693,6 +713,7 @@ export function AuthorizationManager({ workerId, isAdmin, listState, onListState
                   onChange={() => setRowForm((current) => ({ ...current, farming_plan: !current.farming_plan }))}
                 />
               </td>
+              {PRINT_COLUMNS.map((kind) => <td key={kind} />)}
               <td>{rowInput('address')}</td>
               <td>{rowInput('prefecture')}</td>
               <td>{rowInput('municipality')}</td>
