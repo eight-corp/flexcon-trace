@@ -95,7 +95,7 @@ type PurchaseInventoryEdit = {
   keywords: string
 }
 type DuplicateStatement = { id: string; document_number: string; statement_date: string; issuer: string }
-type CaptureJob = { id: string; status: 'uploading' | 'queued' | 'processing' | 'succeeded' | 'failed' | 'cancelled'; reader_id: string; reader_name: string; created_at: string; attempts: number; error: string; document_number: string; confirmed: boolean }
+type CaptureJob = { id: string; status: 'uploading' | 'queued' | 'processing' | 'succeeded' | 'failed' | 'cancelled'; reader_id: string; reader_name: string; created_at: string; attempts: number; error: string; document_number: string }
 type PhotoUpload = { jobId: string; image: Awaited<ReturnType<typeof resizePhoto>> & { productMasterNames: string[]; originMasterNames: string[] } }
 const jobStatusLabels: Record<CaptureJob['status'], string> = { uploading: '画像保存待ち', queued: '解析待ち', processing: '解析中', succeeded: '確認待ち', failed: '解析失敗', cancelled: '取消済み' }
 const photoRetryReasons = new Set(['missing_image', 'invalid_format', 'invalid_image', 'image_too_large'])
@@ -932,6 +932,8 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin, 
     <div className="purchase-statement-detail-actions">{!selectedStatement.pending && selectedStatement.image_path && statementImageButton(selectedStatement, '元画像を表示')}{canOperate && (!selectedStatement.pending || selectedStatement.created_by_worker_id !== workerId) && <button className="secondary-button" type="button" onClick={() => selectedStatement.pending ? openPendingStatement(selectedStatement) : editStatement(selectedStatement)} disabled={busy}><Pencil size={17} />{selectedStatement.pending ? '確認・修正' : '編集'}</button>}{isAdmin && <button className="danger-button" type="button" onClick={() => void deleteStatement(selectedStatement)} disabled={busy}><Trash2 size={17} />削除</button>}</div>
   </section>
 
+  const visibleCaptureJobs = captureJobs.filter(job => job.status !== 'succeeded' && job.status !== 'cancelled')
+
   return <div className="purchase-statement-page">
     <div className="page-heading"><p>{mode === 'reader' ? '仕切書読込み' : mode === 'pending' ? '確認待ちの仕切書' : mode === 'list' ? '確認済みの仕切書' : '仕切書の入力候補と在庫管理に使用する項目を管理します。'}</p></div>
     {notice && <div className={`notice ${notice.type}`} role={notice.type === 'error' ? 'alert' : 'status'}>{notice.text}</div>}
@@ -945,10 +947,10 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin, 
     {(mode === 'reader' || mode === 'pending') && <section className="purchase-queue-section" aria-label="画像解析の待ち行列">
       <div className="purchase-statement-section-heading"><h2>画像解析</h2><button className="icon-button" type="button" title="解析状況を再読込" aria-label="解析状況を再読込" onClick={() => void loadCaptureJobs()}><RefreshCw size={18} /></button></div>
       {queueError && <p className="notice error" role="alert">解析状況を取得できませんでした。{queueError}</p>}
-      <div className="purchase-queue-counts" role="status">解析待ち {captureJobs.filter(job => job.status === 'queued').length}件 ／ 解析中 {captureJobs.filter(job => job.status === 'processing').length}件 ／ 失敗 {captureJobs.filter(job => job.status === 'failed').length}件</div>
+      <div className="purchase-queue-counts" role="status">解析待ち {visibleCaptureJobs.filter(job => job.status === 'queued').length}件 ／ 解析中 {visibleCaptureJobs.filter(job => job.status === 'processing').length}件 ／ 失敗 {visibleCaptureJobs.filter(job => job.status === 'failed').length}件</div>
       <div className="purchase-queue-wrap"><table className="purchase-queue-table"><thead><tr><th>保存日時</th><th>読取者</th><th>状態</th><th>仕切書</th><th>画像</th><th>操作</th></tr></thead><tbody>
-        {captureJobs.filter(job => mode === 'reader' || !['succeeded', 'cancelled'].includes(job.status)).map(job => <tr key={job.id} data-status={job.status}>
-          <td>{new Date(job.created_at).toLocaleString('ja-JP')}</td><td>{job.reader_name}</td><td><strong>{job.confirmed ? '確認済み' : jobStatusLabels[job.status]}</strong>{job.status === 'failed' && <small className="purchase-queue-failure"><b>失敗原因：</b>{captureFailureReason(job.error)}</small>}</td><td>{job.document_number || '―'}</td>
+        {visibleCaptureJobs.map(job => <tr key={job.id} data-status={job.status}>
+          <td>{new Date(job.created_at).toLocaleString('ja-JP')}</td><td>{job.reader_name}</td><td><strong>{jobStatusLabels[job.status]}</strong>{job.status === 'failed' && <small className="purchase-queue-failure"><b>失敗原因：</b>{captureFailureReason(job.error)}</small>}</td><td>{job.document_number || '―'}</td>
           <td><button className="icon-button" type="button" title="保存画像を表示" aria-label={`${job.reader_name}の保存画像を表示`} disabled={job.status === 'uploading'} onClick={(event) => {
             imageTriggerRef.current = event.currentTarget
             void openJobImage(job)
@@ -958,7 +960,7 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin, 
             {(isAdmin || job.reader_id === workerId) && <button className="secondary-button" type="button" disabled={Boolean(updatingJob)} onClick={() => void dismissFailedJob(job)}><Trash2 size={16} />待ち行列から外す</button>}
           </div>}</td>
         </tr>)}
-        {captureJobs.filter(job => mode === 'reader' || !['succeeded', 'cancelled'].includes(job.status)).length === 0 && <tr><td colSpan={6} className="empty-state">{mode === 'pending' ? '解析待ちの画像はありません' : '保存した画像はありません'}</td></tr>}
+        {visibleCaptureJobs.length === 0 && <tr><td colSpan={6} className="empty-state">待ち行列に画像はありません</td></tr>}
       </tbody></table></div>
     </section>}
     {(mode === 'list' || mode === 'pending') && <>
