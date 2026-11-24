@@ -62,6 +62,9 @@ try {
     let failUpload = false
     let imageUrl = ''
     let imageRequests = 0
+    const dismissedJobs = new Set()
+    let onPendingRefresh
+    let resumePendingRefresh
     const jobNumbers = new Map()
     const finishQueue = async () => {
       for (;;) {
@@ -90,7 +93,22 @@ try {
           let body
           if (name === 'business_session') body = { ok: true, workerId: actor, workerName: actor, permissions: { purchase_statements: actor === 'viewer' ? 'viewer' : 'operator' } }
           else if (name === 'flexcon_list_purchase_inventory_master') body = []
-          else if (['flexcon_list_purchase_statement_jobs', 'flexcon_retry_purchase_statement_job', 'flexcon_list_purchase_statement_master', 'flexcon_list_purchase_statements', 'flexcon_list_pending_purchase_statements', 'flexcon_submit_purchase_statement', 'flexcon_find_purchase_statement_by_number', 'flexcon_confirm_purchase_statement'].includes(name)) body = await rpc(actor, name, args)
+          else if (name === 'flexcon_list_purchase_statement_jobs') body = (await rpc(actor, name, args)).filter(job => !dismissedJobs.has(job.id))
+          else if (name === 'flexcon_dismiss_failed_purchase_statement_job') {
+            assert.equal(actor, 'reviewer')
+            assert.equal((await db.query('select status from flexcon_purchase_statement_jobs where id=$1', [args.p_job_id])).rows[0].status, 'failed')
+            dismissedJobs.add(args.p_job_id)
+            body = null
+          } else if (['flexcon_retry_purchase_statement_job', 'flexcon_list_purchase_statement_master', 'flexcon_list_purchase_statements', 'flexcon_list_pending_purchase_statements', 'flexcon_submit_purchase_statement', 'flexcon_find_purchase_statement_by_number', 'flexcon_confirm_purchase_statement'].includes(name)) {
+            if (name === 'flexcon_list_pending_purchase_statements' && actor === 'reviewer' && onPendingRefresh) {
+              await new Promise(resolve => {
+                resumePendingRefresh = resolve
+                onPendingRefresh()
+                onPendingRefresh = undefined
+              })
+            }
+            body = await rpc(actor, name, args)
+          }
           else throw new Error(`Unexpected RPC: ${name}`)
           await route.fulfill({ contentType: 'application/json', body: JSON.stringify(body) })
         } catch (error) {
@@ -215,6 +233,16 @@ try {
       const row = reviewer.locator('.purchase-statement-pending-rows').filter({ has: reviewer.getByRole('button', { name: '100', exact: true }) })
       await row.locator('.purchase-statement-date-warning').waitFor()
       assert.equal(await reviewer.locator('.purchase-statement-pending-rows .purchase-statement-date-warning').count(), 1)
+      await reviewer.bringToFront()
+      const pendingRefresh = new Promise(resolve => { onPendingRefresh = resolve })
+      const nextPendingRequest = reviewer.waitForRequest('**/rest/v1/rpc/flexcon_list_pending_purchase_statements', { timeout: 10000 })
+      await reviewer.evaluate(() => window.dispatchEvent(new Event('focus')))
+      await nextPendingRequest
+      await pendingRefresh
+      try {
+        assert.equal(await reviewer.getByRole('button', { name: '再読込', exact: true }).isEnabled(), true)
+        assert.equal(await reviewer.getByText('一覧を読み込んでいます').count(), 0)
+      } finally { resumePendingRefresh() }
       await row.locator('td').first().click()
       const dialog = reviewer.getByRole('dialog', { name: '仕切書を確認', exact: true })
       await dialog.waitFor()
@@ -294,10 +322,28 @@ try {
       const reasons = anotherReader.locator('.purchase-queue-failure')
       await reasons.filter({ hasText: '失敗原因：AI画像読取りサービスの利用上限' }).waitFor()
       await reasons.filter({ hasText: '失敗原因：この解析では詳しい原因が記録されていません' }).waitFor()
+      await reader.getByRole('button', { name: '解析状況を再読込' }).click()
+      const otherReaderJob = reader.locator('tr[data-status="failed"]').filter({ hasText: '利用上限' })
+      await otherReaderJob.getByRole('button', { name: '再試行', exact: true }).waitFor()
+      assert.equal(await otherReaderJob.getByRole('button', { name: '待ち行列から外す', exact: true }).count(), 0)
+      const failedRow = anotherReader.locator('tr[data-status="failed"]').filter({ hasText: '利用上限' })
+      const dismiss = failedRow.getByRole('button', { name: '待ち行列から外す', exact: true })
       if (process.env.QA_ARTIFACTS) {
-        await reasons.filter({ hasText: '利用上限' }).scrollIntoViewIfNeeded()
+        await dismiss.scrollIntoViewIfNeeded()
         await anotherReader.screenshot({ path: path.join(process.env.QA_ARTIFACTS, `statement-failure-cause-${width}.png`) })
       }
+      anotherReader.once('dialog', dialog => dialog.dismiss())
+      await dismiss.click()
+      assert.equal(dismissedJobs.size, 0)
+      await dismiss.waitFor()
+      anotherReader.once('dialog', dialog => dialog.accept())
+      await dismiss.click()
+      await anotherReader.getByRole('status').filter({ hasText: '失敗画像を待ち行列から外しました' }).waitFor()
+      await failedRow.waitFor({ state: 'detached' })
+      assert.equal(dismissedJobs.size, 1)
+      await reasons.filter({ hasText: '詳しい原因が記録されていません' }).waitFor()
+      await reader.getByRole('button', { name: '解析状況を再読込' }).click()
+      await otherReaderJob.waitFor({ state: 'detached' })
       assert.deepEqual(errors, [])
       console.log(`Purchase review workflow passed at ${width}px`)
     } finally {

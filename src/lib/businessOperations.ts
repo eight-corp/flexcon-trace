@@ -4,7 +4,7 @@ export const BUSINESS_WRITES_CHANGED = 'business-writes-changed'
 export function pendingBusinessWrites() { return pending.size }
 
 export function trackBusinessWrite(url: URL, method: string) {
-  const mutation = /\/rest\/v1\/rpc\/flexcon_(?:add|update|delete|set|save|register|import|append|split|mark|bulk|reorder|confirm|submit|undo)_/.test(url.pathname)
+  const mutation = /\/rest\/v1\/rpc\/flexcon_(?:add|update|delete|set|save|register|import|append|split|mark|bulk|reorder|confirm|submit|undo|dismiss)_/.test(url.pathname)
   if (method.toUpperCase() !== 'POST' || (!mutation && !url.pathname.includes('/functions/v1/'))) return () => {}
   let resolve!: () => void
   const promise = new Promise<void>((done) => { resolve = done })
@@ -26,6 +26,7 @@ export async function waitForBusinessWrites() {
 }
 
 export function undoActionLabel(action: string) {
+  if (action === 'flexcon_dismiss_failed_purchase_statement_job') return '失敗画像を待ち行列から外す操作'
   const subject = action === 'flexcon_bulk_delete_inventory_records' ? '入出庫記録'
     : action.includes('purchase_statement_image') ? '仕切書画像'
       : action.includes('purchase_') && action.includes('_master') ? '仕切書マスタ'

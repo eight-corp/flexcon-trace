@@ -237,6 +237,8 @@
 .purchase-queue-table th { position: sticky; top: 0; background: #edf2ee; z-index: 1; white-space: nowrap; }
 .purchase-queue-table td:nth-child(3) { min-width: 170px; max-width: 300px; overflow-wrap: anywhere; }
 .purchase-queue-table small { display: block; margin-top: 4px; }
+.purchase-queue-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.purchase-queue-actions button { white-space: nowrap; }
 .purchase-queue-failure { font-size: 13px; line-height: 1.45; }
 .purchase-queue-table tr[data-status="failed"] td:nth-child(3) { background: #fff0ec; color: #9c3329; }
 .purchase-queue-table tr[data-status="processing"] td:nth-child(3) { background: #eef5fb; color: #215c83; }

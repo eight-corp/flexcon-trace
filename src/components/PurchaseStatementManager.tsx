@@ -320,23 +320,38 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin, 
   const [captureJobs, setCaptureJobs] = useState<CaptureJob[]>([])
   const [uploadRetry, setUploadRetry] = useState<PhotoUpload | null>(null)
   const [queueError, setQueueError] = useState('')
-  const [retryingJob, setRetryingJob] = useState('')
+  const [updatingJob, setUpdatingJob] = useState('')
   const [notice, setNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [viewingImageUrl, setViewingImageUrl] = useState('')
   const [imageDisplayFailed, setImageDisplayFailed] = useState(false)
   const imageDialogRef = useRef<HTMLDialogElement>(null)
   const imageTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const statementsRequest = useRef(0)
+  const statementsManualLoading = useRef(false)
+  const captureRequest = useRef(0)
 
   useEffect(() => {
     const dialog = imageDialogRef.current
     if (viewingImageUrl && dialog && !dialog.open) dialog.showModal()
   }, [viewingImageUrl])
 
-  const loadStatements = useCallback(async () => {
-    setLoadingStatements(true)
+  const loadStatements = useCallback(async (background = false) => {
+    if (background && statementsManualLoading.current) return
+    const request = ++statementsRequest.current
+    if (!background) {
+      statementsManualLoading.current = true
+      setLoadingStatements(true)
+    }
     const { data, error } = await supabase.rpc(mode === 'pending' ? 'flexcon_list_pending_purchase_statements' : 'flexcon_list_purchase_statements', { p_worker_id: workerId })
-    setLoadingStatements(false)
-    if (error) return setNotice({ type: 'error', text: error.message })
+    if (request !== statementsRequest.current) return
+    if (!background) {
+      statementsManualLoading.current = false
+      setLoadingStatements(false)
+    }
+    if (error) {
+      if (!background) setNotice({ type: 'error', text: error.message })
+      return
+    }
     setStatements((data ?? []) as StoredStatement[])
   }, [mode, workerId])
 
@@ -365,7 +380,9 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin, 
   }, [workerId])
 
   const loadCaptureJobs = useCallback(async () => {
+    const request = ++captureRequest.current
     const { data, error } = await supabase.rpc('flexcon_list_purchase_statement_jobs', { p_worker_id: workerId })
+    if (request !== captureRequest.current) return
     if (error) { setQueueError(error.message); return }
     setQueueError('')
     setCaptureJobs((data ?? []) as CaptureJob[])
@@ -374,8 +391,14 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin, 
   useEffect(() => {
     if (mode !== 'reader' && mode !== 'pending') return
     // Polling also catches work submitted from another terminal without a Realtime grant.
-    const refresh = () => { void loadCaptureJobs(); if (mode === 'pending') void loadStatements() }
-    refresh()
+    let refreshing = false
+    const refresh = () => {
+      if (document.hidden || refreshing) return
+      refreshing = true
+      void Promise.all([loadCaptureJobs(), mode === 'pending' ? loadStatements(true) : null])
+        .finally(() => { refreshing = false })
+    }
+    void loadCaptureJobs()
     const timer = window.setInterval(refresh, 5000)
     window.addEventListener('focus', refresh)
     return () => { window.clearInterval(timer); window.removeEventListener('focus', refresh) }
@@ -496,12 +519,26 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin, 
   }
 
   const retryJob = async (job: CaptureJob) => {
-    if (retryingJob) return
-    setRetryingJob(job.id)
+    if (updatingJob) return
+    setUpdatingJob(job.id)
     const { error } = await supabase.rpc('flexcon_retry_purchase_statement_job', { p_worker_id: workerId, p_job_id: job.id })
     if (error) setNotice({ type: 'error', text: error.message })
     else await loadCaptureJobs()
-    setRetryingJob('')
+    setUpdatingJob('')
+  }
+
+  const dismissFailedJob = async (job: CaptureJob) => {
+    if (!canOperate || (!isAdmin && job.reader_id !== workerId) || job.status !== 'failed' || updatingJob) return
+    if (!window.confirm('この失敗画像を待ち行列から外しますか？\n画像ファイルは残り、直前の操作として取り消せます。')) return
+    setUpdatingJob(job.id)
+    const { error } = await supabase.rpc('flexcon_dismiss_failed_purchase_statement_job', { p_worker_id: workerId, p_job_id: job.id })
+    if (error) setNotice({ type: 'error', text: error.message })
+    else {
+      setCaptureJobs(current => current.filter(row => row.id !== job.id))
+      setNotice({ type: 'success', text: '失敗画像を待ち行列から外しました。' })
+    }
+    await loadCaptureJobs()
+    setUpdatingJob('')
   }
 
   const openJobImage = async (job: CaptureJob) => {
@@ -903,7 +940,10 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin, 
             imageTriggerRef.current = event.currentTarget
             void openJobImage(job)
           }}><FileImage size={18} /></button></td>
-          <td>{job.status === 'failed' && canOperate && <button className="secondary-button" type="button" disabled={Boolean(retryingJob)} onClick={() => void retryJob(job)}><RefreshCw size={16} />再試行</button>}</td>
+          <td>{job.status === 'failed' && canOperate && <div className="purchase-queue-actions">
+            <button className="secondary-button" type="button" disabled={Boolean(updatingJob)} onClick={() => void retryJob(job)}><RefreshCw size={16} />再試行</button>
+            {(isAdmin || job.reader_id === workerId) && <button className="secondary-button" type="button" disabled={Boolean(updatingJob)} onClick={() => void dismissFailedJob(job)}><Trash2 size={16} />待ち行列から外す</button>}
+          </div>}</td>
         </tr>)}
         {captureJobs.filter(job => mode === 'reader' || !['succeeded', 'cancelled'].includes(job.status)).length === 0 && <tr><td colSpan={6} className="empty-state">{mode === 'pending' ? '解析待ちの画像はありません' : '保存した画像はありません'}</td></tr>}
       </tbody></table></div>
