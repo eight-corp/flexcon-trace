@@ -59,7 +59,10 @@ try {
     const contexts = []
     const errors = []
     let reads = 0
-    let failUpload = false
+    let payloadFailuresRemaining = 0
+    let rejectLargeUpload = false
+    let loseUploadResponse = false
+    const enqueueAttempts = []
     let imageUrl = ''
     let imageRequests = 0
     const dismissedJobs = new Set()
@@ -121,21 +124,26 @@ try {
         const args = route.request().postDataJSON()
         let body
         if (name === 'purchase-statement-queue' && args.action === 'enqueue') {
+          enqueueAttempts.push(args)
+          if (rejectLargeUpload) {
+            rejectLargeUpload = false
+            return route.fulfill({ status: 413, contentType: 'text/plain', body: 'Payload too large' })
+          }
           if (!jobNumbers.has(args.jobId)) { reads++; jobNumbers.set(args.jobId, String(99 + reads)) }
           await rpc(actor, 'flexcon_purchase_queue_reserve', { p_worker_id: actor, p_job_id: args.jobId, p_fingerprint: 'a'.repeat(64) })
-          if (failUpload) {
-            failUpload = false
+          if (payloadFailuresRemaining > 0) {
+            payloadFailuresRemaining--
             return route.fulfill({ status: 400, contentType: 'application/json', body: JSON.stringify({ reason: 'payload_upload', error: '解析用画像を保存先に書き込めませんでした。「画像保存を再試行」でお試しください。' }) })
           }
           await rpc(actor, 'flexcon_purchase_queue_ready', { p_worker_id: actor, p_job_id: args.jobId })
+          if (loseUploadResponse) {
+            loseUploadResponse = false
+            return route.abort('connectionreset')
+          }
           body = { jobId: args.jobId, status: 'queued' }
         } else if (name === 'purchase-statement-queue' && args.action === 'signed-url') {
           body = { signedUrl: imageUrl }
         } else if (name === 'purchase-statement-image' && args.action === 'upload') {
-          if (failUpload) {
-            failUpload = false
-            return route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'test upload failure' }) })
-          }
           assert.equal(actor, 'reader')
           await db.query("update flexcon_purchase_statement_drafts set image_path=id::text||'/original.jpg' where id=$1", [args.statementId])
           body = { imagePath: `${args.statementId}/original.jpg` }
@@ -169,8 +177,17 @@ try {
         return canvas.toDataURL('image/jpeg')
       })
       const photo = { name: 'test.jpg', mimeType: 'image/jpeg', buffer: Buffer.from(imageUrl.split(',')[1], 'base64') }
+      rejectLargeUpload = true
+      await reader.locator('input[type=file]').setInputFiles(photo)
+      await reader.getByRole('alert').filter({ hasText: '画像データが大きすぎます' }).waitFor()
+      assert.equal(enqueueAttempts.length, 1)
+      assert.equal(await reader.getByRole('button', { name: '画像保存を再試行', exact: true }).count(), 0)
+      payloadFailuresRemaining = 1
       await reader.locator('input[type=file]').setInputFiles(photo)
       await reader.getByRole('status').filter({ hasText: '画像を保存し、解析待ちに追加しました。' }).waitFor()
+      assert.equal(enqueueAttempts.length, 3)
+      assert.deepEqual(enqueueAttempts[1], enqueueAttempts[2])
+      assert.equal(await reader.getByText('今回の受付：1件', { exact: true }).count(), 1)
       assert.equal(await reader.locator('.purchase-statement-editor').count(), 0)
       assert.equal((await db.query('select count(*)::int as n from flexcon_purchase_statements')).rows[0].n, 1)
       const nav = await reader.locator('nav button').allTextContents()
@@ -193,21 +210,28 @@ try {
       }
       await queuePopup.getByRole('button', { name: '画像を閉じる', exact: true }).click()
       await queuePopup.waitFor({ state: 'detached' })
-      failUpload = true
+      payloadFailuresRemaining = 2
       await reader.locator('input[type=file]').setInputFiles(photo)
       await reader.getByRole('button', { name: '画像保存を再試行', exact: true }).waitFor()
       await reader.getByRole('alert').filter({ hasText: '原因：解析用画像を保存先に書き込めませんでした' }).waitFor()
       assert.equal(await reader.getByRole('button', { name: '確認待ち', exact: true }).isEnabled(), false)
       assert.equal(await reader.getByRole('button', { name: '直前の操作を取り消す', exact: true }).isEnabled(), false)
       assert.equal(await reader.getByRole('status').filter({ hasText: '読み取り成功。' }).count(), 0)
+      assert.equal(enqueueAttempts.length, 5)
+      assert.deepEqual(enqueueAttempts[3], enqueueAttempts[4])
       await reader.getByRole('button', { name: '画像保存を再試行', exact: true }).click()
       await reader.getByRole('status').filter({ hasText: '画像を保存し、解析待ちに追加しました。' }).waitFor()
+      assert.equal(enqueueAttempts.length, 6)
+      assert.deepEqual(enqueueAttempts[3], enqueueAttempts[5])
       assert.equal(reads, 2)
       assert.equal((await rpc('reader', 'flexcon_list_pending_purchase_statements', { p_worker_id: 'reader' })).length, 0)
       assert.equal((await db.query("select count(*)::int n from flexcon_purchase_statement_jobs where status='queued'")).rows[0].n, 2)
       const anotherReader = await createPage('reviewer')
+      loseUploadResponse = true
       await anotherReader.locator('input[type=file]').setInputFiles(photo)
       await anotherReader.getByRole('status').filter({ hasText: '画像を保存し、解析待ちに追加しました。' }).waitFor()
+      assert.equal(enqueueAttempts.length, 8)
+      assert.deepEqual(enqueueAttempts[6], enqueueAttempts[7])
       await reader.reload()
       await reader.locator('.purchase-queue-table tbody tr').nth(2).waitFor()
       assert.match(await reader.locator('.purchase-queue-table').innerText(), /Reviewer/)

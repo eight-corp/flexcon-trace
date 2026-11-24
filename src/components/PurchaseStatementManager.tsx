@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { FunctionsFetchError, FunctionsRelayError } from '@supabase/supabase-js'
 import { ArrowLeft, Camera, Check, ChevronDown, ChevronUp, FileImage, Keyboard, Pencil, Plus, RefreshCw, Save, Search, Trash2, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useCalendarMode } from '../lib/calendarMode'
@@ -99,6 +100,8 @@ type PhotoUpload = { jobId: string; image: Awaited<ReturnType<typeof resizePhoto
 const jobStatusLabels: Record<CaptureJob['status'], string> = { uploading: '画像保存待ち', queued: '解析待ち', processing: '解析中', succeeded: '確認待ち', failed: '解析失敗', cancelled: '取消済み' }
 const photoRetryReasons = new Set(['missing_image', 'invalid_format', 'invalid_image', 'image_too_large'])
 const queueRequestReasons = new Set([...photoRetryReasons, 'service_configuration', 'session_expired', 'session_unavailable', 'access_denied', 'queue_update', 'image_upload', 'payload_upload', 'image_open'])
+const retryableQueueReasons = new Set(['session_unavailable', 'queue_update', 'image_upload', 'payload_upload'])
+const retryableQueueStatuses = new Set([408, 429, 500, 502, 503, 504])
 
 function captureFailureReason(message: string) {
   const reason = message?.trim()
@@ -112,14 +115,15 @@ async function queueRequestFailure(error: { context?: unknown }) {
   if (response instanceof Response) {
     const data = await response.clone().json().catch(() => null) as { reason?: string; error?: string } | null
     if (data?.reason && queueRequestReasons.has(data.reason) && typeof data.error === 'string' && data.error.length <= 300) {
-      return { cause: data.error, retake: photoRetryReasons.has(data.reason) }
+      return { cause: data.error, retake: photoRetryReasons.has(data.reason), retryable: retryableQueueReasons.has(data.reason) }
     }
-    if (response.status === 413) return { cause: '画像データが大きすぎます。小さめの画像を選び直してください。', retake: true }
-    if (response.status === 401 || response.status === 403) return { cause: 'ログイン状態か仕切書の利用権限を確認できませんでした。再ログイン後にお試しください。', retake: false }
-    if (response.status === 408 || response.status === 504) return { cause: '仕切書サーバーから時間内に応答がありませんでした。再試行してください。', retake: false }
-    return { cause: `仕切書サーバーが処理を完了できませんでした（HTTP ${response.status}）。再試行してください。`, retake: false }
+    if (response.status === 413) return { cause: '画像データが大きすぎます。小さめの画像を選び直してください。', retake: true, retryable: false }
+    if (response.status === 401 || response.status === 403) return { cause: 'ログイン状態か仕切書の利用権限を確認できませんでした。再ログイン後にお試しください。', retake: false, retryable: false }
+    if (response.status === 408 || response.status === 504) return { cause: '仕切書サーバーから時間内に応答がありませんでした。再試行してください。', retake: false, retryable: true }
+    return { cause: `仕切書サーバーが処理を完了できませんでした（HTTP ${response.status}）。再試行してください。`, retake: false,
+      retryable: retryableQueueStatuses.has(response.status) || (response.ok && error instanceof FunctionsRelayError) }
   }
-  return { cause: '仕切書サーバーと通信できませんでした。接続を確認して再試行してください。', retake: false }
+  return { cause: '仕切書サーバーと通信できませんでした。接続を確認して再試行してください。', retake: false, retryable: error instanceof FunctionsFetchError }
 }
 const masterLabels: Record<MasterType, string> = { recipient: '担当者', origin: '産地', product: '在庫商品管理', category: '種別', storage_location: '保管場所', customer: '販売先管理' }
 const masterFieldLabels: Record<MasterType, string> = { recipient: '担当者', origin: '産地', product: '品名', category: '種別', storage_location: '保管場所名', customer: '販売先名' }
@@ -476,7 +480,7 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin, 
       const upload: PhotoUpload = { jobId: crypto.randomUUID(), image: { ...image, productMasterNames, originMasterNames } }
       setUploadRetry(upload)
       prepared = true
-      await enqueuePhoto(upload)
+      await enqueuePhoto(upload, true)
     } catch (error) {
       if (!prepared) onPhotoPendingChange?.(false)
       const message = error instanceof Error ? error.message : '再試行してください。'
@@ -487,20 +491,29 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin, 
     }
   }
 
-  const enqueuePhoto = async (upload: PhotoUpload) => {
-    const { data, error } = await supabase.functions.invoke('purchase-statement-queue', { body: { action: 'enqueue', ...upload } })
-    if (error) {
-      const { cause, retake } = await queueRequestFailure(error as { context?: unknown })
-      if (retake) {
+  const enqueuePhoto = async (upload: PhotoUpload, autoRetry = false) => {
+    let receipt: { jobId: string; status?: string }
+    for (let attempt = 0; ; attempt++) {
+      const { data, error } = await supabase.functions.invoke<{ jobId: string; status?: string }>('purchase-statement-queue', { body: { action: 'enqueue', ...upload } })
+      if (!error && data?.jobId === upload.jobId) {
+        receipt = data
+        break
+      }
+      const failure = error ? await queueRequestFailure(error) : { cause: '受付結果が返りませんでした。「画像保存を再試行」でお試しください。', retake: false, retryable: true }
+      if (autoRetry && attempt === 0 && failure.retryable) {
+        // Reuse the original ID and bytes even when the first response was lost after saving.
+        await new Promise(resolve => window.setTimeout(resolve, 1000))
+        continue
+      }
+      if (failure.retake) {
         setUploadRetry(null)
         onPhotoPendingChange?.(false)
       }
-      throw new Error(`画像を保存できませんでした。原因：${cause}`)
+      throw new Error(`画像を保存できませんでした。原因：${failure.cause}`)
     }
-    if (!(data as { jobId?: string } | null)?.jobId) throw new Error('画像を保存できませんでした。原因：受付結果が返りませんでした。「画像保存を再試行」でお試しください。')
     setUploadRetry(null)
     onPhotoPendingChange?.(false)
-    if ((data as { status?: string }).status === 'cancelled') {
+    if (receipt.status === 'cancelled') {
       setNotice({ type: 'error', text: 'この読取は取り消されています。撮影し直してください。' })
       await loadCaptureJobs()
       return
