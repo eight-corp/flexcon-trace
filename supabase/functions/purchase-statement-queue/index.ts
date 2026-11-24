@@ -1,4 +1,4 @@
-import { analyzePurchaseStatement, validateAnalysisInput, type AnalysisInput } from '../analyze-purchase-statement/index.ts'
+import { analyzePurchaseStatement, StatementReadError, validateAnalysisInput, type AnalysisInput } from '../analyze-purchase-statement/index.ts'
 
 const origins = new Set(['https://eight-corp.github.io', 'http://localhost:5173', 'http://127.0.0.1:5173'])
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -17,13 +17,13 @@ function response(request: Request, body: unknown, status = 200) {
 
 function serviceHeaders() {
   const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
-  if (!key) throw new Error('解析サービスの設定がありません。')
+  if (!key) throw new StatementReadError('service_configuration')
   return { apikey: key, authorization: `Bearer ${key}`, 'Content-Type': 'application/json' }
 }
 
 function baseUrl() {
   const url = Deno.env.get('SUPABASE_URL')
-  if (!url) throw new Error('Supabaseの設定がありません。')
+  if (!url) throw new StatementReadError('service_configuration')
   return url
 }
 
@@ -36,25 +36,29 @@ async function rpc<T>(name: string, args: unknown, headers: Record<string, strin
 
 async function session(request: Request, writing: boolean) {
   const headers = Object.fromEntries(['apikey', 'authorization', 'x-business-session'].map(key => [key, request.headers.get(key) ?? '']))
-  if (Object.values(headers).some(value => !value)) throw new Error('ログイン情報を確認できません。')
+  if (Object.values(headers).some(value => !value)) throw new StatementReadError('session_expired')
   const user = await rpc<{ ok: boolean; workerId?: string; permissions?: Record<string, string> }>('business_session', {}, { ...headers, 'Content-Type': 'application/json' })
-  if (!user.ok || !user.workerId || !(writing ? ['admin', 'operator'] : ['admin', 'operator', 'viewer']).includes(user.permissions?.purchase_statements ?? '')) throw new Error('仕切書を利用する権限がありません。')
+    .catch(error => { throw error instanceof StatementReadError ? error : new StatementReadError('session_unavailable') })
+  if (!user?.ok || !user.workerId) throw new StatementReadError('session_expired')
+  if (!(writing ? ['admin', 'operator'] : ['admin', 'operator', 'viewer']).includes(user.permissions?.purchase_statements ?? '')) throw new StatementReadError('access_denied')
   return { workerId: user.workerId, headers: { ...headers, 'Content-Type': 'application/json' } }
 }
 
 async function upload(bucket: string, path: string, body: string | Uint8Array, contentType: string) {
+  const reason = bucket === imageBucket ? 'image_upload' : 'payload_upload'
   const result = await fetch(`${baseUrl()}/storage/v1/object/${bucket}/${path}`, {
     method: 'POST', headers: { ...serviceHeaders(), 'Content-Type': contentType, 'x-upsert': 'false' }, body,
-  })
+  }).catch(() => { throw new StatementReadError(reason) })
   if (!result.ok) {
     const data = await result.json().catch(() => ({}))
     // A lost acknowledgement must not require a second immutable image or a second job.
-    if (result.status !== 409 && String(data.statusCode) !== '409') throw new Error('画像を保存できませんでした。再試行してください。')
+    if (result.status !== 409 && String(data.statusCode) !== '409') throw new StatementReadError(reason)
   }
 }
 
 export function reviewPayload(statement: Record<string, unknown>) {
-  if (!Array.isArray(statement.lines) || !statement.lines.length) throw new Error('仕切書の明細を読み取れませんでした。')
+  if (!Array.isArray(statement.lines)) throw new StatementReadError('invalid_result')
+  if (!statement.lines.length) throw new StatementReadError('no_lines')
   const text = (value: unknown) => typeof value === 'string' ? value.trim() : ''
   const positive = (value: unknown) => Number.isFinite(Number(value)) && Number(value) > 0 ? Number(value) : null
   let cropYear: string | null = null
@@ -81,17 +85,26 @@ type ClaimedJob = { id: string; leaseToken: string; payloadPath: string }
 
 async function processJob(job: ClaimedJob) {
   const headers = serviceHeaders()
+  let phase: StatementReadError['reason'] = 'stored_input_unavailable'
   try {
     const stored = await fetch(`${baseUrl()}/storage/v1/object/authenticated/${payloadBucket}/${job.payloadPath}`, { headers })
-    if (!stored.ok) throw new Error('保存画像を取得できませんでした。再試行してください。')
+    if (!stored.ok) {
+      const storageError = await stored.json().catch(() => null) as { statusCode?: unknown; error?: unknown } | null
+      if (stored.status === 404 || String(storageError?.statusCode) === '404' || storageError?.error === 'NoSuchKey') throw new StatementReadError('stored_input_missing')
+      throw new StatementReadError('stored_input_unavailable')
+    }
+    phase = 'stored_input_invalid'
     const input = await stored.json() as AnalysisInput
+    phase = 'unknown_failure'
     const result = await analyzePurchaseStatement(input)
     const payload = reviewPayload(result.statement)
+    phase = 'result_save'
     await rpc('flexcon_purchase_queue_complete', { p_job_id: job.id, p_lease_token: job.leaseToken, p_header: payload.header, p_items: payload.items, p_warnings: payload.warnings }, headers)
   } catch (error) {
     // Never store provider responses, credentials or image contents in public status messages.
-    console.error('Purchase statement job failed', { jobId: job.id, error: error instanceof Error ? error.message : 'unknown' })
-    await rpc('flexcon_purchase_queue_fail', { p_job_id: job.id, p_lease_token: job.leaseToken, p_error: '解析を完了できませんでした。時間をおいて再試行してください。' }, headers)
+    const failure = error instanceof StatementReadError ? error : new StatementReadError(phase)
+    console.error('Purchase statement job failed', { jobId: job.id, reason: failure.reason })
+    await rpc('flexcon_purchase_queue_fail', { p_job_id: job.id, p_lease_token: job.leaseToken, p_error: failure.message }, headers)
   }
 }
 
@@ -103,35 +116,41 @@ Deno.serve(async request => {
     if (secret) {
       // The database authenticates this secret before claiming any work. Cron retries expired leases.
       const job = await rpc<ClaimedJob | null>('flexcon_purchase_queue_claim', { p_secret: secret }, serviceHeaders())
-      if (job) EdgeRuntime.waitUntil(processJob(job).catch(error => console.error('Queue lease will be retried', { jobId: job.id, error: String(error) })))
+      if (job) EdgeRuntime.waitUntil(processJob(job).catch(() => console.error('Queue lease will be retried', { jobId: job.id })))
       return response(request, { ok: true })
     }
     const body = await request.json() as { action?: string; jobId?: string; image?: AnalysisInput }
     const user = await session(request, body.action !== 'signed-url')
-    if (!uuid.test(body.jobId ?? '')) throw new Error('画像IDが不正です。')
+    if (!uuid.test(body.jobId ?? '')) throw new StatementReadError('queue_update')
     if (body.action === 'signed-url') {
-      const path = await rpc<string>('flexcon_purchase_queue_image', { p_worker_id: user.workerId, p_job_id: body.jobId }, user.headers)
-      const signed = await fetch(`${baseUrl()}/storage/v1/object/sign/${imageBucket}/${path}`, { method: 'POST', headers: serviceHeaders(), body: JSON.stringify({ expiresIn: 600 }) })
-      const data = await signed.json()
-      const url = data.signedURL ?? data.signedUrl
-      if (!signed.ok || !url) throw new Error('画像を開けませんでした。')
-      return response(request, { signedUrl: url.startsWith('http') ? url : `${baseUrl()}/storage/v1${url}` })
+      try {
+        const path = await rpc<string>('flexcon_purchase_queue_image', { p_worker_id: user.workerId, p_job_id: body.jobId }, user.headers)
+        const signed = await fetch(`${baseUrl()}/storage/v1/object/sign/${imageBucket}/${path}`, { method: 'POST', headers: serviceHeaders(), body: JSON.stringify({ expiresIn: 600 }) })
+        const data = await signed.json()
+        const url = data.signedURL ?? data.signedUrl
+        if (!signed.ok || typeof url !== 'string' || !url) throw new StatementReadError('image_open')
+        return response(request, { signedUrl: url.startsWith('http') ? url : `${baseUrl()}/storage/v1${url}` })
+      } catch (error) { throw error instanceof StatementReadError ? error : new StatementReadError('image_open') }
     }
-    if (body.action !== 'enqueue' || !body.image || body.image.mimeType !== 'image/jpeg') throw new Error('撮影画像がありません。')
+    if (body.action !== 'enqueue' || !body.image) throw new StatementReadError('missing_image')
+    if (body.image.mimeType !== 'image/jpeg') throw new StatementReadError('invalid_format')
     validateAnalysisInput(body.image)
+    let bytes: Uint8Array
+    try { bytes = Uint8Array.from(atob(body.image.imageBase64!), character => character.charCodeAt(0)) }
+    catch { throw new StatementReadError('invalid_image') }
+    if (bytes[0] !== 0xff || bytes[1] !== 0xd8 || bytes[2] !== 0xff) throw new StatementReadError('invalid_image')
     const json = JSON.stringify(body.image)
     const fingerprint = [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(json)))].map(value => value.toString(16).padStart(2, '0')).join('')
     const job = await rpc<{ id: string; status: string; uploadId: string }>('flexcon_purchase_queue_reserve', { p_worker_id: user.workerId, p_job_id: body.jobId, p_fingerprint: fingerprint }, user.headers)
     if (job.status === 'uploading') {
       const path = `${job.id}/${job.uploadId}`
-      const bytes = Uint8Array.from(atob(body.image.imageBase64!), character => character.charCodeAt(0))
-      if (bytes[0] !== 0xff || bytes[1] !== 0xd8 || bytes[2] !== 0xff) throw new Error('JPEG画像を確認できませんでした。撮影し直してください。')
       await upload(imageBucket, `${path}.jpg`, bytes, 'image/jpeg')
       await upload(payloadBucket, `${path}.json`, json, 'application/json')
       await rpc('flexcon_purchase_queue_ready', { p_worker_id: user.workerId, p_job_id: job.id }, user.headers)
     }
     return response(request, { jobId: job.id, status: job.status === 'uploading' ? 'queued' : job.status })
   } catch (error) {
-    return response(request, { error: error instanceof Error ? error.message : '画像を保存できませんでした。' }, 400)
+    const failure = error instanceof StatementReadError ? error : new StatementReadError('queue_update')
+    return response(request, { error: failure.message, reason: failure.reason }, 400)
   }
 })

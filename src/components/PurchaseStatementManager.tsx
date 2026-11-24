@@ -97,6 +97,30 @@ type DuplicateStatement = { id: string; document_number: string; statement_date:
 type CaptureJob = { id: string; status: 'uploading' | 'queued' | 'processing' | 'succeeded' | 'failed' | 'cancelled'; reader_id: string; reader_name: string; created_at: string; attempts: number; error: string; document_number: string; confirmed: boolean }
 type PhotoUpload = { jobId: string; image: Awaited<ReturnType<typeof resizePhoto>> & { productMasterNames: string[]; originMasterNames: string[] } }
 const jobStatusLabels: Record<CaptureJob['status'], string> = { uploading: '画像保存待ち', queued: '解析待ち', processing: '解析中', succeeded: '確認待ち', failed: '解析失敗', cancelled: '取消済み' }
+const photoRetryReasons = new Set(['missing_image', 'invalid_format', 'invalid_image', 'image_too_large'])
+const queueRequestReasons = new Set([...photoRetryReasons, 'service_configuration', 'session_expired', 'session_unavailable', 'access_denied', 'queue_update', 'image_upload', 'payload_upload', 'image_open'])
+
+function captureFailureReason(message: string) {
+  const reason = message?.trim()
+  return !reason || /^解析を完了できませんでした。(?:時間をおいて再試行してください。)?$/.test(reason)
+    ? 'この解析では詳しい原因が記録されていません。再試行すると、新しい結果を確認できます。'
+    : reason
+}
+
+async function queueRequestFailure(error: { context?: unknown }) {
+  const response = error.context
+  if (response instanceof Response) {
+    const data = await response.clone().json().catch(() => null) as { reason?: string; error?: string } | null
+    if (data?.reason && queueRequestReasons.has(data.reason) && typeof data.error === 'string' && data.error.length <= 300) {
+      return { cause: data.error, retake: photoRetryReasons.has(data.reason) }
+    }
+    if (response.status === 413) return { cause: '画像データが大きすぎます。小さめの画像を選び直してください。', retake: true }
+    if (response.status === 401 || response.status === 403) return { cause: 'ログイン状態か仕切書の利用権限を確認できませんでした。再ログイン後にお試しください。', retake: false }
+    if (response.status === 408 || response.status === 504) return { cause: '仕切書サーバーから時間内に応答がありませんでした。再試行してください。', retake: false }
+    return { cause: `仕切書サーバーが処理を完了できませんでした（HTTP ${response.status}）。再試行してください。`, retake: false }
+  }
+  return { cause: '仕切書サーバーと通信できませんでした。接続を確認して再試行してください。', retake: false }
+}
 const masterLabels: Record<MasterType, string> = { recipient: '担当者', origin: '産地', product: '在庫商品管理', category: '種別', storage_location: '保管場所', customer: '販売先管理' }
 const masterFieldLabels: Record<MasterType, string> = { recipient: '担当者', origin: '産地', product: '品名', category: '種別', storage_location: '保管場所名', customer: '販売先名' }
 
@@ -220,7 +244,7 @@ async function resizePhoto(file: File) {
     const source = await new Promise<HTMLImageElement>((resolve, reject) => {
       const image = new Image()
       image.onload = () => resolve(image)
-      image.onerror = () => reject(new Error('撮影画像を読み込めませんでした。'))
+      image.onerror = () => reject(new Error('選択したファイルを画像として開けません。撮影し直すか、別の画像を選んでください。'))
       image.src = objectUrl
     })
     const maxDimension = 1800
@@ -432,7 +456,8 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin, 
       await enqueuePhoto(upload)
     } catch (error) {
       if (!prepared) onPhotoPendingChange?.(false)
-      setNotice({ type: 'error', text: error && typeof error === 'object' && 'message' in error ? String(error.message) : '仕切書画像の読取・保存を完了できませんでした。' })
+      const message = error instanceof Error ? error.message : '再試行してください。'
+      setNotice({ type: 'error', text: prepared ? message : `画像の準備に失敗しました。原因：${message}` })
     } finally {
       setBusy(false)
       if (cameraRef.current) cameraRef.current.value = ''
@@ -441,7 +466,15 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin, 
 
   const enqueuePhoto = async (upload: PhotoUpload) => {
     const { data, error } = await supabase.functions.invoke('purchase-statement-queue', { body: { action: 'enqueue', ...upload } })
-    if (error || !(data as { jobId?: string } | null)?.jobId) throw new Error('画像を保存できませんでした。「画像保存を再試行」で再送信してください。')
+    if (error) {
+      const { cause, retake } = await queueRequestFailure(error as { context?: unknown })
+      if (retake) {
+        setUploadRetry(null)
+        onPhotoPendingChange?.(false)
+      }
+      throw new Error(`画像を保存できませんでした。原因：${cause}`)
+    }
+    if (!(data as { jobId?: string } | null)?.jobId) throw new Error('画像を保存できませんでした。原因：受付結果が返りませんでした。「画像保存を再試行」でお試しください。')
     setUploadRetry(null)
     onPhotoPendingChange?.(false)
     if ((data as { status?: string }).status === 'cancelled') {
@@ -473,7 +506,11 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin, 
 
   const openJobImage = async (job: CaptureJob) => {
     const { data, error } = await supabase.functions.invoke('purchase-statement-queue', { body: { action: 'signed-url', jobId: job.id } })
-    if (error || !(data as { signedUrl?: string } | null)?.signedUrl) return setNotice({ type: 'error', text: '保存画像を開けませんでした。' })
+    if (error) {
+      const { cause } = await queueRequestFailure(error as { context?: unknown })
+      return setNotice({ type: 'error', text: `保存画像を開けませんでした。原因：${cause}` })
+    }
+    if (!(data as { signedUrl?: string } | null)?.signedUrl) return setNotice({ type: 'error', text: '保存画像を開けませんでした。原因：画像の表示リンクが返りませんでした。' })
     setViewingImageUrl((data as { signedUrl: string }).signedUrl)
   }
 
@@ -861,7 +898,7 @@ export function PurchaseStatementManager({ mode, workerId, canOperate, isAdmin, 
       <div className="purchase-queue-counts" role="status">解析待ち {captureJobs.filter(job => job.status === 'queued').length}件 ／ 解析中 {captureJobs.filter(job => job.status === 'processing').length}件 ／ 失敗 {captureJobs.filter(job => job.status === 'failed').length}件</div>
       <div className="purchase-queue-wrap"><table className="purchase-queue-table"><thead><tr><th>保存日時</th><th>読取者</th><th>状態</th><th>仕切書</th><th>画像</th><th>操作</th></tr></thead><tbody>
         {captureJobs.filter(job => mode === 'reader' || !['succeeded', 'cancelled'].includes(job.status)).map(job => <tr key={job.id} data-status={job.status}>
-          <td>{new Date(job.created_at).toLocaleString('ja-JP')}</td><td>{job.reader_name}</td><td><strong>{job.confirmed ? '確認済み' : jobStatusLabels[job.status]}</strong>{job.error && <small>{job.error}</small>}</td><td>{job.document_number || '―'}</td>
+          <td>{new Date(job.created_at).toLocaleString('ja-JP')}</td><td>{job.reader_name}</td><td><strong>{job.confirmed ? '確認済み' : jobStatusLabels[job.status]}</strong>{job.status === 'failed' && <small className="purchase-queue-failure"><b>失敗原因：</b>{captureFailureReason(job.error)}</small>}</td><td>{job.document_number || '―'}</td>
           <td><button className="icon-button" type="button" title="保存画像を表示" aria-label={`${job.reader_name}の保存画像を表示`} disabled={job.status === 'uploading'} onClick={(event) => {
             imageTriggerRef.current = event.currentTarget
             void openJobImage(job)

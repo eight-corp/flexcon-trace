@@ -23,7 +23,47 @@ function jsonResponse(request: Request, body: unknown, status = 200) {
 
 const retryableGeminiStatuses = new Set([429, 500, 502, 503, 504])
 
-class GeminiUnavailableError extends Error {}
+const statementFailureMessages = {
+  missing_image: '画像データがありません。仕切書を撮影し直してください。',
+  invalid_format: '対応していない画像形式です。画像を選び直すか撮影し直してください。',
+  invalid_image: '画像データが壊れているか、JPEGとして開けません。撮影し直してください。',
+  image_too_large: '画像データが大きすぎます。小さめの画像を選び直してください。',
+  service_configuration: '仕切書の保存・解析サービスの設定に問題があります。管理者に連絡してください。',
+  session_expired: 'ログイン情報を確認できません。再ログイン後にお試しください。',
+  session_unavailable: 'ログイン状態の確認サービスに接続できませんでした。時間をおいて再試行してください。',
+  access_denied: '仕切書を読み取る権限がありません。管理者に確認してください。',
+  queue_update: '画像解析の受付を登録・更新できませんでした。「画像保存を再試行」でお試しください。',
+  image_upload: '元画像を保存先に書き込めませんでした。「画像保存を再試行」でお試しください。',
+  payload_upload: '解析用画像を保存先に書き込めませんでした。「画像保存を再試行」でお試しください。',
+  image_open: '保存画像の表示リンクを取得できませんでした。時間をおいてお試しください。',
+  stored_input_missing: '解析用の保存画像が見つかりません。元の仕切書を撮影し直してください。',
+  stored_input_unavailable: '保存先から解析用画像を取得できませんでした。時間をおいて再試行してください。',
+  stored_input_invalid: '解析用に保存されたデータを開けません。元の仕切書を撮影し直してください。',
+  provider_configuration: 'AI画像読取りサービスの認証またはモデル設定に問題があります。管理者に連絡してください。',
+  provider_timeout: 'AI画像読取りが時間内に完了しませんでした。時間をおいて再試行してください。',
+  provider_rate_limit: 'AI画像読取りサービスの利用上限に達しました。時間をおいて再試行してください。',
+  provider_unavailable: 'AI画像読取りサービスが一時的に応答できません。時間をおいて再試行してください。',
+  provider_network: 'AI画像読取りサービスとの通信に失敗しました。時間をおいて再試行してください。',
+  provider_rejected: 'AI画像読取りサービスが解析要求を受け付けませんでした。再試行しても直らない場合は管理者に連絡してください。',
+  provider_blocked: 'AI画像読取りサービスの制限により結果が返されませんでした。原本を確認し、必要に応じて手入力してください。',
+  no_result: 'AI画像読取りサービスから読取結果が返りませんでした。再試行し、改善しない場合は撮影し直してください。',
+  invalid_result: 'AI画像読取りサービスから返された結果を処理できませんでした。再試行してください。',
+  no_lines: '仕切書の明細を1行も読み取れませんでした。明細欄全体が写っているか確認し、撮影し直すか手入力してください。',
+  result_save: '画像の解析後、読み取った結果を確認待ちに保存できませんでした。再試行してください。',
+  unknown_failure: '失敗原因を特定できませんでした。再試行しても直らない場合は管理者に連絡してください。',
+} as const
+
+export class StatementReadError extends Error {
+  constructor(readonly reason: keyof typeof statementFailureMessages) {
+    super(statementFailureMessages[reason])
+  }
+}
+
+type GeminiResponse = {
+  error?: { details?: Array<{ reason?: string }> }
+  promptFeedback?: { blockReason?: string }
+  candidates?: Array<{ finishReason?: string; content?: { parts?: Array<{ text?: string }> } }>
+}
 
 async function classifyTaxTreatment(model: string, apiKey: string, mimeType: string, taxRegionBase64: string) {
   if (!taxRegionBase64) return ''
@@ -112,41 +152,38 @@ async function generateStatement(
       })
     } catch (error) {
       const fallbackModel = models[modelIndex + 1]
-      if (fallbackModel && error instanceof DOMException && error.name === 'TimeoutError') {
+      const timedOut = error instanceof DOMException && ['TimeoutError', 'AbortError'].includes(error.name)
+      if (fallbackModel && timedOut) {
         console.warn('Gemini request timed out; switching models.', { model, fallbackModel })
         continue
       }
-      if (error instanceof DOMException && error.name === 'TimeoutError') {
-        throw new GeminiUnavailableError('AI画像読取りが時間内に完了しませんでした。もう一度お試しください。')
-      }
-      throw error
+      throw new StatementReadError(timedOut ? 'provider_timeout' : 'provider_network')
     }
-    const responseText = await response.text()
-    let data: {
-      error?: { message?: string }
-      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>
-    } = {}
-    try { data = JSON.parse(responseText) } catch {}
-
-    if (response.ok) return data
+    const data = await response.json().catch(() => null) as GeminiResponse | null
+    if (response.ok) {
+      if (!data || typeof data !== 'object' || Array.isArray(data)) throw new StatementReadError('invalid_result')
+      return data
+    }
 
     const retryable = retryableGeminiStatuses.has(response.status)
-    if (!retryable) throw new Error(data.error?.message ?? 'Geminiで画像を解析できませんでした。')
+    if (!retryable) {
+      const invalidKey = Array.isArray(data?.error?.details) && data.error.details.some(detail => detail?.reason === 'API_KEY_INVALID')
+      throw new StatementReadError([401, 403, 404].includes(response.status) || invalidKey ? 'provider_configuration' : 'provider_rejected')
+    }
 
     console.warn('Gemini request was temporarily unavailable.', {
       model,
       status: response.status,
-      message: data.error?.message,
     })
     const fallbackModel = models[modelIndex + 1]
     if (fallbackModel) {
       console.warn('Switching to fallback Gemini model.', { model, fallbackModel })
       continue
     }
-    throw new GeminiUnavailableError('AI画像読取りサービスが混み合っています。少し時間をおいて、もう一度お試しください。仕切書の内容が原因ではありません。')
+    throw new StatementReadError(response.status === 429 ? 'provider_rate_limit' : 'provider_unavailable')
   }
 
-  throw new GeminiUnavailableError('AI画像読取りサービスが混み合っています。少し時間をおいて、もう一度お試しください。')
+  throw new StatementReadError('provider_unavailable')
 }
 
 type BusinessSession = {
@@ -161,7 +198,8 @@ async function requireRiceShippingOperator(request: Request) {
   const apiKey = request.headers.get('apikey')
   const authorization = request.headers.get('authorization')
   const businessSession = request.headers.get('x-business-session')
-  if (!supabaseUrl || !apiKey || !authorization || !businessSession) throw new Error('ログイン情報を確認できません。')
+  if (!supabaseUrl) throw new StatementReadError('service_configuration')
+  if (!apiKey || !authorization || !businessSession) throw new StatementReadError('session_expired')
 
   const response = await fetch(`${supabaseUrl}/rest/v1/rpc/business_session`, {
     method: 'POST',
@@ -172,12 +210,12 @@ async function requireRiceShippingOperator(request: Request) {
       'Content-Type': 'application/json',
     },
     body: '{}',
-  })
-  const session = await response.json() as BusinessSession
+  }).catch(() => { throw new StatementReadError('session_unavailable') })
+  const session = await response.json().catch(() => null) as BusinessSession | null
+  if (!response.ok || !session) throw new StatementReadError('session_unavailable')
   const role = session.permissions?.purchase_statements
-  if (!response.ok || session.ok === false || !session.workerId || !['admin', 'operator'].includes(role ?? '')) {
-    throw new Error(session.error ?? '仕切書を読み取る権限がありません。')
-  }
+  if (session.ok === false || !session.workerId) throw new StatementReadError('session_expired')
+  if (!['admin', 'operator'].includes(role ?? '')) throw new StatementReadError('access_denied')
 }
 
 const responseSchema = {
@@ -329,8 +367,9 @@ const prompt = `
 export type AnalysisInput = { imageBase64?: string; headerRegionBase64?: string; taxRegionBase64?: string; paymentRegionBase64?: string; detailRegionBase64?: string; productMasterNames?: unknown; originMasterNames?: unknown; mimeType?: string }
 
 export async function analyzePurchaseStatement(body: AnalysisInput) {
+    validateAnalysisInput(body)
     const geminiApiKey = Deno.env.get('GEMINI_API_KEY')
-    if (!geminiApiKey) throw new Error('Gemini画像読取りのAPIキーが設定されていません。')
+    if (!geminiApiKey) throw new StatementReadError('provider_configuration')
     const imageBase64 = body.imageBase64 ?? ''
     const headerRegionBase64 = body.headerRegionBase64 ?? ''
     const taxRegionBase64 = body.taxRegionBase64 ?? ''
@@ -339,7 +378,6 @@ export async function analyzePurchaseStatement(body: AnalysisInput) {
     const names = (value: unknown) => Array.isArray(value) ? value.filter((name): name is string => typeof name === 'string').map(name => name.trim()).filter(Boolean).slice(0, 100) : []
     const productMasterNames = names(body.productMasterNames)
     const originMasterNames = names(body.originMasterNames)
-    validateAnalysisInput(body)
     const mimeType = body.mimeType!
     const primaryModel = Deno.env.get('GEMINI_MODEL') || 'gemini-3.1-flash-lite'
     const fallbackModel = Deno.env.get('GEMINI_FALLBACK_MODEL') || 'gemini-3.7-flash'
@@ -349,9 +387,26 @@ export async function analyzePurchaseStatement(body: AnalysisInput) {
       classifyTaxTreatment(models.at(-1) ?? models[0], geminiApiKey, mimeType, taxRegionBase64),
     ])
     if (statementResult.status === 'rejected') throw statementResult.reason
-    const responseText = (statementResult.value as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> }).candidates?.[0]?.content?.parts?.find((part) => part.text)?.text ?? ''
-    if (!responseText) throw new Error('Geminiから読取結果が返りませんでした。')
-    const statement = normalizeStatementLines(JSON.parse(responseText) as Record<string, unknown>, originMasterNames)
+    const result = statementResult.value
+    if (result.candidates !== undefined && !Array.isArray(result.candidates)) throw new StatementReadError('invalid_result')
+    const candidate = result.candidates?.[0]
+    if ((result.promptFeedback?.blockReason && result.promptFeedback.blockReason !== 'BLOCK_REASON_UNSPECIFIED')
+      || ['SAFETY', 'IMAGE_SAFETY', 'BLOCKLIST', 'PROHIBITED_CONTENT', 'RECITATION', 'SPII'].includes(candidate?.finishReason ?? '')) {
+      throw new StatementReadError('provider_blocked')
+    }
+    if (candidate?.finishReason === 'MAX_TOKENS') throw new StatementReadError('invalid_result')
+    const parts = candidate?.content?.parts
+    if (parts !== undefined && !Array.isArray(parts)) throw new StatementReadError('invalid_result')
+    const responseText = parts?.find((part) => typeof part?.text === 'string' && part.text.trim())?.text
+    if (!responseText) throw new StatementReadError('no_result')
+    let statement: Record<string, unknown>
+    try {
+      const parsed: unknown = JSON.parse(responseText)
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new StatementReadError('invalid_result')
+      statement = normalizeStatementLines(parsed as Record<string, unknown>, originMasterNames)
+    } catch { throw new StatementReadError('invalid_result') }
+    if (!Array.isArray(statement.lines)) throw new StatementReadError('invalid_result')
+    if (statement.lines.length === 0) throw new StatementReadError('no_lines')
     delete statement.recipient
     const taxTreatment = taxResult.status === 'fulfilled' ? taxResult.value : ''
     if (taxTreatment) {
@@ -365,10 +420,12 @@ export async function analyzePurchaseStatement(body: AnalysisInput) {
 }
 
 export function validateAnalysisInput(body: AnalysisInput) {
-  if (!['image/jpeg', 'image/png', 'image/webp'].includes(body.mimeType ?? '')) throw new Error('対応していない画像形式です。')
+  if (!body || typeof body !== 'object' || !body.imageBase64) throw new StatementReadError('missing_image')
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(body.mimeType ?? '')) throw new StatementReadError('invalid_format')
   for (const [key, maximum] of Object.entries({ imageBase64: 12_000_000, headerRegionBase64: 4_000_000, taxRegionBase64: 4_000_000, paymentRegionBase64: 4_000_000, detailRegionBase64: 6_000_000 })) {
     const value = body[key as keyof AnalysisInput] ?? ''
-    if (typeof value !== 'string' || value.length > maximum || (key === 'imageBase64' && !value)) throw new Error('画像が大きすぎるか、画像データがありません。撮影し直してください。')
+    if (typeof value !== 'string') throw new StatementReadError('invalid_image')
+    if (value.length > maximum) throw new StatementReadError('image_too_large')
   }
 }
 
@@ -380,7 +437,8 @@ if (import.meta.main) Deno.serve(async (request) => {
     await requireRiceShippingOperator(request)
     return jsonResponse(request, await analyzePurchaseStatement(await request.json()))
   } catch (error) {
-    const status = error instanceof GeminiUnavailableError ? 503 : 400
-    return jsonResponse(request, { error: error instanceof Error ? error.message : '仕切書を解析できませんでした。' }, status)
+    const failure = error instanceof StatementReadError ? error : new StatementReadError('unknown_failure')
+    const status = ['provider_rate_limit', 'provider_unavailable', 'provider_timeout', 'provider_network'].includes(failure.reason) ? 503 : 400
+    return jsonResponse(request, { error: failure.message, reason: failure.reason }, status)
   }
 })

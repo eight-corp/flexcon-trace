@@ -107,7 +107,7 @@ try {
           await rpc(actor, 'flexcon_purchase_queue_reserve', { p_worker_id: actor, p_job_id: args.jobId, p_fingerprint: 'a'.repeat(64) })
           if (failUpload) {
             failUpload = false
-            return route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'test upload failure' }) })
+            return route.fulfill({ status: 400, contentType: 'application/json', body: JSON.stringify({ reason: 'payload_upload', error: '解析用画像を保存先に書き込めませんでした。「画像保存を再試行」でお試しください。' }) })
           }
           await rpc(actor, 'flexcon_purchase_queue_ready', { p_worker_id: actor, p_job_id: args.jobId })
           body = { jobId: args.jobId, status: 'queued' }
@@ -137,6 +137,9 @@ try {
     try {
       const reader = await createPage('reader')
       await reader.getByRole('button', { name: '撮影・画像を選択', exact: true }).waitFor()
+      await reader.locator('input[type=file]').setInputFiles({ name: 'broken.jpg', mimeType: 'image/jpeg', buffer: Buffer.from('not an image') })
+      await reader.getByRole('alert').filter({ hasText: '原因：選択したファイルを画像として開けません' }).waitFor()
+      assert.equal(await reader.getByRole('button', { name: '撮影・画像を選択', exact: true }).isEnabled(), true)
       imageUrl = await reader.evaluate(() => {
         const canvas = document.createElement('canvas')
         canvas.width = 720; canvas.height = 300
@@ -175,6 +178,7 @@ try {
       failUpload = true
       await reader.locator('input[type=file]').setInputFiles(photo)
       await reader.getByRole('button', { name: '画像保存を再試行', exact: true }).waitFor()
+      await reader.getByRole('alert').filter({ hasText: '原因：解析用画像を保存先に書き込めませんでした' }).waitFor()
       assert.equal(await reader.getByRole('button', { name: '確認待ち', exact: true }).isEnabled(), false)
       assert.equal(await reader.getByRole('button', { name: '直前の操作を取り消す', exact: true }).isEnabled(), false)
       assert.equal(await reader.getByRole('status').filter({ hasText: '読み取り成功。' }).count(), 0)
@@ -279,6 +283,21 @@ try {
       await viewer.getByRole('button', { name: '確認待ち', exact: true }).click()
       await viewer.getByRole('button', { name: '101', exact: true }).click()
       assert.equal(await viewer.getByRole('button', { name: '確認・修正', exact: true }).count(), 0)
+      for (const error of ['AI画像読取りサービスの利用上限に達しました。時間をおいて再試行してください。', '解析を完了できませんでした。時間をおいて再試行してください。']) {
+        await anotherReader.locator('input[type=file]').setInputFiles(photo)
+        await anotherReader.getByRole('button', { name: '次の仕切書を読み取る', exact: true }).waitFor({ state: 'visible' })
+        await anotherReader.waitForFunction(() => !document.querySelector('.purchase-statement-actions .primary-button')?.disabled)
+        const job = await rpc('reader', 'flexcon_purchase_queue_claim', { p_secret: queueSecret })
+        await rpc('reader', 'flexcon_purchase_queue_fail', { p_job_id: job.id, p_lease_token: job.leaseToken, p_error: error })
+      }
+      await anotherReader.getByRole('button', { name: '解析状況を再読込' }).click()
+      const reasons = anotherReader.locator('.purchase-queue-failure')
+      await reasons.filter({ hasText: '失敗原因：AI画像読取りサービスの利用上限' }).waitFor()
+      await reasons.filter({ hasText: '失敗原因：この解析では詳しい原因が記録されていません' }).waitFor()
+      if (process.env.QA_ARTIFACTS) {
+        await reasons.filter({ hasText: '利用上限' }).scrollIntoViewIfNeeded()
+        await anotherReader.screenshot({ path: path.join(process.env.QA_ARTIFACTS, `statement-failure-cause-${width}.png`) })
+      }
       assert.deepEqual(errors, [])
       console.log(`Purchase review workflow passed at ${width}px`)
     } finally {
